@@ -2,9 +2,7 @@ from abc import abstractmethod
 import itertools
 import random
 from typing import Any, Callable, Dict, List, Optional
-from pydantic import BaseModel, Field
-
-from nomadic.util import get_tqdm_iterable
+from pydantic import BaseModel, Field, ValidationError
 
 class RunResult(BaseModel):
     """Run result."""
@@ -133,7 +131,13 @@ class RayTuneParamTuner(BaseParamTuner):
             # convert dict back to RunResult (reconstruct it with metadata)
             # get the keys in RunResult, assign corresponding values in
             # result.metrics to those keys
-            run_result = RunResult.model_validate(result.metrics)
+            try:
+                run_result = RunResult.model_validate(result.metrics)
+            except ValidationError as e:
+                # Tuning function may have errored out (e.g. due to objective function erroring)
+                # Handle gracefully
+                run_result = RunResult(score=-1, params={})
+
             # add some more metadata to run_result (e.g. timestamp)
             run_result.metadata["timestamp"] = (
                 result.metrics["timestamp"] if result.metrics else None

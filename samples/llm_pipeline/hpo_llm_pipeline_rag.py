@@ -144,7 +144,10 @@ def main(tuning_method: str, chunk_size_hp_space, top_k_hp_space):
         "ref_response_strs": ref_response_strs[:10],
     }
     if tuning_method in ['default', 'ray']:
-        param_dict = {"chunk_size": tune.grid_search(chunk_size_hp_space), "top_k": tune.grid_search(top_k_hp_space)}
+        param_dict = {
+            "chunk_size": tune.grid_search(chunk_size_hp_space),
+            "top_k": tune.grid_search(top_k_hp_space)
+        }
         param_tuner = RayTuneParamTuner(
             param_fn=objective_function,
             param_dict=param_dict,
