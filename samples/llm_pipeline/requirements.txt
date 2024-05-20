@@ -1,7 +1,0 @@
-pymupdf
-llama-index
-llama-hub
-llama-index-llms-openai
-llama-index-embeddings-openai
-llama-index-readers-file 
-llama-index-experimental-param-tuner
