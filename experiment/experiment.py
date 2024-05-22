@@ -1,12 +1,19 @@
 from abc import abstractmethod
-import datetime
-from typing import Callable, Dict, Iterable, Set
-from pydantic import BaseModel, Field, ValidationError
+from datetime import datetime
+from typing import Any, Dict, Iterable, List, Optional
+from pydantic import BaseModel, Field
+
+from llama_index.core.llms import LLM
+from llama_index.core.evaluation import BatchEvalRunner
+
+from nomadic.model.model import Model
+from nomadic.result.result import RunResult, TunedResult
+from nomadic.tune.tuner import BaseParamTuner, RayTuneParamTuner
 
 """
-experiment_run = {
-    experiments = {
-        experiment: {
+experiment = {
+    experiment_runs = {
+        experiment_run: {
             selected_hp_values = {
                 'hp_name': HP_VALUE: Iterable
             },
@@ -24,26 +31,38 @@ experiment_run = {
 }
 """
 
+
 class Experiment(BaseModel):
-    """Base experiment"""
-
-    selected_hp_values = Dict[str, Iterable] = Field(
-        ..., description="Hyperparameter values of experiment to run."
-    )
-
-class ExperimentRun(BaseModel):
     """Base experiment run."""
 
-    experiments: Set[Experiment] = Field(
-        ..., description="Set of experiments."
+    evaluator: BatchEvalRunner = Field(
+        ..., description="Evaluator of experiment"
     )
-    start_datetime: datetime = Field(
-        ..., description="Start datetime."
+    tuner: BaseParamTuner = Field(..., description="Tuner of ")
+    model: Model = Field(..., description="Model to run experiment")
+    current_param_dict: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional dictionary of current hyperparameter values.",
     )
-    end_datetime: datetime = Field(
-        ..., description="End datetime."
+    evaluation_dataset: Dict = Field(
+        default_factory=dict,
+        description="Optional dictionary of current hyperparameter values.",
+    )
+    start_datetime: Optional[datetime] = Field(
+        default=None, description="Start datetime."
+    )
+    end_datetime: Optional[datetime] = Field(
+        default=None, description="End datetime."
     )
 
-    @abstractmethod
-    def fit(self) -> TunedResult:
-        """Tune parameters."""
+    def run(self) -> TunedResult:
+        """Run experiment."""
+
+        def objective_function(param_values: Dict[str, Any]) -> RunResult:
+            self.model.llm.complete()
+
+        self.start_datetime = datetime.now()
+
+        tuner = RayTuneParamTuner()
+
+        self.end_datetime = datetime.now()
