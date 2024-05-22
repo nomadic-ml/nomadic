@@ -4,7 +4,7 @@ import random
 from typing import Any, Callable, Dict, Iterable, List, Optional
 from pydantic import BaseModel, Field, ValidationError
 
-from nomadic.result.result import RunResult, TunedResult
+from nomadic.result import RunResult, TunedResult
 
 
 class BaseParamTuner(BaseModel):
@@ -92,11 +92,15 @@ class RayTuneParamTuner(BaseParamTuner):
 
             # add some more metadata to run_result (e.g. timestamp)
             run_result.metadata["timestamp"] = (
-                result_grid.metrics["timestamp"] if result_grid.metrics else None
+                result_grid.metrics["timestamp"]
+                if result_grid.metrics
+                else None
             )
             return run_result
 
-        run_config = RunConfig(**self.run_config_dict) if self.run_config_dict else None
+        run_config = (
+            RunConfig(**self.run_config_dict) if self.run_config_dict else None
+        )
         tuner = ray_tune.Tuner(
             ray_tune.with_parameters(
                 param_fn_wrapper, fixed_param_dict=self.fixed_param_dict
@@ -108,7 +112,8 @@ class RayTuneParamTuner(BaseParamTuner):
         result_grids = tuner.fit()
 
         all_run_results = [
-            convert_ray_tune_run_result(result_grid) for result_grid in result_grids
+            convert_ray_tune_run_result(result_grid)
+            for result_grid in result_grids
         ]
 
         # If current_hp_values is specified, ensure current hp values are also scored,
@@ -128,7 +133,8 @@ class RayTuneParamTuner(BaseParamTuner):
                 convert_ray_tune_run_result(
                     ray_tune.Tuner(
                         ray_tune.with_parameters(
-                            param_fn_wrapper, fixed_param_dict=self.fixed_param_dict
+                            param_fn_wrapper,
+                            fixed_param_dict=self.fixed_param_dict,
                         ),
                         param_space={
                             hp_name: ray_tune.grid_search([val])
@@ -149,7 +155,9 @@ class RayTuneParamTuner(BaseParamTuner):
 
 # TODO: Finish implementing ParamTuner
 class ParamTuner(BaseParamTuner):
-    search_method: str = Field(..., description="Search method: 'grid' or 'random'.")
+    search_method: str = Field(
+        ..., description="Search method: 'grid' or 'random'."
+    )
     n_iter: int = Field(
         default=10, description="Number of iterations for random search."
     )
@@ -161,7 +169,9 @@ class ParamTuner(BaseParamTuner):
         run_results = []
 
         if self.search_method == "grid":
-            param_combinations = list(itertools.product(*self.param_dict.values()))
+            param_combinations = list(
+                itertools.product(*self.param_dict.values())
+            )
             for params in param_combinations:
                 param_set = dict(zip(self.param_dict.keys(), params))
                 param_set.update(self.fixed_param_dict)
@@ -172,12 +182,16 @@ class ParamTuner(BaseParamTuner):
 
         elif self.search_method == "random":
             for _ in range(self.n_iter):
-                param_set = {k: random.choice(v) for k, v in self.param_dict.items()}
+                param_set = {
+                    k: random.choice(v) for k, v in self.param_dict.items()
+                }
                 param_set.update(self.fixed_param_dict)
                 score, metadata = self.evaluate(param_set)
                 run_results.append(
                     RunResult(score=score, params=param_set, metadata=metadata)
                 )
 
-        best_idx = max(range(len(run_results)), key=lambda i: run_results[i].score)
+        best_idx = max(
+            range(len(run_results)), key=lambda i: run_results[i].score
+        )
         return TunedResult(run_results=run_results, best_idx=best_idx)

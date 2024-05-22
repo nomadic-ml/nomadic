@@ -1,7 +1,11 @@
-from typing import Iterable
+from typing import Iterable, List, Type
+
+from pydantic import BaseModel
 
 
-def get_tqdm_iterable(items: Iterable, show_progress: bool, desc: str) -> Iterable:
+def get_tqdm_iterable(
+    items: Iterable, show_progress: bool, desc: str
+) -> Iterable:
     """
     Implement tqdm progress bar.
     """
@@ -31,7 +35,9 @@ def convert_string_to_int_array(string: str) -> list:
         if not isinstance(int_array, list) or not all(
             isinstance(i, int) for i in int_array
         ):
-            raise ValueError("The input string does not represent an integer array.")
+            raise ValueError(
+                "The input string does not represent an integer array."
+            )
         return int_array
     except (ValueError, SyntaxError) as e:
         raise ValueError("Invalid input string") from e
@@ -61,3 +67,12 @@ def read_serialized_tuned_result(pickled_file_path: str) -> TunedResult:
     with open(pickled_file_path, "rb") as pickled_file:
         file_contents = pickle.load(pickled_file)
     return file_contents
+
+
+def get_subclasses(cls: Type[BaseModel]) -> List[Type[BaseModel]]:
+    """Get a list of all subclasses of a Pydantic model."""
+
+    subclasses = []
+    for subclass in cls.__subclasses__():
+        subclasses.extend(get_subclasses(subclass))
+    return subclasses
