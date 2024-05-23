@@ -17,28 +17,27 @@ class Model(BaseModel):
     api_keys: Dict[str, str] = Field(
         ..., description="API keys needed to run model."
     )
-    name: ClassVar[str] = Field(
-        default_value="Base Model", description="Name of model"
-    )
     llm: Optional[LLM] = Field(
         default=None, description="Model to run experiment"
     )
-    expected_keys: Set[str] = Field(
+    name: ClassVar[str] = Field(
+        default_value="Base Model", description="Name of model"
+    )
+    expected_keys: ClassVar[Set[str]] = Field(
         default_factory=set, description="Set of expected API keys"
     )
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.llm = self._set_model()
+    def model_post_init(self, ctx):
+        self._set_model()
 
     def _set_model(self, **kwargs):
         """Set model"""
-        any_missing = any(
+        any_missing, missing_keys = any(
             item not in self.api_keys for item in self.expected_keys
-        )
+        ), list(item not in self.api_keys for item in self.expected_keys)
         if any_missing:
             raise NameError(
-                f"The following keys are missing from the provided API keys: {any_missing}"
+                f"The following keys are missing from the provided API keys: {missing_keys}"
             )
         # Set LLM in subclass's call
 
@@ -52,37 +51,34 @@ class Model(BaseModel):
 
 class SagemakerModel(Model):
     name: ClassVar[str] = "Sagemaker"
-    expected_keys: Set[str] = (
+    expected_keys: ClassVar[Set[str]] = (
         "AWS_KNOWTEX_ACCESS_KEY_ID",
         "AWS_KNOWTEX_SECRET_ACCESS_KEY",
         "AWS_DEFAULT_REGION",
         "ENDPOINT_NAME",
     )
 
-    def _set_model(self, **kwargs):
+    def _set_model(self, temperature: Optional[float] = None, **kwargs):
         """Set Sagemaker model"""
-        super()._set_model(self, **kwargs)
+        super()._set_model(**kwargs)
         self.llm = SageMakerLLM(
             endpoint_name=self.api_keys["ENDPOINT_NAME"],
             aws_access_key_id=self.api_keys["AWS_KNOWTEX_ACCESS_KEY_ID"],
             aws_secret_access_key=self.api_keys[
                 "AWS_KNOWTEX_SECRET_ACCESS_KEY"
             ],
+            aws_session_token="",
+            region_name=self.api_keys[
+                "AWS_DEFAULT_REGION"
+            ],  # Due to bug in LlamaIndex
             aws_region_name=self.api_keys["AWS_DEFAULT_REGION"],
+            temperature=temperature,
         )
 
     def run(self, **kwargs) -> CompletionResponse:
         """Run Sagemaker model"""
         if "temperature" in kwargs["parameters"]:
-            self.llm = SageMakerLLM(
-                endpoint_name=self.api_keys["ENDPOINT_NAME"],
-                aws_access_key_id=self.api_keys["AWS_KNOWTEX_ACCESS_KEY_ID"],
-                aws_secret_access_key=self.api_keys[
-                    "AWS_KNOWTEX_SECRET_ACCESS_KEY"
-                ],
-                aws_region_name=self.api_keys["AWS_DEFAULT_REGION"],
-                temperature=kwargs["parameters"]["temperature"],
-            )
+            self.llm = self._set_model(kwargs["parameters"]["temperature"])
         model_parameters = copy.deepcopy(kwargs["parameters"]).pop(
             "temperature", None
         )
@@ -97,11 +93,10 @@ DEFAULT_OPENAI_MODEL: str = "gpt-3.5-turbo"
 
 class OpenAIModel(Model):
     name: ClassVar[str] = "OpenAI"
-    expected_keys: Set[str] = ("OPENAI_API_KEY",)
+    expected_keys: ClassVar[Set[str]] = ("OPENAI_API_KEY",)
 
     def _set_model(self, **kwargs):
         """Set OpenAI model"""
-        super()._set_model(self, **kwargs)
         openai.api_key = self.api_keys["OPENAI_API_KEY"]
         self.llm = OpenAI(
             model=kwargs.get("model", DEFAULT_OPENAI_MODEL),

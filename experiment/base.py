@@ -1,150 +1,152 @@
-from pathlib import Path
-import os
+from abc import abstractmethod
+from datetime import datetime
+from enum import Enum
+import traceback
+from typing import Any, Dict, Optional, Type, Union
+from pydantic import BaseModel, ConfigDict, Field
+
 import numpy as np
-import streamlit as st
-import pandas as pd
-import openai
-from collections import defaultdict
-from ray import tune
+from llama_index.core.evaluation import BatchEvalRunner
+from llama_index.core.llms import CompletionResponse
+from llama_index.core.base.response.schema import Response
+
+from nomadic.model import Model
+from nomadic.model.base import OpenAIModel, SagemakerModel
+from nomadic.result import RunResult, TunedResult
 from nomadic.tuner import RayTuneParamTuner
 
-# The OpenAI API key should be set in the environment before running the app
-if "OPENAI_API_KEY" not in os.environ:
-    os.environ["OPENAI_API_KEY"] = "your-api-key-placeholder"
-
-# Initialize OpenAI client with the API key
-from openai import OpenAI
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-hyperparameters_list = ["Learning Rate", "Batch Size", "Epochs", "Top K", "Chunk Size", "Regularization Strength"]
-
-default_search_spaces = {
-    "Learning Rate": "0.001,0.01,0.1",
-    "Batch Size": "16,32,64,128",
-    "Epochs": "10,20,30,50",
-    "Top K": "1,2,5,10",
-    "Chunk Size": "256,512,1024,2048",
-    "Regularization Strength": "0.01,0.1,1,10"
+"""
+experiment = {
+    experiment_runs = {
+        experiment_run: {
+            selected_hp_values = {
+                'hp_name': HP_VALUE: Iterable
+            },
+        },
+    },
+    current_hp_values = {
+        'hp_name': HP_VALUE: Iterable
+    },
+    hp_search_space_map = {
+        'hp_name': hp_search_space
+    },
+    datetime_started = datetime,
+    datetime_ended = datetime,
+    author = User
 }
-
-st.set_page_config(page_title="Model Optimization", page_icon=":chart_with_upwards_trend:", layout="wide")
-st.sidebar.title("Model Optimization Dashboard")
-
-model_options = ["OpenAI", "Sagemaker"]
-selected_model = st.sidebar.selectbox("Select a model", model_options, index=model_options.index("OpenAI"))
-
-# Check if the model has changed and regenerate hyperparameters if so
-if 'selected_model' not in st.session_state or st.session_state['selected_model'] != selected_model:
-    hyperparameters = hyperparameters_list
-    st.session_state['selected_model'] = selected_model
-    st.session_state['hyperparameters'] = hyperparameters
-
-# Form for defining hyperparameters
-num_hps = st.sidebar.number_input("Number of Hyperparameters to Search", min_value=1, key="num_hps")
-hp_form = st.sidebar.form("HP Space")
-hp_form_content = defaultdict()
-
-def get_default_search_space(hp_name):
-    return default_search_spaces.get(hp_name, "")
-
-with hp_form:
-    for i in range(1, num_hps + 1):
-        col1, col2 = st.columns(2)
-        hp_form_content[i] = defaultdict()
-        with col1:
-            hp_name = st.selectbox(f"Hyperparameter {i} Name", options=default_search_spaces.keys(), index=0, key=f"name_{i}")
-            hp_form_content[i][f"name"] = hp_name
-        with col2:
-            default_space = get_default_search_space(hp_name)
-            hp_form_content[i][f"search_space"] = st.text_input(f"Hyperparameter {i} Search Space", value=default_space, key=f"search_space_{i}")
-    col1, col2 = st.columns(2)
-    with col1:
-        hp_form_button = st.form_submit_button("Save Hyperparameters")
-    with col2:
-        hp_clear_button = st.form_submit_button("Clear Hyperparameters")
-    hp_submit_button = st.form_submit_button("Submit Experiment")
-
-def generate_text(model, prompt, temperature):
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=150,
-            temperature=temperature,
-            n=1,
-            stop=None,
-        )
-        return response.choices[0].message.content.strip()
-    except openai.OpenAIError as e:
-        st.error(f"An error occurred while generating text with OpenAI: {str(e)}")
-        return ""
-
-def convert_string_to_int_array(range_input):
-    if isinstance(range_input, list):
-        return range_input
-    elif isinstance(range_input, str):
-        range_list = range_input.replace('[', '').replace(']', '').replace(' ', '').split(',')
-        return [float(val) if '.' in val else int(val) for val in range_list]
-    else:
-        raise ValueError("Input must be a string or a list.")
+"""
 
 
-class Experiment:
-    def __init__(self, name, hp_space, model_type, current_hp_values=None):
-        self.name = name
-        self.hp_space = hp_space
-        self.model_type = model_type
-        self.current_hp_values = current_hp_values if current_hp_values else {}
+class ExperimentStatus(Enum):
+    not_started = "not_started"
+    running = "running"
+    finished_success = "finished_success"
+    finished_error = "finished_error"
 
-    def run(self):
+
+class ExperimentMode(Enum):
+    train = "training"
+    fine_tune = "fine_tuning"
+    inference = "inference"
+
+
+class Experiment(BaseModel):
+    """Base experiment run."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    # Required
+    # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
+    model: Any = Field(..., description="Model to run experiment")
+    hp_space: Dict[str, Any] = Field(
+        ..., description="A dictionary of parameters to iterate over."
+    )
+    evaluator: BatchEvalRunner = Field(
+        ..., description="Evaluator of experiment"
+    )
+    evaluation_dataset: Dict = Field(
+        default_factory=dict,
+        description="Evaluation dataset in dictionary format.",
+    )
+    # Optional
+    fixed_param_dict: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional dictionary of fixed hyperparameter values.",
+    )
+    current_param_dict: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional dictionary of current hyperparameter values.",
+    )
+    # Self populated
+    start_datetime: Optional[datetime] = Field(
+        default=None, description="Start datetime."
+    )
+    end_datetime: Optional[datetime] = Field(
+        default=None, description="End datetime."
+    )
+    experiment_status: ExperimentStatus = Field(
+        default=ExperimentStatus("not_started"),
+        description="Current status of Experiment",
+    )
+    experiment_status_message: str = Field(
+        default="",
+        description="Detailed description of Experiment status during error.",
+    )
+
+    def run(self) -> TunedResult:
+        """Run experiment."""
+        is_error = False
+
+        def default_param_function(param_values: Dict[str, Any]) -> RunResult:
+            eval_qs, pred_responses, ref_responses = [], [], []
+            for row in self.evaluation_dataset["data"]:
+                completion_response: CompletionResponse = (
+                    self.model.llm.complete(
+                        prompt=row["Instruction"],
+                        kwargs={"parameters": param_values},
+                    )
+                )
+                pred_responses.append(completion_response.text)
+                eval_qs.append(row["Instruction"])
+                ref_responses.append(row.get("Answer", None))
+
+            # TODO: Generalize
+            eval_results = self.evaluator.evaluate_responses(
+                # eval_qs, responses=pred_responses, reference=ref_responses
+                responses=[Response(response) for response in pred_responses],
+                reference=ref_responses,
+            )
+            # TODO: Generalize
+            # get semantic similarity metric
+            mean_score = np.array(
+                [r.score for r in eval_results["semantic_similarity"]]
+            ).mean()
+            return RunResult(score=mean_score, params=param_values)
+
+        self.experiment_status = ExperimentStatus("running")
+        self.start_datetime = datetime.now()
+        result = None
         try:
-            if self.model_type == "OpenAI":
-                param_tuner = RayTuneParamTuner(
-                    param_fn=openai_objective_function,
-                    param_dict=self.hp_space,
-                    fixed_param_dict=self.current_hp_values,
-                )
-            elif self.model_type == "Sagemaker":
-                param_tuner = RayTuneParamTuner(
-                    param_fn=sagemaker_objective_function,
-                    param_dict=self.hp_space,
-                    fixed_param_dict=self.current_hp_values,
-                )
-            results = param_tuner.fit()
-            return results
+            # TODO: Figure out serialization problem caused by
+            # an `_abc_data` object.
+            tuner = RayTuneParamTuner(
+                param_fn=default_param_function,
+                param_dict=self.hp_space,
+                fixed_param_dict=self.fixed_param_dict,
+                current_param_dict=self.current_param_dict,
+                show_progress=True,
+            )
+            result = tuner.fit()
         except Exception as e:
-            print(f"An error occurred during the experiment: {str(e)}")
-            return None
+            is_error = True
+            self.experiment_status_message = (
+                f"Exception: {str(e)}\n\nStack Trace:\n{traceback.format_exc()}"
+            )
 
-if hp_form_button:
-    st.session_state["hp_form_content"] = hp_form_content
-
-# Select evaluation metric
-evaluation_metric = st.sidebar.selectbox("Evaluation Metric", ["Cosine similarity", "RMSE"], key="evaluation_metric_selectbox")
-st.session_state.evaluation_metric = evaluation_metric
-
-# File uploader for evaluation dataset
-evaluation_dataset_file = st.sidebar.file_uploader("Evaluation dataset", type="json", key="evaluation_dataset_file")
-
-# Optional parameters
-current_hp_values_input = st.sidebar.text_area("Current Hyperparameters (Optional)", value="{'temperature': 0.5}", key="current_hp_values_input")
-user_triggered = st.sidebar.text_input("User Triggered (Optional)", key="user_triggered")
-things_of_interest = st.sidebar.text_area("Things of Interest (Optional)", value="{'example_key': 'example_value'}", key="things_of_interest")
-num_simulations = st.sidebar.number_input("Number of Simulations (Optional)", min_value=1, value=100, key="num_simulations")
-method_of_optimization = st.sidebar.text_input("Method of Optimization (Optional)", key="method_of_optimization")
-
-# Validation checks for optional parameters
-try:
-    current_hp_values = eval(current_hp_values_input) if current_hp_values_input else None
-    if current_hp_values and not isinstance(current_hp_values, dict):
-        raise ValueError("Current Hyperparameters must be a dictionary.")
-except Exception as e:
-    st.sidebar.error(f"Invalid format for Current Hyperparameters: {str(e)}")
-
-try:
-    things_of_interest = eval(things_of_interest) if things_of_interest else None
-    if things_of_interest and not isinstance(things_of_interest, dict):
-        raise ValueError("Things of Interest must be a dictionary.")
-except Exception as e:
-    st.sidebar.error(f"Invalid format for Things of Interest: {str(e)}")
-
+        self.end_datetime = datetime.now()
+        self.experiment_status = (
+            ExperimentStatus("finished_success")
+            if not is_error
+            else ExperimentStatus("finished_error")
+        )
+        return result or RunResult(score=-1, params={}, metadata={})

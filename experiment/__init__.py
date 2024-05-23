@@ -1,3 +1,7 @@
-from nomadic.experiment.base import ExperimentStatus, Experiment
+from nomadic.experiment.base import (
+    ExperimentStatus,
+    ExperimentMode,
+    Experiment,
+)
 
-__all__ = ["ExperimentStatus", "Experiment"]
+__all__ = ["ExperimentStatus", "ExperimentMode", "Experiment"]
