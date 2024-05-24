@@ -2,7 +2,8 @@ from abc import abstractmethod
 from datetime import datetime
 from enum import Enum
 import traceback
-from typing import Any, Dict, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
+from llama_index_client import ChatMessage
 from pydantic import BaseModel, ConfigDict, Field
 
 import numpy as np
@@ -13,7 +14,7 @@ from llama_index.core.base.response.schema import Response
 from nomadic.model import Model
 from nomadic.model.base import OpenAIModel, SagemakerModel
 from nomadic.result import RunResult, TunedResult
-from nomadic.tuner import RayTuneParamTuner
+from nomadic.tuner import RayTuneParamTuner, ParamTuner
 
 """
 experiment = {
@@ -58,14 +59,14 @@ class Experiment(BaseModel):
     # Required
     # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
     model: Any = Field(..., description="Model to run experiment")
-    hp_space: Dict[str, Any] = Field(
+    param_dict: Dict[str, Dict[str, Any]] = Field(
         ..., description="A dictionary of parameters to iterate over."
     )
     evaluator: BatchEvalRunner = Field(
         ..., description="Evaluator of experiment"
     )
-    evaluation_dataset: Dict = Field(
-        default_factory=dict,
+    evaluation_dataset: List[Dict] = Field(
+        default_factory=List,
         description="Evaluation dataset in dictionary format.",
     )
     # Optional
@@ -99,14 +100,15 @@ class Experiment(BaseModel):
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
             eval_qs, pred_responses, ref_responses = [], [], []
-            for row in self.evaluation_dataset["data"]:
-                completion_response: CompletionResponse = (
-                    self.model.llm.complete(
-                        prompt=row["Instruction"],
-                        kwargs={"parameters": param_values},
-                    )
+            for row in self.evaluation_dataset:
+                completion_response: CompletionResponse = self.model.run(
+                    kwargs={
+                        "Context": row["Context"],
+                        "Instruction": row["Instruction"],
+                        "parameters": param_values,
+                    }
                 )
-                pred_responses.append(completion_response.text)
+                pred_responses.append(completion_response.raw["Body"])
                 eval_qs.append(row["Instruction"])
                 ref_responses.append(row.get("Answer", None))
 
@@ -129,9 +131,17 @@ class Experiment(BaseModel):
         try:
             # TODO: Figure out serialization problem caused by
             # an `_abc_data` object.
-            tuner = RayTuneParamTuner(
+            # tuner = RayTuneParamTuner(
+            #     param_fn=default_param_function,
+            #     param_dict=self.hp_space,
+            #     fixed_param_dict=self.fixed_param_dict,
+            #     current_param_dict=self.current_param_dict,
+            #     show_progress=True,
+            # )
+            tuner = ParamTuner(
                 param_fn=default_param_function,
-                param_dict=self.hp_space,
+                param_dict=self.param_dict,
+                search_method="grid",
                 fixed_param_dict=self.fixed_param_dict,
                 current_param_dict=self.current_param_dict,
                 show_progress=True,

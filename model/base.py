@@ -1,6 +1,6 @@
 from abc import abstractmethod
 import copy
-from typing import ClassVar, Dict, Optional, Set
+from typing import Any, ClassVar, Dict, Optional, Set
 from pydantic import BaseModel, Field
 
 from llama_index.core.llms import LLM, CompletionResponse
@@ -58,7 +58,12 @@ class SagemakerModel(Model):
         "ENDPOINT_NAME",
     )
 
-    def _set_model(self, temperature: Optional[float] = None, **kwargs):
+    def _set_model(
+        self,
+        temperature: Optional[float] = None,
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ):
         """Set Sagemaker model"""
         super()._set_model(**kwargs)
         self.llm = SageMakerLLM(
@@ -73,18 +78,19 @@ class SagemakerModel(Model):
             ],  # Due to bug in LlamaIndex
             aws_region_name=self.api_keys["AWS_DEFAULT_REGION"],
             temperature=temperature,
+            model_kwargs=model_kwargs,
+            kwargs=kwargs,
         )
 
     def run(self, **kwargs) -> CompletionResponse:
         """Run Sagemaker model"""
-        if "temperature" in kwargs["parameters"]:
-            self.llm = self._set_model(kwargs["parameters"]["temperature"])
-        model_parameters = copy.deepcopy(kwargs["parameters"]).pop(
-            "temperature", None
+        self._set_model(
+            temperature=kwargs["kwargs"]["parameters"].get("temperature", None),
+            model_kwargs=copy.deepcopy(kwargs["kwargs"]["parameters"]),
         )
         return self.llm.complete(
-            prompt=kwargs["Instruction"],
-            kwargs={"parameters": model_parameters},
+            prompt=kwargs["kwargs"]["Instruction"],
+            formatted=True,
         )
 
 

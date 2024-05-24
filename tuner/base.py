@@ -1,10 +1,12 @@
 from abc import abstractmethod
+from copy import deepcopy
 import itertools
 import random
 from typing import Any, Callable, Dict, Iterable, List, Optional
 from pydantic import BaseModel, Field, ValidationError
 
 from nomadic.result import RunResult, TunedResult
+from nomadic.util import get_tqdm_iterable
 
 
 class BaseParamTuner(BaseModel):
@@ -155,43 +157,49 @@ class RayTuneParamTuner(BaseParamTuner):
 
 # TODO: Finish implementing ParamTuner
 class ParamTuner(BaseParamTuner):
-    search_method: str = Field(
-        ..., description="Search method: 'grid' or 'random'."
-    )
-    n_iter: int = Field(
-        default=10, description="Number of iterations for random search."
-    )
-
     def fit(self) -> TunedResult:
-        if self.search_method not in ["grid", "random"]:
-            raise ValueError("search_method must be either 'grid' or 'random'.")
+        def generate_param_combinations(
+            param_dict: Dict[str, Any]
+        ) -> List[Dict[str, Any]]:
+            """Generate parameter combinations."""
+            param_names = []
+            param_values = []
 
-        run_results = []
+            for param_name, param_val in param_dict.items():
+                if "grid_search" in param_val:
+                    param_names.append(param_name)
+                    param_values.append(param_val["grid_search"])
 
-        if self.search_method == "grid":
-            param_combinations = list(
-                itertools.product(*self.param_dict.values())
+            combinations = [
+                dict(zip(param_names, combination))
+                for combination in itertools.product(*param_values)
+            ]
+            return combinations
+
+        param_combinations = generate_param_combinations(self.param_dict)
+
+        # for each combination, run the job with the arguments
+        # in args_dict
+
+        combos_with_progress = enumerate(
+            get_tqdm_iterable(
+                param_combinations, self.show_progress, "Param combinations."
             )
-            for params in param_combinations:
-                param_set = dict(zip(self.param_dict.keys(), params))
-                param_set.update(self.fixed_param_dict)
-                score, metadata = self.evaluate(param_set)
-                run_results.append(
-                    RunResult(score=score, params=param_set, metadata=metadata)
-                )
-
-        elif self.search_method == "random":
-            for _ in range(self.n_iter):
-                param_set = {
-                    k: random.choice(v) for k, v in self.param_dict.items()
-                }
-                param_set.update(self.fixed_param_dict)
-                score, metadata = self.evaluate(param_set)
-                run_results.append(
-                    RunResult(score=score, params=param_set, metadata=metadata)
-                )
-
-        best_idx = max(
-            range(len(run_results)), key=lambda i: run_results[i].score
         )
-        return TunedResult(run_results=run_results, best_idx=best_idx)
+
+        all_run_results = []
+        for idx, param_combination in combos_with_progress:
+            full_param_dict = {
+                **self.fixed_param_dict,
+                **param_combination,
+            }
+            run_result = self.param_fn(full_param_dict)
+
+            all_run_results.append(run_result)
+
+        # sort the results by score
+        sorted_run_results = sorted(
+            all_run_results, key=lambda x: x.score, reverse=True
+        )
+
+        return TunedResult(run_results=sorted_run_results, best_idx=0)
