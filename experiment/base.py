@@ -1,9 +1,7 @@
-from abc import abstractmethod
 from datetime import datetime
 from enum import Enum
 import traceback
 from typing import Any, Dict, List, Optional, Type, Union
-from llama_index_client import ChatMessage
 from pydantic import BaseModel, ConfigDict, Field
 
 import numpy as np
@@ -102,13 +100,19 @@ class Experiment(BaseModel):
             eval_qs, pred_responses, ref_responses = [], [], []
             for row in self.evaluation_dataset:
                 completion_response: CompletionResponse = self.model.run(
-                    kwargs={
-                        "Context": row["Context"],
-                        "Instruction": row["Instruction"],
-                        "parameters": param_values,
-                    }
+                    context=row["Context"],
+                    instruction=row["Instruction"],
+                    parameters=param_values,
                 )
-                pred_responses.append(completion_response.raw["Body"])
+                # OpenAI's model returns result in `completion_response.text`.
+                # Sagemaker's model returns result in `completion_response.raw["Body"]`.
+                if isinstance(self.model, OpenAIModel):
+                    pred_response = completion_response.text
+                elif isinstance(self.model, SagemakerModel):
+                    pred_response = completion_response.raw["Body"]
+                else:
+                    raise NotImplementedError
+                pred_responses.append(pred_response)
                 eval_qs.append(row["Instruction"])
                 ref_responses.append(row.get("Answer", None))
 
@@ -159,4 +163,7 @@ class Experiment(BaseModel):
             if not is_error
             else ExperimentStatus("finished_error")
         )
-        return result or RunResult(score=-1, params={}, metadata={})
+        return result or TunedResult(
+            run_results=[RunResult(score=-1, params={}, metadata={})],
+            best_idx=0,
+        )

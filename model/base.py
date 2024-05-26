@@ -1,5 +1,4 @@
 from abc import abstractmethod
-import copy
 from typing import Any, ClassVar, Dict, Optional, Set
 from pydantic import BaseModel, Field
 
@@ -84,12 +83,14 @@ class SagemakerModel(Model):
 
     def run(self, **kwargs) -> CompletionResponse:
         """Run Sagemaker model"""
+        # Sagemaker accepts hyperparameter values within
+        # the `model_kwargs` field.
         self._set_model(
-            temperature=kwargs["kwargs"]["parameters"].get("temperature", None),
-            model_kwargs=copy.deepcopy(kwargs["kwargs"]["parameters"]),
+            temperature=kwargs["parameters"].get("temperature", None),
+            model_kwargs=kwargs["parameters"],
         )
         return self.llm.complete(
-            prompt=kwargs["kwargs"]["Instruction"],
+            prompt=kwargs["Instruction"],
             formatted=True,
         )
 
@@ -115,12 +116,9 @@ class OpenAIModel(Model):
             self.llm = OpenAI(
                 model=kwargs.get("model", DEFAULT_OPENAI_MODEL),
                 api_key=self.api_keys["OPENAI_API_KEY"],
-                temperature=kwargs["temperature"],
+                temperature=kwargs["parameters"].get("temperature", None),
             )
-        model_parameters = copy.deepcopy(kwargs["parameters"]).pop(
-            "temperature", None
-        )
         return self.llm.complete(
-            prompt=kwargs["Instruction"],
-            kwargs={"parameters": model_parameters},
+            prompt=kwargs["instruction"],
+            **kwargs["parameters"],
         )
