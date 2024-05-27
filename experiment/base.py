@@ -56,17 +56,19 @@ class Experiment(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # Required
-    # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
-    model: Any = Field(..., description="Model to run experiment")
     param_dict: Dict[str, Dict[str, Any]] = Field(
         ..., description="A dictionary of parameters to iterate over."
-    )
-    evaluator: BatchEvalRunner = Field(
-        ..., description="Evaluator of experiment"
     )
     evaluation_dataset: List[Dict] = Field(
         default_factory=List,
         description="Evaluation dataset in dictionary format.",
+    )
+    # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
+    model: Optional[Any] = Field(
+        default=None, description="Model to run experiment"
+    )
+    evaluator: Optional[BatchEvalRunner] = Field(
+        default=None, description="Evaluator of experiment"
     )
     # Optional
     fixed_param_dict: Optional[Dict[str, Any]] = Field(
