@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 import traceback
 from typing import Any, Dict, List, Optional, Type, Union
 from pydantic import BaseModel, ConfigDict, Field
@@ -83,11 +84,14 @@ class Experiment(BaseModel):
     end_datetime: Optional[datetime] = Field(
         default=None, description="End datetime."
     )
-    experiment_status: ExperimentStatus = Field(
+    tuned_result: Optional[TunedResult] = Field(
+        default=None, description="Tuned result of Experiment"
+    )
+    experiment_status: Optional[ExperimentStatus] = Field(
         default=ExperimentStatus("not_started"),
         description="Current status of Experiment",
     )
-    experiment_status_message: str = Field(
+    experiment_status_message: Optional[str] = Field(
         default="",
         description="Detailed description of Experiment status during error.",
     )
@@ -163,7 +167,13 @@ class Experiment(BaseModel):
             if not is_error
             else ExperimentStatus("finished_error")
         )
-        return result or TunedResult(
+        self.tuned_result = result or TunedResult(
             run_results=[RunResult(score=-1, params={}, metadata={})],
             best_idx=0,
         )
+        return self.tuned_result
+
+    def save_experiment(self, folder_path: Path):
+        file_name = f"/experiment_{self.start_datetime}.json"
+        with open(folder_path + file_name, "w") as file:
+            file.write(self.model_dump_json(exclude=("model", "evaluator")))
