@@ -103,7 +103,7 @@ class Experiment(BaseModel):
         is_error = False
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
-            eval_qs, pred_responses, ref_responses = [], [], []
+            contexts, pred_responses, eval_qs, ref_responses = [], [], [], []
             for row in self.evaluation_dataset:
                 completion_response: CompletionResponse = self.model.run(
                     context=row["Context"],
@@ -112,15 +112,17 @@ class Experiment(BaseModel):
                 )
                 # OpenAI's model returns result in `completion_response.text`.
                 # Sagemaker's model returns result in `completion_response.raw["Body"]`.
-                if isinstance(self.model, OpenAIModel):
-                    pred_response = completion_response.text
-                elif isinstance(self.model, SagemakerModel):
-                    pred_response = completion_response.raw["Body"]
-                else:
-                    raise NotImplementedError
-                pred_responses.append(pred_response)
-                eval_qs.append(row["Instruction"])
-                ref_responses.append(row.get("Answer", None))
+                if self.model:
+                    if isinstance(self.model, OpenAIModel):
+                        pred_response = completion_response.text
+                    elif isinstance(self.model, SagemakerModel):
+                        pred_response = completion_response.raw["Body"]
+                    else:
+                        raise NotImplementedError
+                    contexts.append(row.get("Context", None))
+                    pred_responses.append(pred_response)
+                    eval_qs.append(row["Instruction"])
+                    ref_responses.append(row.get("Answer", None))
 
             # TODO: Generalize
             eval_results = self.evaluator.evaluate_responses(
@@ -133,7 +135,7 @@ class Experiment(BaseModel):
             mean_score = np.array(
                 [r.score for r in eval_results["semantic_similarity"]]
             ).mean()
-            return RunResult(score=mean_score, params=param_values)
+            return RunResult(score=mean_score, params=param_values, metadata={"Contexts": contexts, "Instructions": eval_qs, "Predictions": pred_responses, "Referance Responses": ref_responses})
 
         self.experiment_status = ExperimentStatus("running")
         self.start_datetime = datetime.now()
