@@ -1,5 +1,6 @@
 from typing import Iterable, List, Type
 
+from nomadic.result.base import TunedResult
 from pydantic import BaseModel
 
 
@@ -25,8 +26,6 @@ import subprocess
 import time
 import pickle
 from pathlib import Path
-
-from llama_index.experimental.param_tuner.base import TunedResult
 
 
 def convert_string_to_int_array(string: str) -> list:
