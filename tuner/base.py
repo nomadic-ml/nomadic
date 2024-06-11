@@ -186,9 +186,10 @@ class ParamTuner(BaseParamTuner):
         )
 
         all_run_results = []
+        fixed_param_dict = self.fixed_param_dict or {}
         for idx, param_combination in combos_with_progress:
             full_param_dict = {
-                **self.fixed_param_dict,
+                **fixed_param_dict,
                 **param_combination,
             }
             run_result = self.param_fn(full_param_dict)
