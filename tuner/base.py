@@ -25,6 +25,10 @@ class BaseParamTuner(BaseModel):
         description="Optional dictionary of current hyperparameter values.",
     )
     show_progress: bool = False
+    num_prompts: int = Field(
+        default=1,
+        description="Number of prompt variations to generate for each data point."
+    )
 
     @abstractmethod
     def fit(self) -> TunedResult:
@@ -192,9 +196,9 @@ class ParamTuner(BaseParamTuner):
                 **fixed_param_dict,
                 **param_combination,
             }
-            run_result = self.param_fn(full_param_dict)
-
-            all_run_results.append(run_result)
+            for _ in range(self.num_prompts):
+                run_result = self.param_fn(full_param_dict)
+                all_run_results.append(run_result)
 
         # sort the results by score
         sorted_run_results = sorted(

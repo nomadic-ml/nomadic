@@ -79,6 +79,10 @@ class Experiment(BaseModel):
         default=None,
         description="Optional dictionary of current hyperparameter values.",
     )
+    num_prompts: int = Field(
+        default=1,
+        description="Number of prompt variations to generate for each data point."
+    )
     # Self populated
     start_datetime: Optional[datetime] = Field(
         default=None, description="Start datetime."
@@ -105,31 +109,35 @@ class Experiment(BaseModel):
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
             contexts, pred_responses, eval_qs, ref_responses = [], [], [], []
             for row in self.evaluation_dataset:
-                completion_response: CompletionResponse = self.model.run(
-                    context=row["Context"],
-                    instruction=row["Instruction"],
-                    parameters=param_values,
-                )
-                # OpenAI's model returns result in `completion_response.text`.
-                # Sagemaker's model returns result in `completion_response.raw["Body"]`.
-                if self.model:
-                    if isinstance(self.model, OpenAIModel):
-                        pred_response = completion_response.text
-                    elif isinstance(self.model, SagemakerModel):
-                        pred_response = completion_response.raw["Body"]
-                    else:
-                        raise NotImplementedError
-                    contexts.append(row.get("Context", None))
-                    pred_responses.append(pred_response)
-                    eval_qs.append(row["Instruction"])
-                    ref_responses.append(row.get("Answer", None))
+                for i in range(self.num_prompts):
+                    # Vary the temperature attribute for each prompt
+                    varied_param_values = param_values.copy()
+                    varied_param_values["temperature"] = param_values.get("temperature", 1.0) * (1 + 0.1 * i)
+                    completion_response: CompletionResponse = self.model.run(
+                        context=row["Context"],
+                        instruction=row["Instruction"],
+                        parameters=varied_param_values,
+                    )
+                    # OpenAI's model returns result in `completion_response.text`.
+                    # Sagemaker's model returns result in `completion_response.raw["Body"]`.
+                    if self.model:
+                        if isinstance(self.model, OpenAIModel):
+                            pred_response = completion_response.text
+                        elif isinstance(self.model, SagemakerModel):
+                            pred_response = completion_response.raw["Body"]
+                        else:
+                            raise NotImplementedError
+                        contexts.append(row.get("Context", None))
+                        pred_responses.append(pred_response)
+                        eval_qs.append(row["Instruction"])
+                        ref_responses.append(row.get("Answer", None))
 
-            # TODO: Generalize
             eval_results = self.evaluator.evaluate_responses(
                 # eval_qs, responses=pred_responses, reference=ref_responses
                 responses=[Response(response) for response in pred_responses],
                 reference=ref_responses,
             )
+
             # TODO: Generalize
             # get semantic similarity metric
             mean_score = np.array(
