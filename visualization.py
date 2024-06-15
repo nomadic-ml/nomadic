@@ -1,13 +1,9 @@
 import streamlit as st
 import pandas as pd
-
-from llama_index.experimental.param_tuner.base import RunResult, TunedResult
-
-import pandas as pd
-import streamlit as st
 import altair as alt
 
 
+# flake8: noqa: C901
 def visualize_tuned_result(tuned_result):
     if not tuned_result.run_results:
         st.write("No results found. Please check the tuning process.")
@@ -49,7 +45,9 @@ def visualize_tuned_result(tuned_result):
         for key in ("chunk_size", "top_k"):
             options = sorted(df_results[key].unique())
             if len(options) > 1:
-                selected_value = st.select_slider(f"Select {key}", options=options)
+                selected_value = st.select_slider(
+                    f"Select {key}", options=options
+                )
             else:
                 selected_value = options[0]
             selections[key] = selected_value
@@ -68,7 +66,9 @@ def visualize_tuned_result(tuned_result):
                 alt.Chart(filtered_data)
                 .mark_line(point=True)
                 .encode(
-                    x=alt.X(f"{first_param}:N", title=f"{first_param.capitalize()}"),
+                    x=alt.X(
+                        f"{first_param}:N", title=f"{first_param.capitalize()}"
+                    ),
                     y=alt.Y("score:Q", title="Score"),
                     tooltip=list(param_keys) + ["score"],
                     color=alt.Color(

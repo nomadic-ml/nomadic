@@ -1,6 +1,6 @@
 from abc import abstractmethod
 import itertools
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from pydantic import BaseModel, Field, ValidationError
 
 from nomadic.result import RunResult, TunedResult
@@ -27,7 +27,7 @@ class BaseParamTuner(BaseModel):
     show_progress: bool = False
     num_prompts: int = Field(
         default=1,
-        description="Number of prompt variations to generate for each data point."
+        description="Number of prompt variations to generate for each data point.",
     )
 
     @abstractmethod
@@ -89,7 +89,7 @@ class RayTuneParamTuner(BaseParamTuner):
             # result.metrics to those keys
             try:
                 run_result = RunResult.model_validate(result_grid.metrics)
-            except ValidationError as e:
+            except ValidationError:
                 # Tuning function may have errored out (e.g. due to objective function erroring)
                 # Handle gracefully
                 run_result = RunResult(score=-1, params={})

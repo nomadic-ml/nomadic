@@ -1,5 +1,11 @@
 from typing import Iterable, List, Type
 
+import ast
+import subprocess
+import time
+import pickle
+from pathlib import Path
+
 from nomadic.result.base import TunedResult
 from pydantic import BaseModel
 
@@ -19,13 +25,6 @@ def get_tqdm_iterable(
         except ImportError:
             pass
     return _iterator
-
-
-import ast
-import subprocess
-import time
-import pickle
-from pathlib import Path
 
 
 def convert_string_to_int_array(string: str) -> list:

@@ -25,5 +25,5 @@ def convert_string_to_list(s: str) -> List[Any]:
                 return result
         else:
             raise ValueError("The provided string is not a list.")
-    except (ValueError, SyntaxError) as e:
+    except (ValueError, SyntaxError):
         raise ValueError("Invalid string representation of a list.")

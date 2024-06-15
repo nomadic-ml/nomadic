@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 import traceback
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 import numpy as np
@@ -10,10 +10,9 @@ from llama_index.core.evaluation import BatchEvalRunner
 from llama_index.core.llms import CompletionResponse
 from llama_index.core.base.response.schema import Response
 
-from nomadic.model import Model
-from nomadic.model.base import OpenAIModel, SagemakerModel
+from nomadic.model import OpenAIModel, SagemakerModel
 from nomadic.result import RunResult, TunedResult
-from nomadic.tuner import RayTuneParamTuner, ParamTuner
+from nomadic.tuner import ParamTuner
 
 """
 experiment = {
@@ -81,7 +80,7 @@ class Experiment(BaseModel):
     )
     num_prompts: int = Field(
         default=1,
-        description="Number of prompt variations to generate for each data point."
+        description="Number of prompt variations to generate for each data point.",
     )
     # Self populated
     start_datetime: Optional[datetime] = Field(
@@ -112,7 +111,9 @@ class Experiment(BaseModel):
                 for i in range(self.num_prompts):
                     # Vary the temperature attribute for each prompt
                     varied_param_values = param_values.copy()
-                    varied_param_values["temperature"] = param_values.get("temperature", 1.0) * (1 + 0.1 * i)
+                    varied_param_values["temperature"] = param_values.get(
+                        "temperature", 1.0
+                    ) * (1 + 0.1 * i)
                     completion_response: CompletionResponse = self.model.run(
                         context=row["Context"],
                         instruction=row["Instruction"],
@@ -143,7 +144,16 @@ class Experiment(BaseModel):
             mean_score = np.array(
                 [r.score for r in eval_results["semantic_similarity"]]
             ).mean()
-            return RunResult(score=mean_score, params=param_values, metadata={"Contexts": contexts, "Instructions": eval_qs, "Predictions": pred_responses, "Referance Responses": ref_responses})
+            return RunResult(
+                score=mean_score,
+                params=param_values,
+                metadata={
+                    "Contexts": contexts,
+                    "Instructions": eval_qs,
+                    "Predictions": pred_responses,
+                    "Referance Responses": ref_responses,
+                },
+            )
 
         self.experiment_status = ExperimentStatus("running")
         self.start_datetime = datetime.now()
