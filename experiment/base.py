@@ -62,6 +62,10 @@ class Experiment(BaseModel):
         default_factory=List,
         description="Evaluation dataset in dictionary format.",
     )
+    user_prompt_request: str = Field(
+        default="",
+        description="User request for GPT prompt.",
+    )
     # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
     model: Optional[Any] = Field(
         default=None, description="Model to run experiment"
@@ -101,6 +105,26 @@ class Experiment(BaseModel):
         description="Detailed description of Experiment status during error.",
     )
 
+    def generate_similar_prompts(self, prompt: str, user_request: str) -> List[str]:
+        """
+        Generate similar prompts using a GPT query.
+        """
+        import openai
+
+        #openai.api_key = os.getenv("OPENAI_API_KEY")
+        openai.api_key= "sk-proj-gSjHA2Ve0MwmGbo5KcPuT3BlbkFJwbGxbpmjK22mQmXNgwhZ"
+        response = openai.Completion.create(
+            engine="davinci-codex",
+            prompt=f"Create similar prompts to the one given: {prompt}. User request: {user_request}",
+            max_tokens=100,
+            n=self.num_prompts,
+            stop=None,
+            temperature=0.7,
+        )
+
+        similar_prompts = [choice["text"].strip() for choice in response.choices]
+        return similar_prompts
+
     def run(self) -> TunedResult:
         """Run experiment."""
         is_error = False
@@ -108,16 +132,12 @@ class Experiment(BaseModel):
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
             contexts, pred_responses, eval_qs, ref_responses = [], [], [], []
             for row in self.evaluation_dataset:
-                for i in range(self.num_prompts):
-                    # Vary the temperature attribute for each prompt
-                    varied_param_values = param_values.copy()
-                    varied_param_values["temperature"] = param_values.get(
-                        "temperature", 1.0
-                    ) * (1 + 0.1 * i)
+                similar_prompts = self.generate_similar_prompts(row["Instruction"], self.user_prompt_request)
+                for prompt in similar_prompts:
                     completion_response: CompletionResponse = self.model.run(
                         context=row["Context"],
-                        instruction=row["Instruction"],
-                        parameters=varied_param_values,
+                        instruction=prompt,
+                        parameters=param_values,
                     )
                     # OpenAI's model returns result in `completion_response.text`.
                     # Sagemaker's model returns result in `completion_response.raw["Body"]`.
@@ -130,7 +150,7 @@ class Experiment(BaseModel):
                             raise NotImplementedError
                         contexts.append(row.get("Context", None))
                         pred_responses.append(pred_response)
-                        eval_qs.append(row["Instruction"])
+                        eval_qs.append(prompt)
                         ref_responses.append(row.get("Answer", None))
 
             eval_results = self.evaluator.evaluate_responses(
