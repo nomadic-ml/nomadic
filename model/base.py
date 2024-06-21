@@ -51,8 +51,8 @@ class Model(BaseModel):
 class SagemakerModel(Model):
     name: ClassVar[str] = "Sagemaker"
     expected_keys: ClassVar[Set[str]] = (
-        "AWS_KNOWTEX_ACCESS_KEY_ID",
-        "AWS_KNOWTEX_SECRET_ACCESS_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
         "AWS_DEFAULT_REGION",
         "ENDPOINT_NAME",
     )
@@ -67,9 +67,9 @@ class SagemakerModel(Model):
         super()._set_model(**kwargs)
         self.llm = SageMakerLLM(
             endpoint_name=self.api_keys["ENDPOINT_NAME"],
-            aws_access_key_id=self.api_keys["AWS_KNOWTEX_ACCESS_KEY_ID"],
+            aws_access_key_id=self.api_keys["AWS_ACCESS_KEY_ID"],
             aws_secret_access_key=self.api_keys[
-                "AWS_KNOWTEX_SECRET_ACCESS_KEY"
+                "AWS_SECRET_ACCESS_KEY"
             ],
             aws_session_token="",
             region_name=self.api_keys[
@@ -122,3 +122,5 @@ class OpenAIModel(Model):
             prompt=kwargs["instruction"],
             **kwargs["parameters"],
         )
+
+    
