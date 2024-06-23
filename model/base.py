@@ -22,7 +22,7 @@ class Model(BaseModel):
     name: ClassVar[str] = Field(
         default_value="Base Model", description="Name of model"
     )
-    expected_keys: ClassVar[Set[str]] = Field(
+    expected_api_keys: ClassVar[Set[str]] = Field(
         default_factory=set, description="Set of expected API keys"
     )
     hyperparameters: ClassVar[Dict[str,str]] = Field(
@@ -35,16 +35,16 @@ class Model(BaseModel):
     def _set_model(self, **kwargs):
         """Set model"""
         any_missing, missing_keys = any(
-            item not in self.api_keys for item in self.expected_keys
-        ), list(item not in self.api_keys for item in self.expected_keys)
+            item not in self.api_keys for item in self.expected_api_keys
+        ), list(item not in self.api_keys for item in self.expected_api_keys)
         if any_missing:
             raise NameError(
                 f"The following keys are missing from the provided API keys: {missing_keys}"
             )
         # Set LLM in subclass's call
 
-    def get_required_api_keys(self):
-        return self.expected_keys
+    def get_expected_api_keys(self):
+        return self.expected_api_keys
     
     def get_hyperparameters(self):
         return self.hyperparameters
@@ -56,7 +56,7 @@ class Model(BaseModel):
 
 class SagemakerModel(Model):
     name: ClassVar[str] = "Sagemaker"
-    expected_keys: ClassVar[Set[str]] = (
+    expected_api_keys: ClassVar[Set[str]] = (
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
         "AWS_DEFAULT_REGION",
@@ -112,7 +112,7 @@ DEFAULT_OPENAI_MODEL: str = "gpt-3.5-turbo"
 
 class OpenAIModel(Model):
     name: ClassVar[str] = "OpenAI"
-    expected_keys: ClassVar[Set[str]] = ("OPENAI_API_KEY",)
+    expected_api_keys: ClassVar[Set[str]] = ("OPENAI_API_KEY",)
     hyperparameters: ClassVar[Dict[str, Any]] = {
         "temperature": "[0.1,0.3,0.5,0.7,0.9]",
         "max_tokens": "[50,100,150,200]",
