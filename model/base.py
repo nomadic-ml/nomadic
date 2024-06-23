@@ -25,6 +25,9 @@ class Model(BaseModel):
     expected_keys: ClassVar[Set[str]] = Field(
         default_factory=set, description="Set of expected API keys"
     )
+    hyperparameters: ClassVar[Dict[str,str]] = Field(
+        default_factory=set, description="Set of hyperparameters to tune"
+    )
 
     def model_post_init(self, ctx):
         self._set_model()
@@ -42,6 +45,9 @@ class Model(BaseModel):
 
     def get_required_api_keys(self):
         return self.expected_keys
+    
+    def get_hyperparameters(self):
+        return self.hyperparameters
 
     @abstractmethod
     def run(self, **kwargs) -> RunResult:
@@ -56,6 +62,12 @@ class SagemakerModel(Model):
         "AWS_DEFAULT_REGION",
         "ENDPOINT_NAME",
     )
+    hyperparameters: ClassVar[Dict[str, Any]] = {
+        "temperature": "[0.1,0.3,0.5,0.7,0.9]",
+        "max_tokens": "[50,100,150,200]",
+        "top_p": "[0.1,0.3,0.5,0.7,0.9]",
+        "frequency_penalty": "[0.0,0.1,0.2,0.3,0.4]",
+    }
 
     def _set_model(
         self,
@@ -101,7 +113,12 @@ DEFAULT_OPENAI_MODEL: str = "gpt-3.5-turbo"
 class OpenAIModel(Model):
     name: ClassVar[str] = "OpenAI"
     expected_keys: ClassVar[Set[str]] = ("OPENAI_API_KEY",)
-
+    hyperparameters: ClassVar[Dict[str, Any]] = {
+        "temperature": "[0.1,0.3,0.5,0.7,0.9]",
+        "max_tokens": "[50,100,150,200]",
+        "top_p": "[0.1,0.3,0.5,0.7,0.9]",
+    }
+    
     def _set_model(self, **kwargs):
         """Set OpenAI model"""
         openai.api_key = self.api_keys["OPENAI_API_KEY"]
@@ -122,5 +139,4 @@ class OpenAIModel(Model):
             prompt=kwargs["instruction"],
             **kwargs["parameters"],
         )
-
     
