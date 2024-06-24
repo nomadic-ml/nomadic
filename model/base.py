@@ -25,7 +25,7 @@ class Model(BaseModel):
     expected_api_keys: ClassVar[Set[str]] = Field(
         default_factory=set, description="Set of expected API keys"
     )
-    hyperparameters: ClassVar[Dict[str,str]] = Field(
+    hyperparameters: ClassVar[Dict[str, str]] = Field(
         default_factory=set, description="Set of hyperparameters to tune"
     )
 
@@ -45,7 +45,7 @@ class Model(BaseModel):
 
     def get_expected_api_keys(self):
         return self.expected_api_keys
-    
+
     def get_hyperparameters(self):
         return self.hyperparameters
 
@@ -118,7 +118,7 @@ class OpenAIModel(Model):
         "max_tokens": "[50,100,150,200]",
         "top_p": "[0.1,0.3,0.5,0.7,0.9]",
     }
-    
+
     def _set_model(self, **kwargs):
         """Set OpenAI model"""
         openai.api_key = self.api_keys["OPENAI_API_KEY"]
@@ -139,4 +139,3 @@ class OpenAIModel(Model):
             prompt=kwargs["instruction"],
             **kwargs["parameters"],
         )
-    

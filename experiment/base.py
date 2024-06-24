@@ -111,8 +111,8 @@ class Experiment(BaseModel):
         """
         import openai
 
-        #openai.api_key = os.getenv("OPENAI_API_KEY")
-        openai.api_key= "sk-proj-gSjHA2Ve0MwmGbo5KcPuT3BlbkFJwbGxbpmjK22mQmXNgwhZ"
+        # openai.api_key = os.getenv("OPENAI_API_KEY")
+        openai.api_key = "sk-proj-gSjHA2Ve0MwmGbo5KcPuT3BlbkFJwbGxbpmjK22mQmXNgwhZ"
         response = openai.Completion.create(
             engine="davinci-codex",
             prompt=f"Create similar prompts to the one given: {prompt}. User request: {user_request}",
