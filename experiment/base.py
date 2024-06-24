@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+import os
 from pathlib import Path
 import traceback
 from typing import Any, Dict, List, Optional
@@ -111,8 +112,7 @@ class Experiment(BaseModel):
         """
         import openai
 
-        # openai.api_key = os.getenv("OPENAI_API_KEY")
-        openai.api_key = "sk-proj-gSjHA2Ve0MwmGbo5KcPuT3BlbkFJwbGxbpmjK22mQmXNgwhZ"
+        openai.api_key = os.getenv("OPENAI_API_KEY")
         response = openai.Completion.create(
             engine="davinci-codex",
             prompt=f"Create similar prompts to the one given: {prompt}. User request: {user_request}",
