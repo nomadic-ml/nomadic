@@ -6,9 +6,10 @@ def convert_string_to_list(s: str) -> List[Any]:
     try:
         # Use literal_eval to safely evaluate the string to a Python object
         result = ast.literal_eval(s)
-
-        # Check if result is a list
-        if isinstance(result, list):
+    except (ValueError, SyntaxError):
+        raise ValueError("Invalid string representation of a list.")
+    if isinstance(result, list):
+        try:
             # Check if all elements are strings that can be converted to floats
             if all(
                 isinstance(x, str) and x.replace(".", "", 1).isdigit()
@@ -23,7 +24,7 @@ def convert_string_to_list(s: str) -> List[Any]:
             # Otherwise, return the list as is (assuming it's a list of strings)
             else:
                 return result
-        else:
-            raise ValueError("The provided string is not a list.")
-    except (ValueError, SyntaxError):
-        raise ValueError("Invalid string representation of a list.")
+        except (ValueError, SyntaxError):
+            raise ValueError("Invalid string representation of a list.")
+    else:
+        raise ValueError("The provided string is not a list.")
