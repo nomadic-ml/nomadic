@@ -6,7 +6,6 @@ import traceback
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
-import numpy as np
 from llama_index.core.evaluation import BatchEvalRunner
 from llama_index.core.llms import CompletionResponse
 from llama_index.core.base.response.schema import Response
@@ -68,9 +67,7 @@ class Experiment(BaseModel):
         description="User request for GPT prompt.",
     )
     # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
-    model: Optional[Any] = Field(
-        default=None, description="Model to run experiment"
-    )
+    model: Optional[Any] = Field(default=None, description="Model to run experiment")
     evaluator: Optional[BatchEvalRunner] = Field(
         default=None, description="Evaluator of experiment"
     )
@@ -91,9 +88,7 @@ class Experiment(BaseModel):
     start_datetime: Optional[datetime] = Field(
         default=None, description="Start datetime."
     )
-    end_datetime: Optional[datetime] = Field(
-        default=None, description="End datetime."
-    )
+    end_datetime: Optional[datetime] = Field(default=None, description="End datetime.")
     tuned_result: Optional[TunedResult] = Field(
         default=None, description="Tuned result of Experiment"
     )
@@ -132,7 +127,9 @@ class Experiment(BaseModel):
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
             contexts, pred_responses, eval_qs, ref_responses = [], [], [], []
             for row in self.evaluation_dataset:
-                similar_prompts = self.generate_similar_prompts(row["Instruction"], self.user_prompt_request)
+                similar_prompts = self.generate_similar_prompts(
+                    row["Instruction"], self.user_prompt_request
+                )
                 for prompt in similar_prompts:
                     completion_response: CompletionResponse = self.model.run(
                         context=row["Context"],
@@ -161,9 +158,8 @@ class Experiment(BaseModel):
 
             # TODO: Generalize
             # get semantic similarity metric
-            mean_score = np.array(
-                [r.score for r in eval_results["semantic_similarity"]]
-            ).mean()
+            scores = [r.score for r in eval_results["semantic_similarity"]]
+            mean_score = sum(scores) / len(scores) if scores else 0
             return RunResult(
                 score=mean_score,
                 params=param_values,
