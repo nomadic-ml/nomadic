@@ -10,9 +10,9 @@ import openai
 from nomadic.result import RunResult
 
 DEFAULT_HYPERPARAMETER_SEARCH_SPACE: Dict[str, Any] = {
-    "temperature": "[0.1,0.3,0.5,0.7,0.9]",
-    "max_tokens": "[50,100,150,200]",
-    "top_p": "[0.1,0.3,0.5,0.7,0.9]",
+    "temperature": {"type": float, "values": "[0.1,0.3,0.5,0.7,0.9]"},
+    "max_tokens": {"type": int, "values": "[50,100,150,200]"},
+    "top_p": {"type": float, "values": "[0.1,0.3,0.5,0.7,0.9]"},
 }
 
 
@@ -25,7 +25,7 @@ class Model(BaseModel):
     expected_api_keys: ClassVar[Set[str]] = Field(
         default_factory=set, description="Set of expected API keys"
     )
-    hyperparameters: ClassVar[Dict[str, str]] = Field(
+    hyperparameters: ClassVar[Dict] = Field(
         default=DEFAULT_HYPERPARAMETER_SEARCH_SPACE,
         description="Set of hyperparameters to tune",
     )
@@ -100,15 +100,15 @@ class SagemakerModel(Model):
 
 DEFAULT_OPENAI_MODEL: str = "gpt-3.5-turbo"
 OPENAI_EXTRA_HYPERPARAMETER_SEARCH_SPACE: Dict[str, Any] = {
-    "frequency_penalty": "[-2.0, -1.0, 0.0, 1.0, 2.0]",
-    "presence_penalty": "[-2.0, -1.0, 0.0, 1.0, 2.0]",
+    "frequency_penalty": {"type": float, "values": "[-2.0, -1.0, 0.0, 1.0, 2.0]"},
+    "presence_penalty": {"type": float, "values": "[-2.0, -1.0, 0.0, 1.0, 2.0]"},
 }
 
 
 class OpenAIModel(Model):
     name: ClassVar[str] = "OpenAI"
     expected_api_keys: ClassVar[Set[str]] = ("OPENAI_API_KEY",)
-    hyperparameters: ClassVar[Dict[str, str]] = Field(
+    hyperparameters: ClassVar[Dict] = Field(
         default={
             **DEFAULT_HYPERPARAMETER_SEARCH_SPACE,
             **OPENAI_EXTRA_HYPERPARAMETER_SEARCH_SPACE,

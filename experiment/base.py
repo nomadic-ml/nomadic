@@ -3,16 +3,16 @@ from enum import Enum
 import os
 from pathlib import Path
 import traceback
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
-from llama_index.core.evaluation import BatchEvalRunner
+from llama_index.core.evaluation import BaseEvaluator
 from llama_index.core.llms import CompletionResponse
 from llama_index.core.base.response.schema import Response
 
 from nomadic.model import OpenAIModel, SagemakerModel
 from nomadic.result import RunResult, TunedResult
-from nomadic.tuner import ParamTuner
+from nomadic.tuner import ParamTuner, RayTuneParamTuner, BaseParamTuner
 
 """
 experiment = {
@@ -67,10 +67,13 @@ class Experiment(BaseModel):
         description="User request for GPT prompt.",
     )
     # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
+    # Note: A model is always required. It is currently denoted as `Optional` brcause of the TODO above.
     model: Optional[Any] = Field(default=None, description="Model to run experiment")
-    evaluator: Optional[BatchEvalRunner] = Field(
+    evaluator: Optional[BaseEvaluator] = Field(
         default=None, description="Evaluator of experiment"
     )
+    # TODO: Add BaseParamTuner (or ParamTuner, RayTuneParamTuner) as proper type here
+    tuner: Optional[Any] = Field(default=None, description="Placeholder for base tuner")
     # Optional
     fixed_param_dict: Optional[Dict[str, Any]] = Field(
         default=None,
@@ -83,6 +86,9 @@ class Experiment(BaseModel):
     num_prompts: int = Field(
         default=1,
         description="Number of prompt variations to generate for each data point.",
+    )
+    search_method: Optional[str] = Field(
+        default="grid", description="Tuner search option. Can be: [grid, bayesian]"
     )
     # Self populated
     start_datetime: Optional[datetime] = Field(
@@ -101,23 +107,38 @@ class Experiment(BaseModel):
         description="Detailed description of Experiment status during error.",
     )
 
+    def model_post_init(self, ctx):
+        if self.search_method not in ("grid", "bayesian"):
+            raise ValueError(
+                f"Selected Experiment search_method `{self.search_method}` is not valid."
+            )
+        self.tuner = None
+
     def generate_similar_prompts(self, prompt: str, user_request: str) -> List[str]:
         """
         Generate similar prompts using a GPT query.
         """
-        import openai
+        from openai import OpenAI
 
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        response = openai.Completion.create(
-            engine="davinci-codex",
-            prompt=f"Create similar prompts to the one given: {prompt}. User request: {user_request}",
+        client = OpenAI(api_key=self.model.api_keys["OPENAI_API_KEY"])
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Create similar prompts to the one given: {prompt}. User request: {user_request}",
+                }
+            ],
             max_tokens=100,
             n=self.num_prompts,
             stop=None,
             temperature=0.7,
         )
 
-        similar_prompts = [choice["text"].strip() for choice in response.choices]
+        similar_prompts = [
+            choice.message.content.strip() for choice in response.choices
+        ]
         return similar_prompts
 
     def run(self) -> TunedResult:
@@ -126,6 +147,22 @@ class Experiment(BaseModel):
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
             contexts, pred_responses, eval_qs, ref_responses = [], [], [], []
+            # Enforce param values to fit their default types, if they exist.
+            type_safe_param_values = {}
+            for param, val in param_values.items():
+                if param in self.model.hyperparameters.default:
+                    type_safe_param_values[param] = self.model.hyperparameters.default[
+                        param
+                    ]["type"](val)
+                else:
+                    type_safe_param_values[param] = val
+
+            if not self.evaluation_dataset:
+                completion_response: CompletionResponse = self.model.run(
+                    context=None,
+                    instruction=None,
+                    parameters=type_safe_param_values,
+                )
             for row in self.evaluation_dataset:
                 similar_prompts = self.generate_similar_prompts(
                     row["Instruction"], self.user_prompt_request
@@ -134,7 +171,7 @@ class Experiment(BaseModel):
                     completion_response: CompletionResponse = self.model.run(
                         context=row["Context"],
                         instruction=prompt,
-                        parameters=param_values,
+                        parameters=type_safe_param_values,
                     )
                     # OpenAI's model returns result in `completion_response.text`.
                     # Sagemaker's model returns result in `completion_response.raw["Body"]`.
@@ -150,15 +187,18 @@ class Experiment(BaseModel):
                         eval_qs.append(prompt)
                         ref_responses.append(row.get("Answer", None))
 
-            eval_results = self.evaluator.evaluate_responses(
-                # eval_qs, responses=pred_responses, reference=ref_responses
-                responses=[Response(response) for response in pred_responses],
-                reference=ref_responses,
-            )
+            eval_results = []
+            if self.evaluator:
+                for i, response in enumerate(pred_responses):
+                    eval_results.append(
+                        self.evaluator.evaluate_response(
+                            response=Response(response), reference=ref_responses[i]
+                        )
+                    )
 
             # TODO: Generalize
             # get semantic similarity metric
-            scores = [r.score for r in eval_results["semantic_similarity"]]
+            scores = [r.score for r in eval_results]
             mean_score = sum(scores) / len(scores) if scores else 0
             return RunResult(
                 score=mean_score,
@@ -175,24 +215,15 @@ class Experiment(BaseModel):
         self.start_datetime = datetime.now()
         result = None
         try:
-            # TODO: Figure out serialization problem caused by
-            # an `_abc_data` object.
-            # tuner = RayTuneParamTuner(
-            #     param_fn=default_param_function,
-            #     param_dict=self.hp_space,
-            #     fixed_param_dict=self.fixed_param_dict,
-            #     current_param_dict=self.current_param_dict,
-            #     show_progress=True,
-            # )
-            tuner = ParamTuner(
+            self.tuner = RayTuneParamTuner(
                 param_fn=default_param_function,
                 param_dict=self.param_dict,
-                search_method="grid",
+                search_method=self.search_method,
                 fixed_param_dict=self.fixed_param_dict,
                 current_param_dict=self.current_param_dict,
                 show_progress=True,
             )
-            result = tuner.fit()
+            result = self.tuner.fit()
         except Exception as e:
             is_error = True
             self.experiment_status_message = (

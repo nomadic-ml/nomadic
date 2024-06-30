@@ -21,6 +21,9 @@ class TunedResult(BaseModel):
         """Get best run result."""
         return self.run_results[self.best_idx]
 
+    def __len__(self) -> int:
+        return len(self.run_results)
+
     def to_df(self, include_metadata=True) -> pd.DataFrame:
         """Export TunedResult to a DataFrame."""
         data = []
