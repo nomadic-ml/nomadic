@@ -83,8 +83,8 @@ class Experiment(BaseModel):
         default=None,
         description="Optional dictionary of current hyperparameter values.",
     )
-    num_prompts: int = Field(
-        default=1,
+    num_extra_prompts: Optional[int] = Field(
+        default=0,
         description="Number of prompt variations to generate for each data point.",
     )
     search_method: Optional[str] = Field(
@@ -131,7 +131,7 @@ class Experiment(BaseModel):
                 }
             ],
             max_tokens=100,
-            n=self.num_prompts,
+            n=self.num_extra_prompts,
             stop=None,
             temperature=0.7,
         )
@@ -164,10 +164,13 @@ class Experiment(BaseModel):
                     parameters=type_safe_param_values,
                 )
             for row in self.evaluation_dataset:
-                similar_prompts = self.generate_similar_prompts(
-                    row["Instruction"], self.user_prompt_request
-                )
-                for prompt in similar_prompts:
+                prompts = [row["Instruction"]]
+                # Only generate similar prompts if instructed to generate extra prompts
+                if self.num_extra_prompts > 0:
+                    prompts = prompts + self.generate_similar_prompts(
+                        row["Instruction"], self.user_prompt_request
+                    )
+                for prompt in prompts:
                     completion_response: CompletionResponse = self.model.run(
                         context=row["Context"],
                         instruction=prompt,
@@ -207,7 +210,7 @@ class Experiment(BaseModel):
                     "Contexts": contexts,
                     "Instructions": eval_qs,
                     "Predictions": pred_responses,
-                    "Referance Responses": ref_responses,
+                    "Reference Responses": ref_responses,
                 },
             )
 
@@ -215,7 +218,7 @@ class Experiment(BaseModel):
         self.start_datetime = datetime.now()
         result = None
         try:
-            self.tuner = RayTuneParamTuner(
+            self.tuner = ParamTuner(
                 param_fn=default_param_function,
                 param_dict=self.param_dict,
                 search_method=self.search_method,
