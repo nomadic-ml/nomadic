@@ -1,9 +1,8 @@
 from datetime import datetime
 from enum import Enum
-import os
 from pathlib import Path
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from llama_index.core.evaluation import BaseEvaluator
@@ -12,7 +11,7 @@ from llama_index.core.base.response.schema import Response
 
 from nomadic.model import OpenAIModel, SagemakerModel
 from nomadic.result import RunResult, TunedResult
-from nomadic.tuner import ParamTuner, RayTuneParamTuner, BaseParamTuner
+from nomadic.tuner import ParamTuner, RayTuneParamTuner
 
 """
 experiment = {
@@ -141,8 +140,11 @@ class Experiment(BaseModel):
         ]
         return similar_prompts
 
+    # flake8: noqa: C901
     def run(self) -> TunedResult:
-        """Run experiment."""
+        """
+        Run experiment.
+        """
         is_error = False
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
@@ -246,6 +248,8 @@ class Experiment(BaseModel):
         return self.tuned_result
 
     def save_experiment(self, folder_path: Path):
-        file_name = f"/experiment_{self.start_datetime}.json"
+        file_name = (
+            f"/experiment_{self.start_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        )
         with open(folder_path + file_name, "w") as file:
             file.write(self.model_dump_json(exclude=("model", "evaluator")))

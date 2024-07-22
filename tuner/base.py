@@ -1,6 +1,10 @@
 from abc import abstractmethod
 import itertools
+import json
+import os
 from typing import Any, Callable, Dict, List, Optional
+from matplotlib import pyplot as plt
+import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 
 from ray import tune as ray_tune
@@ -36,6 +40,86 @@ class BaseParamTuner(BaseModel):
     @abstractmethod
     def fit(self) -> TunedResult:
         """Tune parameters."""
+
+    def save_results_table(self, results, filepath):
+        df = pd.DataFrame(results)
+        df.to_csv(filepath, index=False)
+
+    def save_graphs(self, results, output_dir):
+        # Add a new column for the JSON string of hyperparameters
+        results["hyperparameters"] = results.apply(
+            lambda x: json.dumps(
+                {
+                    "branching_factor": x["param_branching_factor"],
+                    "width": x["param_width"],
+                    "depth": x["param_depth"],
+                },
+                sort_keys=True,
+            ),
+            axis=1,
+        )
+
+        # Calculate scores based on the 'jailbroken' column
+        results["score"] = results["jailbroken"].apply(lambda x: 10 if x else 1)
+
+        # Group by hyperparameters and calculate means
+        grouped = (
+            results.groupby("hyperparameters")
+            .agg(
+                {
+                    "score": "mean",
+                    "attack_api_calls": "mean",
+                    "target_api_calls": "mean",
+                    "judge_api_calls": "mean",
+                    "total_cost": "mean",
+                }
+            )
+            .reset_index()
+        )
+
+        # Plotting: Score vs. Hyperparameters
+        plt.figure(figsize=(12, 6))
+        plt.bar(grouped["hyperparameters"], grouped["score"], color="blue")
+        plt.xlabel("Hyperparameters")
+        plt.ylabel("Average Score")
+        plt.title("Average Score by Hyperparameters")
+        plt.xticks(rotation=90)
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "average_scores_by_hyperparameters.png"))
+        plt.clf()
+
+        # Plotting: Total API Calls vs. Hyperparameters (aggregated from all APIs)
+        grouped["total_api_calls"] = (
+            grouped["attack_api_calls"]
+            + grouped["target_api_calls"]
+            + grouped["judge_api_calls"]
+        )
+        plt.figure(figsize=(12, 6))
+        plt.bar(grouped["hyperparameters"], grouped["total_api_calls"], color="green")
+        plt.xlabel("Hyperparameters")
+        plt.ylabel("Average Total API Calls")
+        plt.title("Average Total API Calls by Hyperparameters")
+        plt.xticks(rotation=90)
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(output_dir, "average_total_api_calls_by_hyperparameters.png")
+        )
+        plt.clf()
+
+        # Plotting: Total Cost vs. Hyperparameters
+        plt.figure(figsize=(12, 6))
+        plt.bar(grouped["hyperparameters"], grouped["total_cost"], color="red")
+        plt.xlabel("Hyperparameters")
+        plt.ylabel("Average Total Cost")
+        plt.title("Average Total Cost by Hyperparameters")
+        plt.xticks(rotation=90)
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(output_dir, "average_total_cost_by_hyperparameters.png")
+        )
+        plt.clf()
+
+        print("Graphs have been saved successfully.")
 
 
 class RayTuneParamTuner(BaseParamTuner):
