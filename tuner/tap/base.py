@@ -188,6 +188,13 @@ class TAPParamTuner(BaseParamTuner):
         self, param_dict: Dict[str, Any]
     ) -> Tuple[float, Dict[str, Any]]:
         # Use the enhanced function to evaluate the parameters
+        self.evaluator.goal = self.fixed_param_dict["goal"]
+        self.evaluator.target_str = self.fixed_param_dict["target_str"]
+        print("evaluator goals")
+        self.fixed_param_dict["args"].target_str = self.fixed_param_dict["target_str"]
+        self.fixed_param_dict["args"].goal = self.fixed_param_dict["goal"]
+
+        print(self.evaluator.goal)
         result = self.enhanced_function(
             attack_params=param_dict,
             attack_llm=self.attack_llm,
