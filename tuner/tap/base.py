@@ -77,6 +77,7 @@ class TAPParamTuner(BaseParamTuner):
     attack_llm: Optional[Any] = Field(..., description="Attack LLM instance")
 
     def fit(self) -> TunedResult:
+        print("fitting")
         if self.search_method == "grid":
             return self._grid_search()
         elif self.search_method == "bayesian":
@@ -135,10 +136,9 @@ class TAPParamTuner(BaseParamTuner):
         )
 
     def _flaml_optimization(self) -> TunedResult:
+        print("starting flaml optimization")
 
         def objective(config):
-            print("config")
-            print(config)
             score, result = self._evaluate_params(config)
             return {"score": score, "result": result}
 
@@ -197,9 +197,12 @@ class TAPParamTuner(BaseParamTuner):
             args=self.fixed_param_dict["args"],
             top_p=param_dict.get("top_p", 1.0),
             temperature=param_dict.get("temperature", 0.7),
+            goal=self.fixed_param_dict["goal"],  # Ensure goal is passed
+            target_str=self.fixed_param_dict[
+                "target_str"
+            ],  # Ensure target_str is passed
             flavor="default",
         )
-        print(result)
         avg_score = result["score"]
         return avg_score, result
 
