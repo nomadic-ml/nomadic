@@ -55,9 +55,6 @@ class TAPParamTuner(BaseParamTuner):
         default_factory=dict,
         description="A dictionary of fixed parameters passed to each job.",
     )
-    dataset: List[Dict[str, Any]] = Field(
-        ..., description="Dataset to use for evaluation."
-    )
     evaluation_method: int = Field(default=3, description="Evaluation method to use.")
     run_config_dict: Optional[Dict[str, Any]] = Field(
         default=None, description="Optional run configuration dictionary."
@@ -69,7 +66,7 @@ class TAPParamTuner(BaseParamTuner):
         default=None, description="Enhanced function for FLAML optimization."
     )
     num_simulations: int = Field(
-        default=10,
+        default=-1,
         description="Number of simulations to run for each hyperparameter combination.",
     )
     evaluator: Optional[Any] = Field(..., description="Evaluator instance")
@@ -115,7 +112,7 @@ class TAPParamTuner(BaseParamTuner):
         def objective(params):
             param_dict = dict(zip(self.param_dict.keys(), params))
             score, _ = self._evaluate_params(param_dict)
-            return -score  # Minimize negative score (maximize score)
+            return score  # Minimize negative score (maximize score)
 
         space = [Integer(min(v), max(v), name=k) for k, v in self.param_dict.items()]
 
@@ -139,8 +136,8 @@ class TAPParamTuner(BaseParamTuner):
         print("starting flaml optimization")
 
         def objective(config):
-            score, result = self._evaluate_params(config)
-            return {"score": score, "result": result}
+            result = self._evaluate_params(config)
+            return {"score": result["score"], "result": result}
 
         search_space = {
             k: (
@@ -188,11 +185,23 @@ class TAPParamTuner(BaseParamTuner):
         self, param_dict: Dict[str, Any]
     ) -> Tuple[float, Dict[str, Any]]:
         # Use the enhanced function to evaluate the parameters
-        self.evaluator.goal = self.fixed_param_dict["goal"]
-        self.evaluator.target_str = self.fixed_param_dict["target_str"]
-        print("evaluator goals")
-        self.fixed_param_dict["args"].target_str = self.fixed_param_dict["target_str"]
-        self.fixed_param_dict["args"].goal = self.fixed_param_dict["goal"]
+
+        # Select one random goal with its matching target_str to evaluate
+        # selected HP configuration.
+        # TODO: This is custom code for the dataset. Abstract this out properly
+        import random
+
+        goal_i = random.randint(0, len(self.fixed_param_dict["goals"]) - 1)
+        goal, target_str = (
+            self.fixed_param_dict["goals"][goal_i],
+            self.fixed_param_dict["target_strs"][goal_i],
+        )
+
+        self.evaluator.goal = goal
+        self.evaluator.target_str = target_str
+
+        self.fixed_param_dict["args"].goal = goal
+        self.fixed_param_dict["args"].target_str = target_str
 
         print(self.evaluator.goal)
         result = self.enhanced_function(
@@ -200,18 +209,14 @@ class TAPParamTuner(BaseParamTuner):
             attack_llm=self.attack_llm,
             target_llm=self.target,
             evaluator_llm=self.evaluator,
-            logger=self.fixed_param_dict["logger"],
             args=self.fixed_param_dict["args"],
             top_p=param_dict.get("top_p", 1.0),
             temperature=param_dict.get("temperature", 0.7),
-            goal=self.fixed_param_dict["goal"],  # Ensure goal is passed
-            target_str=self.fixed_param_dict[
-                "target_str"
-            ],  # Ensure target_str is passed
+            goal=goal,  # Ensure goal is passed
+            target_str=target_str,  # Ensure target_str is passed
             flavor="default",
         )
-        avg_score = result["score"]
-        return avg_score, result
+        return result
 
     def save_results_table(self, results: pd.DataFrame, filepath: str):
         results.to_csv(filepath, index=False)
