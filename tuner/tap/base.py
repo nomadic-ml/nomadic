@@ -62,7 +62,7 @@ class TAPParamTuner(BaseParamTuner):
     search_method: str = Field(
         default="grid", description="Search method to use for hyperparameter tuning."
     )
-    enhanced_function: Optional[Callable] = Field(
+    enhanced_function: Optional[Callable[[Any], RunResult]] = Field(
         default=None, description="Enhanced function for FLAML optimization."
     )
     num_simulations: int = Field(
@@ -93,14 +93,17 @@ class TAPParamTuner(BaseParamTuner):
         best_params = None
 
         for params in get_tqdm_iterable(param_combinations, self.show_progress):
+            # Evaluate given HP configuration
             param_dict = dict(zip(param_keys, params))
-            score, result = self._evaluate_params(param_dict)
-
+            result = self._evaluate_params(param_dict)
             results.append(result)
 
-            if score > best_score:
-                best_score = score
+            if result.score > best_score:
+                best_score = result.score
                 best_params = param_dict
+
+            # Write ongoing result to file
+            self.add_entries_to_results_json_file(result)
 
         return TunedResult(
             best_params=best_params,
@@ -110,9 +113,12 @@ class TAPParamTuner(BaseParamTuner):
 
     def _bayesian_optimization(self) -> TunedResult:
         def objective(params):
+            # Evaluate given HP configuration
             param_dict = dict(zip(self.param_dict.keys(), params))
-            score, _ = self._evaluate_params(param_dict)
-            return score  # Minimize negative score (maximize score)
+            result = self._evaluate_params(param_dict)
+            # Write ongoing result to file
+            self.add_entries_to_results_json_file(result)
+            return result.score  # Minimize negative score (maximize score)
 
         space = [Integer(min(v), max(v), name=k) for k, v in self.param_dict.items()]
 
@@ -136,8 +142,11 @@ class TAPParamTuner(BaseParamTuner):
         print("starting flaml optimization")
 
         def objective(config):
+            # Evaluate given HP configuration
             result = self._evaluate_params(config)
-            return {"score": result["score"], "result": result}
+            # Write ongoing result to file
+            self.add_entries_to_results_json_file(result)
+            return {"score": result.score, "result": result.metadata}
 
         def get_tune_value(v):
             if isinstance(v.get("values"), list) and len(v["values"]) == 2:
@@ -188,9 +197,7 @@ class TAPParamTuner(BaseParamTuner):
 
         return TunedResult(run_results=run_results, best_idx=best_idx)
 
-    def _evaluate_params(
-        self, param_dict: Dict[str, Any]
-    ) -> Tuple[float, Dict[str, Any]]:
+    def _evaluate_params(self, param_dict: Dict[str, Any]) -> RunResult:
         # Use the enhanced function to evaluate the parameters
 
         # Select one random goal with its matching target_str to evaluate

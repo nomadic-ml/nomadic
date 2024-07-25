@@ -36,10 +36,40 @@ class BaseParamTuner(BaseModel):
         default=1,
         description="Number of prompt variations to generate for each data point.",
     )
+    results_filepath: Optional[str] = Field(
+        default=None, description="Path of outputting tuner run results."
+    )
 
     @abstractmethod
     def fit(self) -> TunedResult:
         """Tune parameters."""
+
+    def add_entries_to_results_json_file(self, new_entry: RunResult) -> None:
+        if not self.results_filepath:
+            return
+        try:
+            # Read the existing JSON file
+            with open(self.results_filepath, "r") as file:
+                print(f"existing file: {self.results_filepath}")
+                data = json.load(file)
+                print(f"existing data: {data}")
+        except (FileNotFoundError, json.JSONDecodeError):
+            # If the file does not exist or is empty/invalid, initialize an empty list
+            data = []
+
+        # Ensure data is a list before updating it
+        if not isinstance(data, list):
+            data = []
+
+        print(f"new data: {new_entry.model_dump()}")
+        # Append the new entries to the list
+        data.extend([new_entry.model_dump()])
+
+        # Write the updated list back to the JSON file
+        with open(self.results_filepath, "w") as file:
+            print(f"updating file: {self.results_filepath}")
+            json.dump(data, file, indent=4)
+            print(f"updated data: {data}")
 
     def save_results_table(self, results, filepath):
         df = pd.DataFrame(results)
