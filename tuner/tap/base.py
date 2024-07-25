@@ -139,14 +139,21 @@ class TAPParamTuner(BaseParamTuner):
             result = self._evaluate_params(config)
             return {"score": result["score"], "result": result}
 
-        search_space = {
-            k: (
-                tune.choice(v["values"])
-                if isinstance(v.get("values"), list)
-                else tune.uniform(v["min"], v["max"])
-            )
-            for k, v in self.param_dict.items()
-        }
+        def get_tune_value(v):
+            if isinstance(v.get("values"), list) and len(v["values"]) == 2:
+                # print(f"v['values']: {v['values']}")
+                return tune.randint(v["values"][0], v["values"][1] + 1)
+            elif isinstance(v.get("values"), list) and len(v["values"]) == 1:
+                # print(f"v['values']: {v['values']}")
+                return v["values"][0]
+            elif "min" in v and "max" in v:
+                # print(f"v['min']: {v['min']}, v['max']: {v['max']}")
+                return tune.randint(v["min"], v["max"] + 1)
+            else:
+                raise ValueError(f"Unsupported format for value: {v}")
+
+        # Construct the search space with the helper function
+        search_space = {k: get_tune_value(v) for k, v in self.param_dict.items()}
 
         algo = BlendSearch(
             metric="score",
