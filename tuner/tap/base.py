@@ -1,13 +1,15 @@
 import itertools
 import pandas as pd
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional
 from pydantic import BaseModel, Field
 from skopt import gp_minimize
 from skopt.space import Integer
-from flaml import tune
+
 from flaml import BlendSearch
+
+
 from nomadic.result import RunResult, TunedResult
-from nomadic.tuner import BaseParamTuner
+from nomadic.tuner import BaseParamTuner, tune
 from nomadic.util import get_tqdm_iterable
 
 
@@ -33,11 +35,11 @@ class BaseAttackLLM(BaseModel):
 
 
 DEFAULT_HYPERPARAMETER_SEARCH_SPACE: Dict[str, Any] = {
-    "branching_factor": {"type": int, "values": [3, 4]},
-    "width": {"type": int, "values": [5, 6]},
-    "depth": {"type": int, "values": [5, 6]},
-    "temperature": {"type": int, "values": [0.7]},
-    "top_p": {"type": int, "values": [1]},
+    "depth": {"_type": "randint", "_value": [5, 7]},
+    "width": {"_type": "randint", "_value": [5, 7]},
+    "branching_factor": {"_type": "randint", "_value": [3, 5]},
+    "temperature": {"_type": "choice", "_value": [0.7]},
+    "top_p": {"_type": "choice", "_value": [1]},
 }
 
 
@@ -47,7 +49,7 @@ class TAPParamTuner(BaseParamTuner):
     param_fn: Callable[[Dict[str, Any]], Dict[str, Any]] = Field(
         default=None, description="Function to run with parameters."
     )
-    param_dict: Dict[str, Dict[str, Any]] = Field(
+    param_dict: Dict[str, Any] = Field(
         default_factory=lambda: DEFAULT_HYPERPARAMETER_SEARCH_SPACE,
         description="A dictionary of parameters to iterate over.",
     )
@@ -148,21 +150,7 @@ class TAPParamTuner(BaseParamTuner):
             self.add_entries_to_results_json_file(result)
             return {"score": result.score, "result": result.metadata}
 
-        def get_tune_value(v):
-            if isinstance(v.get("values"), list) and len(v["values"]) == 2:
-                # print(f"v['values']: {v['values']}")
-                return tune.randint(v["values"][0], v["values"][1] + 1)
-            elif isinstance(v.get("values"), list) and len(v["values"]) == 1:
-                # print(f"v['values']: {v['values']}")
-                return v["values"][0]
-            elif "min" in v and "max" in v:
-                # print(f"v['min']: {v['min']}, v['max']: {v['max']}")
-                return tune.randint(v["min"], v["max"] + 1)
-            else:
-                raise ValueError(f"Unsupported format for value: {v}")
-
-        # Construct the search space with the helper function
-        search_space = {k: get_tune_value(v) for k, v in self.param_dict.items()}
+        search_space = self.param_dict
 
         algo = BlendSearch(
             metric="score",

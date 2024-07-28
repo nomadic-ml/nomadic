@@ -10,9 +10,7 @@ from nomadic.result.base import TunedResult
 from pydantic import BaseModel
 
 
-def get_tqdm_iterable(
-    items: Iterable, show_progress: bool, desc: str
-) -> Iterable:
+def get_tqdm_iterable(items: Iterable, show_progress: bool, desc: str) -> Iterable:
     """
     Implement tqdm progress bar.
     """
@@ -33,9 +31,7 @@ def convert_string_to_int_array(string: str) -> list:
         if not isinstance(int_array, list) or not all(
             isinstance(i, int) for i in int_array
         ):
-            raise ValueError(
-                "The input string does not represent an integer array."
-            )
+            raise ValueError("The input string does not represent an integer array.")
         return int_array
     except (ValueError, SyntaxError) as e:
         raise ValueError("Invalid input string") from e
@@ -74,3 +70,15 @@ def get_subclasses(cls: Type[BaseModel]) -> List[Type[BaseModel]]:
     for subclass in cls.__subclasses__():
         subclasses.extend(get_subclasses(subclass))
     return subclasses
+
+
+def is_ray_installed() -> bool:
+    """Verify the Ray Tune framework is installed"""
+    try:
+        from ray import __version__ as ray_version
+
+        assert ray_version >= "1.10.0"
+    except (ImportError, AssertionError):
+        return False
+    else:
+        return True

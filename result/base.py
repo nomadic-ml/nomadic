@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 import pandas as pd
@@ -9,7 +9,9 @@ class RunResult(BaseModel):
 
     score: float
     params: Dict[str, Any]
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata.")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="Metadata."
+    )
 
 
 class TunedResult(BaseModel):

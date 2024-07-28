@@ -3,7 +3,7 @@ from enum import Enum
 from pathlib import Path
 import traceback
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from llama_index.core.evaluation import BaseEvaluator
 from llama_index.core.llms import CompletionResponse
@@ -11,7 +11,8 @@ from llama_index.core.base.response.schema import Response
 
 from nomadic.model import OpenAIModel, SagemakerModel
 from nomadic.result import RunResult, TunedResult
-from nomadic.tuner import ParamTuner, RayTuneParamTuner
+from nomadic.tuner.base import BaseParamTuner
+from nomadic.util import is_ray_installed
 
 """
 experiment = {
@@ -54,7 +55,7 @@ class Experiment(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # Required
-    param_dict: Dict[str, Dict[str, Any]] = Field(
+    param_dict: Dict[str, Any] = Field(
         ..., description="A dictionary of parameters to iterate over."
     )
     evaluation_dataset: List[Dict] = Field(
@@ -71,7 +72,7 @@ class Experiment(BaseModel):
     evaluator: Optional[BaseEvaluator] = Field(
         default=None, description="Evaluator of experiment"
     )
-    # TODO: Add BaseParamTuner (or ParamTuner, RayTuneParamTuner) as proper type here
+    # tuner is checked for being child of BaseParamTuner in `check_tuner_class`
     tuner: Optional[Any] = Field(default=None, description="Placeholder for base tuner")
     # Optional
     fixed_param_dict: Optional[Dict[str, Any]] = Field(
@@ -106,12 +107,17 @@ class Experiment(BaseModel):
         description="Detailed description of Experiment status during error.",
     )
 
+    @field_validator("tuner")
+    def check_tuner_class(cls, value):
+        if not isinstance(value, BaseParamTuner):
+            raise ValueError("tuner must be a subclass of BaseParamTuner")
+        return value
+
     def model_post_init(self, ctx):
         if self.search_method not in ("grid", "bayesian"):
             raise ValueError(
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
-        self.tuner = None
 
     def generate_similar_prompts(self, prompt: str, user_request: str) -> List[str]:
         """
@@ -220,14 +226,24 @@ class Experiment(BaseModel):
         self.start_datetime = datetime.now()
         result = None
         try:
-            self.tuner = ParamTuner(
-                param_fn=default_param_function,
-                param_dict=self.param_dict,
-                search_method=self.search_method,
-                fixed_param_dict=self.fixed_param_dict,
-                current_param_dict=self.current_param_dict,
-                show_progress=True,
-            )
+            if not self.tuner:
+                # Select default tuner if one is not specified
+                if is_ray_installed():
+                    from nomadic.tuner.ray import RayTuneParamTuner
+
+                    tuner = RayTuneParamTuner
+                else:
+                    from nomadic.tuner import FlamlParamTuner
+
+                    tuner = FlamlParamTuner
+                self.tuner = tuner(
+                    param_fn=default_param_function,
+                    param_dict=self.param_dict,
+                    search_method=self.search_method,
+                    fixed_param_dict=self.fixed_param_dict,
+                    current_param_dict=self.current_param_dict,
+                    show_progress=True,
+                )
             result = self.tuner.fit()
         except Exception as e:
             is_error = True
