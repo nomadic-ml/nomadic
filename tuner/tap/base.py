@@ -71,6 +71,9 @@ class TAPParamTuner(BaseParamTuner):
         default=-1,
         description="Number of simulations to run for each hyperparameter combination.",
     )
+    time_budget_s: Optional[int] = Field(
+        default=None, description="Time budget (sec) for the experiment to run."
+    )
     evaluator: Optional[Any] = Field(..., description="Evaluator instance")
     target: Optional[Any] = Field(..., description="Target instance")
     attack_llm: Optional[Any] = Field(..., description="Attack LLM instance")
@@ -164,6 +167,7 @@ class TAPParamTuner(BaseParamTuner):
             objective,
             config=search_space,
             num_samples=self.num_simulations,
+            time_budget_s=self.time_budget_s,
             search_alg=algo,
             verbose=self.show_progress,
         )
