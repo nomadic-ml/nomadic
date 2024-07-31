@@ -93,7 +93,7 @@ class SagemakerModel(Model):
             model_kwargs=kwargs["parameters"],
         )
         return self.llm.complete(
-            prompt=kwargs["Instruction"],
+            prompt=kwargs["prompt"],
             formatted=True,
         )
 
@@ -133,6 +133,6 @@ class OpenAIModel(Model):
                 temperature=kwargs["parameters"].get("temperature", None),
             )
         return self.llm.complete(
-            prompt=kwargs["instruction"],
+            prompt=kwargs["prompt"],
             **kwargs["parameters"],
         )

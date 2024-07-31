@@ -14,6 +14,15 @@ from nomadic.result import RunResult, TunedResult
 from nomadic.tuner.base import BaseParamTuner
 from nomadic.util import is_ray_installed
 
+from langchain_core.prompts import FewShotPromptTemplate, PromptTemplate
+from langchain_chroma import Chroma
+from langchain_community.vectorstores import FAISS
+from langchain_core.example_selectors import (
+    MaxMarginalRelevanceExampleSelector,
+    SemanticSimilarityExampleSelector,
+)
+from langchain_openai import OpenAIEmbeddings
+
 """
 experiment = {
     experiment_runs = {
@@ -85,7 +94,11 @@ class Experiment(BaseModel):
     )
     num_extra_prompts: Optional[int] = Field(
         default=0,
-        description="Number of prompt variations to generate for each data point.",
+        description="Number of extra prompts to generate.",
+    )
+    num_example_prompts: Optional[int] = Field(
+        default=0,
+        description="Number of example prompts to include for few-shot prompting.",
     )
     search_method: Optional[str] = Field(
         default="grid", description="Tuner search option. Can be: [grid, bayesian]"
@@ -146,6 +159,50 @@ class Experiment(BaseModel):
         ]
         return similar_prompts
 
+    def get_fewshot_prompt_template(self) -> FewShotPromptTemplate:
+        """
+        Generate few shot prompt template using LangChain
+        """
+        examples = self.evaluation_dataset
+        # create a example template
+        example_template = "Context: {Context}\n\nInstruction: {Instruction}\n\nQuestion: {Question}\n\nAnswer: {Answer}"
+
+        # create a prompt example from above template
+        example_prompt = PromptTemplate(
+            input_variables=["Context", "Instruction", "Question", "Answer"],
+            template=example_template,
+        )
+
+        """
+        Choose between: MaxMarginalRelevanceExampleSelector OR SemanticSimilarityExampleSelector
+        MMR selects examples based on a combination of
+        which examples are most similar to the inputs, while also optimizing for diversity.
+        It does this by finding the examples with the embeddings that have the greatest cosine
+        similarity with the inputs, and then iteratively adding them while penalizing them
+        for closeness to already selected examples.
+        """
+        example_selector = SemanticSimilarityExampleSelector.from_examples(
+            # List of examples available to select from.
+            examples,
+            # Embedding class used to produce embeddings which are used to measure semantic similarity.
+            OpenAIEmbeddings(),
+            # VectorStore class that is used to store the embeddings and do a similarity search over.
+            Chroma,  # Chroma for SemanticSimilarityExampleSelector, FAISS for MaxMarginalRelevanceExampleSelector
+            # Number of examples to produce.
+            k=self.num_example_prompts,
+            # fetch_k=len(examples),  # Specify this IF using MMR,
+        )
+        # Now create the few shot prompt template
+        mmr_prompt = FewShotPromptTemplate(
+            example_selector=example_selector,
+            example_prompt=example_prompt,
+            input_variables=["input"],
+            suffix="{input}\n\nAnswer:",
+            example_separator="\n\n",
+        )
+
+        return mmr_prompt
+
     # flake8: noqa: C901
     def run(self) -> TunedResult:
         """
@@ -153,35 +210,32 @@ class Experiment(BaseModel):
         """
         is_error = False
 
-        def default_param_function(param_values: Dict[str, Any]) -> RunResult:
-            contexts, pred_responses, eval_qs, ref_responses = [], [], [], []
-            # Enforce param values to fit their default types, if they exist.
-            type_safe_param_values = {}
-            for param, val in param_values.items():
-                if param in self.model.hyperparameters.default:
-                    type_safe_param_values[param] = self.model.hyperparameters.default[
-                        param
-                    ]["type"](val)
-                else:
-                    type_safe_param_values[param] = val
-
+        def get_responses(type_safe_param_values):
+            pred_responses, eval_qs, ref_responses = [], [], []
+            # If evaluation dataset is not provided
             if not self.evaluation_dataset:
                 completion_response: CompletionResponse = self.model.run(
-                    context=None,
-                    instruction=None,
+                    prompt=None,
                     parameters=type_safe_param_values,
                 )
-            for row in self.evaluation_dataset:
-                prompts = [row["Instruction"]]
-                # Only generate similar prompts if instructed to generate extra prompts
-                if self.num_extra_prompts > 0:
-                    prompts = prompts + self.generate_similar_prompts(
-                        row["Instruction"], self.user_prompt_request
+            # If evaluation dataset is provided
+            else:
+                for example in self.evaluation_dataset:
+                    prompt = (
+                        "Context: "
+                        + example["Context"]
+                        + "\n\n"
+                        + "Instruction: "
+                        + example["Instruction"]
+                        + "\n\n"
+                        + "Question: "
+                        + example["Question"]
+                        + "\n\n"
                     )
-                for prompt in prompts:
+                    if self.num_example_prompts > 0:
+                        prompt = self.get_fewshot_prompt_template().format(input=prompt)
                     completion_response: CompletionResponse = self.model.run(
-                        context=row["Context"],
-                        instruction=prompt,
+                        prompt=prompt,
                         parameters=type_safe_param_values,
                     )
                     # OpenAI's model returns result in `completion_response.text`.
@@ -193,11 +247,24 @@ class Experiment(BaseModel):
                             pred_response = completion_response.raw["Body"]
                         else:
                             raise NotImplementedError
-                        contexts.append(row.get("Context", None))
                         pred_responses.append(pred_response)
                         eval_qs.append(prompt)
-                        ref_responses.append(row.get("Answer", None))
+                        ref_responses.append(example.get("Answer", None))
+            return (pred_responses, eval_qs, ref_responses)
 
+        def default_param_function(param_values: Dict[str, Any]) -> RunResult:
+            # Enforce param values to fit their default types, if they exist.
+            type_safe_param_values = {}
+            for param, val in param_values.items():
+                if param in self.model.hyperparameters.default:
+                    type_safe_param_values[param] = self.model.hyperparameters.default[
+                        param
+                    ]["type"](val)
+                else:
+                    type_safe_param_values[param] = val
+            pred_responses, eval_qs, ref_responses = get_responses(
+                type_safe_param_values
+            )
             eval_results = []
             if self.evaluator:
                 for i, response in enumerate(pred_responses):
@@ -215,10 +282,9 @@ class Experiment(BaseModel):
                 score=mean_score,
                 params=param_values,
                 metadata={
-                    "Contexts": contexts,
-                    "Instructions": eval_qs,
-                    "Predictions": pred_responses,
-                    "Reference Responses": ref_responses,
+                    "Prompts": eval_qs,
+                    "Answers": pred_responses,
+                    "Ground Truth": ref_responses,
                 },
             )
 
