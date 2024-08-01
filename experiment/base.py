@@ -297,19 +297,27 @@ class Experiment(BaseModel):
                 if is_ray_installed():
                     from nomadic.tuner.ray import RayTuneParamTuner
 
-                    tuner = RayTuneParamTuner
+                    self.tuner = RayTuneParamTuner(
+                        param_fn=default_param_function,
+                        param_dict=self.param_dict,
+                        search_method=self.search_method,
+                        fixed_param_dict=self.fixed_param_dict,
+                        current_param_dict=self.current_param_dict,
+                        show_progress=True,
+                    )
                 else:
                     from nomadic.tuner import FlamlParamTuner
 
-                    tuner = FlamlParamTuner
-                self.tuner = tuner(
-                    param_fn=default_param_function,
-                    param_dict=self.param_dict,
-                    search_method=self.search_method,
-                    fixed_param_dict=self.fixed_param_dict,
-                    current_param_dict=self.current_param_dict,
-                    show_progress=True,
-                )
+                    self.tuner = FlamlParamTuner(
+                        param_fn=default_param_function,
+                        param_dict=self.param_dict,
+                        search_method=self.search_method,
+                        fixed_param_dict=self.fixed_param_dict,
+                        current_param_dict=self.current_param_dict,
+                        show_progress=True,
+                        num_samples=-1,
+                    )
+
             result = self.tuner.fit()
         except Exception as e:
             is_error = True

@@ -2,6 +2,7 @@ from typing import Any, Optional
 from pydantic import Field
 
 from flaml import tune
+from flaml import BlendSearch
 from flaml.tune.analysis import ExperimentAnalysis
 
 from nomadic.result import RunResult, TunedResult
@@ -13,8 +14,14 @@ class FlamlParamTuner(BaseParamTuner):
     Parameter tuner powered by FLAML.
     """
 
-    search_alg: Any = Field(..., description="FLAML search algorithm")
-    num_samples: int = Field(..., description="FLAML num samples")
+    search_alg: Optional[Any] = Field(
+        default=BlendSearch(
+            metric="score",
+            mode="max",
+        ),
+        description="FLAML search algorithm",
+    )
+    num_samples: Optional[int] = Field(default=-1, description="FLAML num samples")
     run_config_dict: Optional[dict] = Field(
         default=None, description="Run config dict for Ray Tune."
     )
@@ -33,6 +40,9 @@ class FlamlParamTuner(BaseParamTuner):
     def fit(self) -> TunedResult:
         """Run tuning."""
         # Combine fixed, current and search space parameters
+        self.param_dict = self.param_dict if not None else {}
+        self.current_param_dict = self.current_param_dict if not None else {}
+        self.fixed_param_dict = self.fixed_param_dict if not None else {}
         config = {**self.param_dict, **self.current_param_dict, **self.fixed_param_dict}
 
         # Run hyperparameter tuning

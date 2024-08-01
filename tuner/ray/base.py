@@ -79,11 +79,15 @@ class RayTuneParamTuner(BaseParamTuner):
         )
         run_config = RunConfig(**self.run_config_dict) if self.run_config_dict else None
         if search_method == "grid":
-            return ray_tune.Tuner(
+            new_param_space = {
+                hp_name: ray_tune.grid_search(val.categories)
+                for hp_name, val in param_space.items()
+            }
+            ray_tuner = ray_tune.Tuner(
                 ray_tune.with_parameters(
                     self._param_fn_wrapper, fixed_param_dict=self.fixed_param_dict
                 ),
-                param_space=param_space,
+                param_space=new_param_space,
                 run_config=run_config,
             )
         elif search_method == "bayesian":
@@ -93,7 +97,7 @@ class RayTuneParamTuner(BaseParamTuner):
                 hp_name: ray_tune.uniform(*tuple(val["uniform"]))
                 for hp_name, val in param_space.items()
             }
-            return ray_tune.Tuner(
+            ray_tuner = ray_tune.Tuner(
                 ray_tune.with_parameters(
                     self._param_fn_wrapper, fixed_param_dict=self.fixed_param_dict
                 ),
@@ -106,6 +110,7 @@ class RayTuneParamTuner(BaseParamTuner):
             )
         else:
             raise NotImplementedError
+        return ray_tuner
 
     def fit(self) -> TunedResult:
         """Run tuning."""
