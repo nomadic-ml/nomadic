@@ -120,6 +120,28 @@ class Experiment(BaseModel):
         description="Detailed description of Experiment status during error.",
     )
 
+    # New fields for multi-prompt approach
+    num_prompt_variants: int = Field(
+        default=1,
+        description="Number of prompt variants to generate.",
+    )
+    num_iterations_per_prompt: int = Field(
+        default=1,
+        description="Number of times to run each prompt variant.",
+    )
+    prompting_approach: str = Field(
+        default="zero-shot",
+        description="Prompting approach (e.g., zero-shot, few-shot, chain-of-thought).",
+    )
+    prompt_complexity: str = Field(
+        default="simple",
+        description="Level of detail in the prompt (e.g., simple, detailed, very detailed).",
+    )
+    prompt_focus: str = Field(
+        default="",
+        description="Emphasis for the prompt (e.g., fact extraction, action points, British English usage).",
+    )
+
     @field_validator("tuner")
     def check_tuner_class(cls, value):
         if not isinstance(value, BaseParamTuner):
@@ -140,24 +162,34 @@ class Experiment(BaseModel):
 
         client = OpenAI(api_key=self.model.api_keys["OPENAI_API_KEY"])
 
+        system_message = f"""
+        Generate {self.num_prompt_variants} prompt variants based on the following parameters:
+        - Prompting Approach: {self.prompting_approach}
+        - Prompt Complexity: {self.prompt_complexity}
+        - Prompt Focus: {self.prompt_focus}
+
+        Each prompt should be a variation of the original prompt, adhering to the specified parameters.
+        """
+
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
+                {"role": "system", "content": system_message},
                 {
                     "role": "user",
-                    "content": f"Create similar prompts to the one given: {prompt}. User request: {user_request}",
-                }
+                    "content": f"Original prompt: {prompt}\nUser request: {user_request}",
+                },
             ],
-            max_tokens=100,
-            n=self.num_extra_prompts,
+            max_tokens=200,
+            n=self.num_prompt_variants,
             stop=None,
             temperature=0.7,
         )
 
-        similar_prompts = [
+        prompt_variants = [
             choice.message.content.strip() for choice in response.choices
         ]
-        return similar_prompts
+        return prompt_variants
 
     def get_fewshot_prompt_template(self) -> FewShotPromptTemplate:
         """
@@ -211,46 +243,49 @@ class Experiment(BaseModel):
         is_error = False
 
         def get_responses(type_safe_param_values):
-            pred_responses, eval_qs, ref_responses = [], [], []
-            # If evaluation dataset is not provided
-            if not self.evaluation_dataset:
-                completion_response: CompletionResponse = self.model.run(
-                    prompt=None,
-                    parameters=type_safe_param_values,
-                )
-            # If evaluation dataset is provided
-            else:
-                for example in self.evaluation_dataset:
-                    prompt = (
-                        "Context: "
-                        + example["Context"]
-                        + "\n\n"
-                        + "Instruction: "
-                        + example["Instruction"]
-                        + "\n\n"
-                        + "Question: "
-                        + example["Question"]
-                        + "\n\n"
-                    )
-                    if self.num_example_prompts > 0:
-                        prompt = self.get_fewshot_prompt_template().format(input=prompt)
-                    completion_response: CompletionResponse = self.model.run(
-                        prompt=prompt,
-                        parameters=type_safe_param_values,
-                    )
-                    # OpenAI's model returns result in `completion_response.text`.
-                    # Sagemaker's model returns result in `completion_response.raw["Body"]`.
-                    if self.model:
-                        if isinstance(self.model, OpenAIModel):
-                            pred_response = completion_response.text
-                        elif isinstance(self.model, SagemakerModel):
-                            pred_response = completion_response.raw["Body"]
-                        else:
-                            raise NotImplementedError
-                        pred_responses.append(pred_response)
-                        eval_qs.append(prompt)
-                        ref_responses.append(example.get("Answer", None))
-            return (pred_responses, eval_qs, ref_responses)
+            all_pred_responses, all_eval_qs, all_ref_responses = [], [], []
+
+            prompt_variants = self.generate_similar_prompts(
+                self.user_prompt_request, self.user_prompt_request
+            )
+
+            for prompt_variant in prompt_variants:
+                for _ in range(self.num_iterations_per_prompt):
+                    pred_responses, eval_qs, ref_responses = [], [], []
+                    # If evaluation dataset is not provided
+                    if not self.evaluation_dataset:
+                        completion_response: CompletionResponse = self.model.run(
+                            prompt=prompt_variant,
+                            parameters=type_safe_param_values,
+                        )
+                    # If evaluation dataset is provided
+                    else:
+                        for example in self.evaluation_dataset:
+                            prompt = f"{prompt_variant}\n\nContext: {example['Context']}\n\nInstruction: {example['Instruction']}\n\nQuestion: {example['Question']}\n\n"
+                            if self.num_example_prompts > 0:
+                                prompt = self.get_fewshot_prompt_template().format(
+                                    input=prompt
+                                )
+                            completion_response: CompletionResponse = self.model.run(
+                                prompt=prompt,
+                                parameters=type_safe_param_values,
+                            )
+                            # OpenAI's model returns result in `completion_response.text`.
+                            # Sagemaker's model returns result in `completion_response.raw["Body"]`.
+                            if self.model:
+                                if isinstance(self.model, OpenAIModel):
+                                    pred_response = completion_response.text
+                                elif isinstance(self.model, SagemakerModel):
+                                    pred_response = completion_response.raw["Body"]
+                                else:
+                                    raise NotImplementedError
+                                pred_responses.append(pred_response)
+                                eval_qs.append(prompt)
+                                ref_responses.append(example.get("Answer", None))
+                    all_pred_responses.extend(pred_responses)
+                    all_eval_qs.extend(eval_qs)
+                    all_ref_responses.extend(ref_responses)
+            return (all_pred_responses, all_eval_qs, all_ref_responses)
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
             # Enforce param values to fit their default types, if they exist.
