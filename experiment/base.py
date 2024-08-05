@@ -125,25 +125,21 @@ class Experiment(BaseModel):
     )
 
     # Enhanced fields for multi-prompt approach
-    num_prompt_variants: int = Field(
-        default=1,
-        description="Number of prompt variants to generate.",
+    prompting_approaches: List[str] = Field(
+        default=["zero-shot"],
+        description="List of prompting approaches to try (e.g., zero-shot, few-shot, chain-of-thought).",
+    )
+    prompt_complexities: List[str] = Field(
+        default=["simple"],
+        description="List of prompt complexity levels to try (e.g., simple, detailed, very detailed).",
+    )
+    prompt_focuses: List[str] = Field(
+        default=[""],
+        description="List of prompt focuses to try (e.g., fact extraction, action points, British English usage).",
     )
     num_iterations_per_prompt: int = Field(
         default=1,
         description="Number of times to run each prompt variant.",
-    )
-    prompting_approach: str = Field(
-        default="zero-shot",
-        description="Prompting approach (e.g., zero-shot, few-shot, chain-of-thought).",
-    )
-    prompt_complexity: str = Field(
-        default="simple",
-        description="Level of detail in the prompt (e.g., simple, detailed, very detailed).",
-    )
-    prompt_focus: str = Field(
-        default="",
-        description="Emphasis for the prompt (e.g., fact extraction, action points, British English usage).",
     )
 
     # New fields for enhanced parameter handling
@@ -269,39 +265,56 @@ class Experiment(BaseModel):
         def get_responses(type_safe_param_values):
             all_pred_responses, all_eval_qs, all_ref_responses = [], [], []
 
-            prompt_variants = self.generate_similar_prompts(
-                self.user_prompt_request, self.user_prompt_request
-            )
+            for approach in self.prompting_approaches:
+                for complexity in self.prompt_complexities:
+                    for focus in self.prompt_focuses:
+                        prompt_variants = self.generate_similar_prompts(
+                            self.user_prompt_request,
+                            self.user_prompt_request,
+                            approach=approach,
+                            complexity=complexity,
+                            focus=focus,
+                        )
 
-            for prompt_variant in prompt_variants:
-                for _ in range(self.num_iterations_per_prompt):
-                    pred_responses, eval_qs, ref_responses = [], [], []
-                    # If evaluation dataset is not provided
-                    if not self.evaluation_dataset:
-                        completion_response: CompletionResponse = self.model.run(
-                            prompt=prompt_variant,
-                            parameters=type_safe_param_values,
-                        )
-                        pred_responses.append(
-                            self._extract_response(completion_response)
-                        )
-                        eval_qs.append(prompt_variant)
-                        ref_responses.append(None)
-                    # If evaluation dataset is provided
-                    else:
-                        for example in self.evaluation_dataset:
-                            prompt = self._construct_prompt(prompt_variant, example)
-                            completion_response: CompletionResponse = self.model.run(
-                                prompt=prompt,
-                                parameters=type_safe_param_values,
-                            )
-                            pred_response = self._extract_response(completion_response)
-                            pred_responses.append(pred_response)
-                            eval_qs.append(prompt)
-                            ref_responses.append(example.get("Answer", None))
-                    all_pred_responses.extend(pred_responses)
-                    all_eval_qs.extend(eval_qs)
-                    all_ref_responses.extend(ref_responses)
+                        for prompt_variant in prompt_variants:
+                            for _ in range(self.num_iterations_per_prompt):
+                                pred_responses, eval_qs, ref_responses = [], [], []
+                                # If evaluation dataset is not provided
+                                if not self.evaluation_dataset:
+                                    completion_response: CompletionResponse = (
+                                        self.model.run(
+                                            prompt=prompt_variant,
+                                            parameters=type_safe_param_values,
+                                        )
+                                    )
+                                    pred_responses.append(
+                                        self._extract_response(completion_response)
+                                    )
+                                    eval_qs.append(prompt_variant)
+                                    ref_responses.append(None)
+                                # If evaluation dataset is provided
+                                else:
+                                    for example in self.evaluation_dataset:
+                                        prompt = self._construct_prompt(
+                                            prompt_variant, example
+                                        )
+                                        completion_response: CompletionResponse = (
+                                            self.model.run(
+                                                prompt=prompt,
+                                                parameters=type_safe_param_values,
+                                            )
+                                        )
+                                        pred_response = self._extract_response(
+                                            completion_response
+                                        )
+                                        pred_responses.append(pred_response)
+                                        eval_qs.append(prompt)
+                                        ref_responses.append(
+                                            example.get("Answer", None)
+                                        )
+                                all_pred_responses.extend(pred_responses)
+                                all_eval_qs.extend(eval_qs)
+                                all_ref_responses.extend(ref_responses)
             return (all_pred_responses, all_eval_qs, all_ref_responses)
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
@@ -318,6 +331,9 @@ class Experiment(BaseModel):
                     "Prompts": eval_qs,
                     "Answers": pred_responses,
                     "Ground Truth": ref_responses,
+                    "Prompting Approach": self.prompting_approaches,
+                    "Prompt Complexity": self.prompt_complexities,
+                    "Prompt Focus": self.prompt_focuses,
                 },
             )
 
