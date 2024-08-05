@@ -163,6 +163,8 @@ class TAPParamTuner(BaseParamTuner):
             ),
         )
 
+        print("search_space, self.num_simulations, algo")
+        print(search_space, self.num_simulations, algo)
         analysis = tune.run(
             objective,
             config=search_space,

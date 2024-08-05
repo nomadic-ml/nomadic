@@ -59,10 +59,6 @@ class Experiment(BaseModel):
     param_dict: Dict[str, Any] = Field(
         ..., description="Dictionary of parameters to iterate over during tuning."
     )
-    evaluation_dataset: List[Dict] = Field(
-        default_factory=list,
-        description="List of dictionaries containing evaluation data.",
-    )
     user_prompt_request: str = Field(
         default="",
         description="User-provided request for generating the GPT prompt.",
@@ -71,6 +67,13 @@ class Experiment(BaseModel):
     model: Optional[Any] = Field(
         default=None,
         description="Model instance to run the experiment (SagemakerModel or OpenAIModel).",
+    )
+    # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
+    # Note: A model is always required. It is currently denoted as `Optional` brcause of the TODO above.
+    model: Optional[Any] = Field(default=None, description="Model to run experiment")
+    evaluation_dataset: Optional[List[Dict]] = Field(
+        default=[{}],
+        description="Evaluation dataset in dictionary format.",
     )
     evaluator: Optional[BaseEvaluator] = Field(
         default=None, description="Evaluator instance for assessing experiment results."
@@ -96,14 +99,19 @@ class Experiment(BaseModel):
         default=0,
         description="Number of example prompts for few-shot learning.",
     )
-    search_method: str = Field(
-        default="grid",
-        description="Hyperparameter search method: 'grid' or 'bayesian'.",
+    search_method: Optional[str] = Field(
+        default="grid", description="Tuner search option. Can be: [grid, bayesian]"
     )
 
     # Experiment status fields
     start_datetime: Optional[datetime] = Field(
         default=None, description="Experiment start timestamp."
+    )
+    search_method: Optional[str] = Field(
+        default="grid", description="Tuner search option. Can be: [grid, bayesian]"
+    )
+    results_filepath: Optional[str] = Field(
+        default=None, description="Path of outputting tuner run results."
     )
     end_datetime: Optional[datetime] = Field(
         default=None, description="Experiment end timestamp."
@@ -297,6 +305,15 @@ class Experiment(BaseModel):
         """Initialize the tuner if not already set."""
         if not self.tuner:
             self.tuner = self._create_default_tuner()
+        else:
+            # Ensure fields given to Experiment are carried to tuner,
+            # if tuner was provided.
+            if self.param_dict:
+                self.tuner.param_dict = self.param_dict
+            if self.fixed_param_dict:
+                self.tuner.fixed_param_dict = self.fixed_param_dict
+            if self.results_filepath:
+                self.tuner.results_filepath = self.results_filepath
 
     def _create_default_tuner(self):
         """Create a default tuner based on available libraries."""
