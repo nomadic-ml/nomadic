@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 import traceback
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from llama_index.core.evaluation import BaseEvaluator
@@ -82,8 +82,9 @@ class Experiment(BaseModel):
     # TODO: Figure out why Union[SagemakerModel, OpenAIModel] doesn't work
     # Note: A model is always required. It is currently denoted as `Optional` because of the TODO above.
     model: Optional[Any] = Field(default=None, description="Model to run experiment")
-    evaluator: Optional[BaseEvaluator] = Field(
-        default=None, description="Evaluator of experiment"
+    evaluator: Optional[Union[BaseEvaluator, Callable]] = Field(
+        default=None,
+        description="Evaluator of experiment (BaseEvaluator instance or callable)",
     )
     # tuner is checked for being child of BaseParamTuner in `check_tuner_class`
     tuner: Optional[Any] = Field(default=None, description="Placeholder for base tuner")
@@ -164,6 +165,16 @@ class Experiment(BaseModel):
         description="How much to penalize new tokens based on whether they appear in the text so far.",
     )
 
+    # New fields for custom evaluator and evaluation metrics
+    custom_evaluator: Optional[Callable[[str], dict]] = Field(
+        default=None,
+        description="Custom evaluator function that takes a response string and returns an evaluation prompt.",
+    )
+    evaluation_metrics: Optional[List[str]] = Field(
+        default=None,
+        description="List of evaluation metrics to be used with the custom evaluator.",
+    )
+
     @field_validator("tuner")
     def check_tuner_class(cls, value):
         if not isinstance(value, BaseParamTuner):
@@ -176,7 +187,9 @@ class Experiment(BaseModel):
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
 
-    def generate_similar_prompts(self, prompt: str, user_request: str) -> List[str]:
+    def generate_similar_prompts(
+        self, prompt: str, user_request: str, approach: str, complexity: str, focus: str
+    ) -> List[str]:
         """
         Generate similar prompts using a GPT query.
         """
@@ -185,10 +198,10 @@ class Experiment(BaseModel):
         client = OpenAI(api_key=self.model.api_keys["OPENAI_API_KEY"])
 
         system_message = f"""
-        Generate {self.num_prompt_variants} prompt variants based on the following parameters:
-        - Prompting Approach: {self.prompting_approach}
-        - Prompt Complexity: {self.prompt_complexity}
-        - Prompt Focus: {self.prompt_focus}
+        Generate {self.num_iterations_per_prompt} prompt variants based on the following parameters:
+        - Prompting Approach: {approach}
+        - Prompt Complexity: {complexity}
+        - Prompt Focus: {focus}
 
         Each prompt should be a variation of the original prompt, adhering to the specified parameters.
         """
@@ -203,7 +216,7 @@ class Experiment(BaseModel):
                 },
             ],
             max_tokens=200,
-            n=self.num_prompt_variants,
+            n=self.num_iterations_per_prompt,
             stop=None,
             temperature=0.7,
         )
@@ -268,7 +281,10 @@ class Experiment(BaseModel):
             for approach in self.prompting_approaches:
                 for complexity in self.prompt_complexities:
                     for focus in self.prompt_focuses:
-                        prompt_variants = self.generate_similar_prompts(
+                        print(
+                            f"\nGenerating prompts for: Approach={approach}, Complexity={complexity}, Focus={focus}"
+                        )
+                        prompt_variants = self._generate_similar_prompts(
                             self.user_prompt_request,
                             self.user_prompt_request,
                             approach=approach,
@@ -276,8 +292,17 @@ class Experiment(BaseModel):
                             focus=focus,
                         )
 
-                        for prompt_variant in prompt_variants:
-                            for _ in range(self.num_iterations_per_prompt):
+                        for i, prompt_variant in enumerate(prompt_variants):
+                            print(
+                                f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}"
+                            )
+                            print(
+                                f"Prompt: {prompt_variant[:100]}..."
+                            )  # Print first 100 chars of prompt
+                            for iteration in range(self.num_iterations_per_prompt):
+                                print(
+                                    f"\nIteration {iteration+1}/{self.num_iterations_per_prompt}"
+                                )
                                 pred_responses, eval_qs, ref_responses = [], [], []
                                 # If evaluation dataset is not provided
                                 if not self.evaluation_dataset:
@@ -287,14 +312,23 @@ class Experiment(BaseModel):
                                             parameters=type_safe_param_values,
                                         )
                                     )
-                                    pred_responses.append(
-                                        self._extract_response(completion_response)
+                                    pred_response = self._extract_response(
+                                        completion_response
                                     )
+                                    pred_responses.append(pred_response)
                                     eval_qs.append(prompt_variant)
                                     ref_responses.append(None)
+                                    print(
+                                        f"Response: {pred_response[:100]}..."
+                                    )  # Print first 100 chars of response
                                 # If evaluation dataset is provided
                                 else:
-                                    for example in self.evaluation_dataset:
+                                    for j, example in enumerate(
+                                        self.evaluation_dataset
+                                    ):
+                                        print(
+                                            f"Processing example {j+1}/{len(self.evaluation_dataset)}"
+                                        )
                                         prompt = self._construct_prompt(
                                             prompt_variant, example
                                         )
@@ -312,18 +346,28 @@ class Experiment(BaseModel):
                                         ref_responses.append(
                                             example.get("Answer", None)
                                         )
+                                        print(
+                                            f"Response: {pred_response[:100]}..."
+                                        )  # Print first 100 chars of response
                                 all_pred_responses.extend(pred_responses)
                                 all_eval_qs.extend(eval_qs)
                                 all_ref_responses.extend(ref_responses)
             return (all_pred_responses, all_eval_qs, all_ref_responses)
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
+            print("\nStarting new experiment run with parameters:")
+            for param, value in param_values.items():
+                print(f"{param}: {value}")
+
             type_safe_param_values = self._enforce_param_types(param_values)
             pred_responses, eval_qs, ref_responses = get_responses(
                 type_safe_param_values
             )
             eval_results = self._evaluate_responses(pred_responses, ref_responses)
             mean_score = self._calculate_mean_score(eval_results)
+
+            print(f"\nExperiment run completed. Mean score: {mean_score}")
+
             return RunResult(
                 score=mean_score,
                 params=param_values,
@@ -331,9 +375,11 @@ class Experiment(BaseModel):
                     "Prompts": eval_qs,
                     "Answers": pred_responses,
                     "Ground Truth": ref_responses,
-                    "Prompting Approach": self.prompting_approaches,
-                    "Prompt Complexity": self.prompt_complexities,
-                    "Prompt Focus": self.prompt_focuses,
+                    "Prompting Approaches": self.prompting_approaches,
+                    "Prompt Complexities": self.prompt_complexities,
+                    "Prompt Focuses": self.prompt_focuses,
+                    "Evaluation Metrics": self.evaluation_metrics,
+                    "Custom Evaluator Results": eval_results,
                 },
             )
 
@@ -341,15 +387,19 @@ class Experiment(BaseModel):
         self.start_datetime = datetime.now()
         result = None
         try:
+            print("\nSetting up tuner...")
             self._setup_tuner(default_param_function)
+            print("Starting experiment...")
             result = self.tuner.fit()
         except Exception as e:
             is_error = True
             self.experiment_status_message = self._format_error_message(e)
+            print(f"Error occurred: {self.experiment_status_message}")
 
         self.end_datetime = datetime.now()
         self.experiment_status = self._determine_experiment_status(is_error)
         self.tuned_result = result or self._create_default_tuned_result()
+        print(f"\nExperiment completed. Status: {self.experiment_status}")
         return self.tuned_result
 
     def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:
@@ -381,7 +431,12 @@ class Experiment(BaseModel):
         self, pred_responses: List[str], ref_responses: List[str]
     ) -> List[Any]:
         eval_results = []
-        if self.evaluator:
+        if self.custom_evaluator:
+            for pred in pred_responses:
+                eval_results.append(
+                    self.custom_evaluator(pred, self.evaluation_metrics)
+                )
+        elif self.evaluator:
             for pred, ref in zip(pred_responses, ref_responses):
                 eval_results.append(
                     self.evaluator.evaluate_response(
@@ -496,6 +551,46 @@ class Experiment(BaseModel):
         plt.tight_layout()
         plt.show()
 
-    def _generate_similar_prompts(self, prompt: str, user_request: str) -> List[str]:
+    def _generate_similar_prompts(
+        self, prompt: str, user_request: str, approach: str, complexity: str, focus: str
+    ) -> List[str]:
         """Generate similar prompts using the model."""
-        return self.generate_similar_prompts(prompt, user_request)
+        return self.generate_similar_prompts(
+            prompt, user_request, approach, complexity, focus
+        )
+
+    def custom_evaluate(self, response: str, evaluation_metrics: List[str]) -> dict:
+        """
+        Custom evaluation function for the experiment.
+
+        Args:
+            response (str): The response to evaluate.
+            evaluation_metrics (List[str]): List of evaluation metrics to use.
+
+        Returns:
+            dict: A dictionary containing the evaluation prompt.
+        """
+        metrics_prompt = "\n".join(
+            [f"{i+1}. {metric}" for i, metric in enumerate(evaluation_metrics)]
+        )
+        metrics_format = "\n".join(
+            [f"{metric}: [score]" for metric in evaluation_metrics]
+        )
+
+        evaluation_prompt = f"""
+        You are a judge evaluating the quality of a generated response for a financial advice summary.
+        Please evaluate the following response based on these criteria, scoring each from 0 to 20:
+
+        {metrics_prompt}
+
+        Response to evaluate:
+        {response}
+
+        Provide your evaluation in the following format:
+        {metrics_format}
+        Overall score: [total out of {len(evaluation_metrics) * 20}]
+
+        Brief explanation: [Your explanation of the strengths and weaknesses]
+        """
+
+        return {"evaluation_prompt": evaluation_prompt}
