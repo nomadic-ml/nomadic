@@ -41,7 +41,7 @@ class Experiment(BaseModel):
         ..., description="A dictionary of parameters to iterate over."
     )
     evaluation_dataset: List[Dict] = Field(
-        default_factory=List,
+        default_factory=list,
         description="Evaluation dataset in dictionary format.",
     )
     user_prompt_request: str = Field(
