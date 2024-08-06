@@ -175,6 +175,12 @@ class Experiment(BaseModel):
         description="List of evaluation metrics to be used with the custom evaluator.",
     )
 
+    # New field for enabling/disabling logging
+    enable_logging: bool = Field(
+        default=True,
+        description="Flag to enable or disable print logging.",
+    )
+
     @field_validator("tuner")
     def check_tuner_class(cls, value):
         if not isinstance(value, BaseParamTuner):
@@ -281,9 +287,10 @@ class Experiment(BaseModel):
             for approach in self.prompting_approaches:
                 for complexity in self.prompt_complexities:
                     for focus in self.prompt_focuses:
-                        print(
-                            f"\nGenerating prompts for: Approach={approach}, Complexity={complexity}, Focus={focus}"
-                        )
+                        if self.enable_logging:
+                            print(
+                                f"\nGenerating prompts for: Approach={approach}, Complexity={complexity}, Focus={focus}"
+                            )
                         prompt_variants = self._generate_similar_prompts(
                             self.user_prompt_request,
                             self.user_prompt_request,
@@ -293,16 +300,18 @@ class Experiment(BaseModel):
                         )
 
                         for i, prompt_variant in enumerate(prompt_variants):
-                            print(
-                                f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}"
-                            )
-                            print(
-                                f"Prompt: {prompt_variant[:100]}..."
-                            )  # Print first 100 chars of prompt
-                            for iteration in range(self.num_iterations_per_prompt):
+                            if self.enable_logging:
                                 print(
-                                    f"\nIteration {iteration+1}/{self.num_iterations_per_prompt}"
+                                    f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}"
                                 )
+                                print(
+                                    f"Prompt: {prompt_variant[:100]}..."
+                                )  # Print first 100 chars of prompt
+                            for iteration in range(self.num_iterations_per_prompt):
+                                if self.enable_logging:
+                                    print(
+                                        f"\nIteration {iteration+1}/{self.num_iterations_per_prompt}"
+                                    )
                                 pred_responses, eval_qs, ref_responses = [], [], []
                                 # If evaluation dataset is not provided
                                 if not self.evaluation_dataset:
@@ -318,17 +327,19 @@ class Experiment(BaseModel):
                                     pred_responses.append(pred_response)
                                     eval_qs.append(prompt_variant)
                                     ref_responses.append(None)
-                                    print(
-                                        f"Response: {pred_response[:100]}..."
-                                    )  # Print first 100 chars of response
+                                    if self.enable_logging:
+                                        print(
+                                            f"Response: {pred_response[:100]}..."
+                                        )  # Print first 100 chars of response
                                 # If evaluation dataset is provided
                                 else:
                                     for j, example in enumerate(
                                         self.evaluation_dataset
                                     ):
-                                        print(
-                                            f"Processing example {j+1}/{len(self.evaluation_dataset)}"
-                                        )
+                                        if self.enable_logging:
+                                            print(
+                                                f"Processing example {j+1}/{len(self.evaluation_dataset)}"
+                                            )
                                         prompt = self._construct_prompt(
                                             prompt_variant, example
                                         )
@@ -346,18 +357,20 @@ class Experiment(BaseModel):
                                         ref_responses.append(
                                             example.get("Answer", None)
                                         )
-                                        print(
-                                            f"Response: {pred_response[:100]}..."
-                                        )  # Print first 100 chars of response
+                                        if self.enable_logging:
+                                            print(
+                                                f"Response: {pred_response[:100]}..."
+                                            )  # Print first 100 chars of response
                                 all_pred_responses.extend(pred_responses)
                                 all_eval_qs.extend(eval_qs)
                                 all_ref_responses.extend(ref_responses)
             return (all_pred_responses, all_eval_qs, all_ref_responses)
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
-            print("\nStarting new experiment run with parameters:")
-            for param, value in param_values.items():
-                print(f"{param}: {value}")
+            if self.enable_logging:
+                print("\nStarting new experiment run with parameters:")
+                for param, value in param_values.items():
+                    print(f"{param}: {value}")
 
             type_safe_param_values = self._enforce_param_types(param_values)
             pred_responses, eval_qs, ref_responses = get_responses(
@@ -366,7 +379,8 @@ class Experiment(BaseModel):
             eval_results = self._evaluate_responses(pred_responses, ref_responses)
             mean_score = self._calculate_mean_score(eval_results)
 
-            print(f"\nExperiment run completed. Mean score: {mean_score}")
+            if self.enable_logging:
+                print(f"\nExperiment run completed. Mean score: {mean_score}")
 
             return RunResult(
                 score=mean_score,
@@ -387,19 +401,23 @@ class Experiment(BaseModel):
         self.start_datetime = datetime.now()
         result = None
         try:
-            print("\nSetting up tuner...")
+            if self.enable_logging:
+                print("\nSetting up tuner...")
             self._setup_tuner(default_param_function)
-            print("Starting experiment...")
+            if self.enable_logging:
+                print("Starting experiment...")
             result = self.tuner.fit()
         except Exception as e:
             is_error = True
             self.experiment_status_message = self._format_error_message(e)
-            print(f"Error occurred: {self.experiment_status_message}")
+            if self.enable_logging:
+                print(f"Error occurred: {self.experiment_status_message}")
 
         self.end_datetime = datetime.now()
         self.experiment_status = self._determine_experiment_status(is_error)
         self.tuned_result = result or self._create_default_tuned_result()
-        print(f"\nExperiment completed. Status: {self.experiment_status}")
+        if self.enable_logging:
+            print(f"\nExperiment completed. Status: {self.experiment_status}")
         return self.tuned_result
 
     def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:
@@ -451,6 +469,8 @@ class Experiment(BaseModel):
 
     def _setup_tuner(self, param_function: Callable):
         if not self.tuner:
+            if self.enable_logging:
+                print("\nSetting up tuner...")
             if is_ray_installed():
                 from nomadic.tuner.ray import RayTuneParamTuner
 
@@ -460,7 +480,7 @@ class Experiment(BaseModel):
                     search_method=self.search_method,
                     fixed_param_dict=self.fixed_param_dict,
                     current_param_dict=self.current_param_dict,
-                    show_progress=True,
+                    show_progress=self.enable_logging,
                 )
             else:
                 from nomadic.tuner import FlamlParamTuner
@@ -471,7 +491,7 @@ class Experiment(BaseModel):
                     search_method=self.search_method,
                     fixed_param_dict=self.fixed_param_dict,
                     current_param_dict=self.current_param_dict,
-                    show_progress=True,
+                    show_progress=self.enable_logging,
                     num_samples=-1,
                 )
 
@@ -503,7 +523,8 @@ class Experiment(BaseModel):
         import seaborn as sns
 
         if not self.tuned_result:
-            print("No results to visualize.")
+            if self.enable_logging:
+                print("No results to visualize.")
             return
 
         # Extract scores and parameters from run results
