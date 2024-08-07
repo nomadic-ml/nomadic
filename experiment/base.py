@@ -496,7 +496,7 @@ class Experiment(BaseModel):
         plt.show()
 
         # New heatmap visualization
-        plt.figure(figsize=(20, 12))
+        plt.figure(figsize=(20, 14))  # Increased figure size to accommodate the new row
 
         # Prepare data for heatmap
         heatmap_data = df.copy()
@@ -526,6 +526,15 @@ class Experiment(BaseModel):
             value_name="Score",
         )
 
+        # Merge similar column names
+        heatmap_data_melted["Metric"] = heatmap_data_melted["Metric"].str.lower()
+        heatmap_data_melted["Metric"] = heatmap_data_melted["Metric"].replace(
+            {
+                "overall_score": "Overall Score"
+                # Add more replacements if needed
+            }
+        )
+
         # Create pivot table
         heatmap_pivot = heatmap_data_melted.pivot(
             index=["param_combination"] + param_columns,
@@ -538,14 +547,47 @@ class Experiment(BaseModel):
             heatmap_pivot.columns[0], ascending=False
         )
 
+        # Create a DataFrame with parameter names
+        parameter = pd.DataFrame(
+            {
+                "param_combination": ["param_combination"],
+                "temperature": ["temperature"],
+                "max_tokens": ["max_tokens"],
+                "prompt_tuning_approach": ["prompt_tuning_approach"],
+                "prompt_tuning_complexity": ["prompt_tuning_complexity"],
+                "prompt_tuning_focus": ["prompt_tuning_focus"],
+            }
+        )
+
+        # Set the index to match heatmap_pivot
+        parameter = parameter.set_index(["param_combination"] + param_columns)
+
+        # Add placeholder values for the metric columns
+        for col in heatmap_pivot.columns:
+            parameter[col] = " "
+
+        # Concatenate the explanation row with the heatmap data
+        heatmap_pivot = pd.concat([parameter, heatmap_pivot])
+
         # Create heatmap
-        sns.heatmap(
+        ax = sns.heatmap(
             heatmap_pivot,
             annot=True,
             cmap="YlGnBu",
             fmt=".1f",
             cbar_kws={"label": "Score"},
+            mask=heatmap_pivot.isnull(),
         )
+
+        # Modify the first row to have a different background color and text color
+        for i in range(len(heatmap_pivot.columns)):
+            ax.add_patch(
+                plt.Rectangle((i, 0), 1, 1, fill=False, edgecolor="none", lw=3)
+            )
+            text = ax.texts[i]
+            text.set_text(heatmap_pivot.iloc[0, i])
+            text.set_fontweight("bold")
+
         plt.title("Heatmap of Scores for Each Parameter Combination", fontsize=16)
         plt.ylabel("Parameter Combination", fontsize=12)
         plt.xlabel("Metric", fontsize=12)
