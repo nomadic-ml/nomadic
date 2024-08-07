@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 import traceback
-from typing import Any, Dict, List, Optional, Callable, Union
+from typing import Any, Dict, List, Optional, Callable, Union, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from llama_index.core.evaluation import BaseEvaluator
@@ -19,6 +19,7 @@ from nomadic.experiment.prompt_tuning import PromptTuner, custom_evaluate
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import numpy as np
 
 
 class ExperimentStatus(Enum):
@@ -41,7 +42,7 @@ class Experiment(BaseModel):
         ..., description="A dictionary of parameters to iterate over."
     )
     evaluation_dataset: List[Dict] = Field(
-        default_factory=list,
+        default_factory=List,
         description="Evaluation dataset in dictionary format.",
     )
     user_prompt_request: str = Field(
@@ -49,9 +50,9 @@ class Experiment(BaseModel):
         description="User request for GPT prompt.",
     )
     model: Optional[Any] = Field(default=None, description="Model to run experiment")
-    evaluator: Optional[Union[BaseEvaluator, Callable]] = Field(
+    evaluator: Optional[Union[BaseEvaluator, Callable, Dict[str, Any]]] = Field(
         default=None,
-        description="Evaluator of experiment (BaseEvaluator instance or callable)",
+        description="Evaluator of experiment (BaseEvaluator instance, callable, or dictionary)",
     )
     tuner: Optional[Any] = Field(default=None, description="Placeholder for base tuner")
     prompts: Optional[List[str]] = Field(
@@ -118,6 +119,9 @@ class Experiment(BaseModel):
         def get_responses(type_safe_param_values):
             all_pred_responses, all_eval_qs, all_ref_responses = [], [], []
 
+            # Unpack the tuple returned by _enforce_param_types
+            openai_params, prompt_tuning_params = type_safe_param_values
+
             if self.prompts:
                 prompt_variants = self.prompts
                 if self.enable_logging:
@@ -127,6 +131,7 @@ class Experiment(BaseModel):
                 if self.enable_logging:
                     print("Prompt tuner is None. Using baseline prompt.")
             else:
+                self.prompt_tuner.update_params(prompt_tuning_params)
                 prompt_variants = self.prompt_tuner.generate_prompt_variants(
                     self.user_prompt_request,
                     (
@@ -145,7 +150,7 @@ class Experiment(BaseModel):
                 if not self.evaluation_dataset:
                     completion_response: CompletionResponse = self.model.run(
                         prompt=prompt_variant,
-                        parameters=type_safe_param_values,
+                        parameters=openai_params,  # Use openai_params here
                     )
                     pred_response = self._extract_response(completion_response)
                     pred_responses.append(pred_response)
@@ -159,10 +164,10 @@ class Experiment(BaseModel):
                             print(
                                 f"Processing example {j+1}/{len(self.evaluation_dataset)}"
                             )
-                        prompt = f"{prompt_variant}\n\nContext: {example['Context']}\n\nInstruction: {example['Instruction']}\n\nQuestion: {example['Question']}\n\n"
+                        prompt = self._construct_prompt(prompt_variant, example)
                         completion_response: CompletionResponse = self.model.run(
                             prompt=prompt,
-                            parameters=type_safe_param_values,
+                            parameters=openai_params,  # Use openai_params here
                         )
                         pred_response = self._extract_response(completion_response)
                         pred_responses.append(pred_response)
@@ -197,12 +202,10 @@ class Experiment(BaseModel):
                 "Custom Evaluator Results": eval_results,
             }
 
-            if hasattr(self, "prompting_approaches"):
-                metadata["Prompting Approaches"] = self.prompting_approaches
-            if hasattr(self, "prompt_complexities"):
-                metadata["Prompt Complexities"] = self.prompt_complexities
-            if hasattr(self, "prompt_focuses"):
-                metadata["Prompt Focuses"] = self.prompt_focuses
+            if self.prompt_tuner:
+                metadata["Prompting Approaches"] = self.prompt_tuner.approach
+                metadata["Prompt Complexities"] = self.prompt_tuner.complexity
+                metadata["Prompt Focuses"] = self.prompt_tuner.focus
             if hasattr(self, "evaluation_metrics"):
                 metadata["Evaluation Metrics"] = self.evaluation_metrics
 
@@ -238,6 +241,26 @@ class Experiment(BaseModel):
             print(f"\nExperiment completed. Status: {self.experiment_status}")
         return self.tuned_result
 
+    def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:
+        prompt = f"{prompt_variant}\n\n"
+        if self.num_example_prompts > 0:
+            prompt += self._add_few_shot_examples()
+        prompt += f"Context: {example['Context']}\n\n"
+        prompt += f"Instruction: {example['Instruction']}\n\n"
+        prompt += f"Question: {example['Question']}\n\n"
+        return prompt
+
+    def _add_few_shot_examples(self) -> str:
+        few_shot_examples = ""
+        for i in range(min(self.num_example_prompts, len(self.evaluation_dataset) - 1)):
+            example = self.evaluation_dataset[i]
+            few_shot_examples += f"Example {i+1}:\n"
+            few_shot_examples += f"Context: {example['Context']}\n"
+            few_shot_examples += f"Instruction: {example['Instruction']}\n"
+            few_shot_examples += f"Question: {example['Question']}\n"
+            few_shot_examples += f"Answer: {example['Answer']}\n\n"
+        return few_shot_examples
+
     # This method has been removed as it's no longer needed
 
     def _extract_response(self, completion_response: CompletionResponse) -> str:
@@ -248,16 +271,19 @@ class Experiment(BaseModel):
         else:
             raise NotImplementedError("Unsupported model type")
 
-    def _enforce_param_types(self, param_values: Dict[str, Any]) -> Dict[str, Any]:
-        type_safe_param_values = {}
+    def _enforce_param_types(
+        self, param_values: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        openai_params = {}
+        prompt_tuning_params = {}
         for param, val in param_values.items():
             if param in self.model.hyperparameters.default:
-                type_safe_param_values[param] = self.model.hyperparameters.default[
-                    param
-                ]["type"](val)
+                openai_params[param] = self.model.hyperparameters.default[param][
+                    "type"
+                ](val)
             else:
-                type_safe_param_values[param] = val
-        return type_safe_param_values
+                prompt_tuning_params[param] = val
+        return openai_params, prompt_tuning_params
 
     def _evaluate_responses(
         self, pred_responses: List[str], ref_responses: List[str]
@@ -265,20 +291,20 @@ class Experiment(BaseModel):
         eval_results = []
         if self.evaluator:
             for pred, ref in zip(pred_responses, ref_responses):
-                if callable(self.evaluator):
-                    if self.evaluator == custom_evaluate:
-                        if (
-                            not hasattr(self, "evaluation_metrics")
-                            or not self.evaluation_metrics
-                        ):
+                if isinstance(self.evaluator, dict):
+                    if self.evaluator.get("method") == "custom_evaluate":
+                        evaluation_metrics = self.evaluator.get(
+                            "evaluation_metrics", []
+                        )
+                        if not evaluation_metrics:
                             raise ValueError(
                                 "evaluation_metrics must be provided when using custom_evaluate"
                             )
-                        eval_results.append(
-                            self.evaluator(pred, self.evaluation_metrics)
-                        )
+                        eval_results.append(custom_evaluate(pred, evaluation_metrics))
                     else:
-                        eval_results.append(self.evaluator(pred, ref))
+                        raise ValueError("Invalid evaluator method")
+                elif callable(self.evaluator):
+                    eval_results.append(self.evaluator(pred, ref))
                 elif isinstance(self.evaluator, BaseEvaluator):
                     eval_results.append(
                         self.evaluator.evaluate_response(
@@ -290,7 +316,13 @@ class Experiment(BaseModel):
         return eval_results
 
     def _calculate_mean_score(self, eval_results: List[Any]) -> float:
-        scores = [r.score for r in eval_results if hasattr(r, "score")]
+        scores = []
+        for result in eval_results:
+            if "scores" in result and "Overall score" in result["scores"]:
+                scores.append(result["scores"]["Overall score"])
+            elif "overall_score" in result and result["overall_score"] != 0:
+                scores.append(result["overall_score"])
+
         return sum(scores) / len(scores) if scores else 0
 
     def _setup_tuner(self, param_function: Callable):
@@ -299,16 +331,26 @@ class Experiment(BaseModel):
                 print("\nSetting up tuner...")
             if is_ray_installed():
                 from nomadic.tuner.ray import RayTuneParamTuner
+                from ray import tune as ray_tune
+
+                # Convert param_dict to Ray Tune format
+                ray_param_dict = {}
+                for param, value in self.param_dict.items():
+                    if isinstance(value, list):
+                        ray_param_dict[param] = ray_tune.choice(value)
+                    else:
+                        ray_param_dict[param] = value
 
                 self.tuner = RayTuneParamTuner(
                     param_fn=param_function,
-                    param_dict=self.param_dict,
+                    param_dict=ray_param_dict,  # Use the converted ray_param_dict
                     search_method=self.search_method,
                     fixed_param_dict=self.fixed_param_dict,
                     current_param_dict=self.current_param_dict,
                     show_progress=self.enable_logging,
                 )
             else:
+                # FlamlParamTuner setup remains unchanged
                 from nomadic.tuner import FlamlParamTuner
 
                 self.tuner = FlamlParamTuner(
@@ -318,7 +360,6 @@ class Experiment(BaseModel):
                     fixed_param_dict=self.fixed_param_dict,
                     current_param_dict=self.current_param_dict,
                     show_progress=self.enable_logging,
-                    num_samples=-1,
                 )
 
     def _format_error_message(self, exception: Exception) -> str:
@@ -350,38 +391,49 @@ class Experiment(BaseModel):
                 print("No results to visualize.")
             return
 
+        # Extract scores and parameters from run_results
         scores = [run.score for run in self.tuned_result.run_results]
         params = [run.params for run in self.tuned_result.run_results]
 
+        # Create a DataFrame
         df = pd.DataFrame(params)
         df["score"] = scores
 
-        plt.figure(figsize=(12, 6))
+        # Separate numeric and categorical columns
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        categorical_cols = df.select_dtypes(exclude=[np.number]).columns
 
-        for i, param in enumerate(df.columns[:-1]):
-            plt.subplot(2, 3, i + 1)
-            sns.histplot(df[param], kde=True)
-            plt.title(f"Distribution of {param}")
-
-        plt.subplot(2, 3, 6)
-        sns.histplot(df["score"], kde=True)
+        # Visualize score distribution
+        plt.figure(figsize=(10, 6))
+        sns.histplot(data=df, x="score", kde=True)
         plt.title("Distribution of Scores")
-
-        plt.tight_layout()
+        plt.xlabel("Score")
+        plt.ylabel("Frequency")
         plt.show()
 
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(df.corr(), annot=True, cmap="coolwarm")
-        plt.title("Correlation Heatmap of Parameters and Score")
-        plt.show()
+        # Boxplots for categorical parameters vs score
+        for col in categorical_cols:
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(x=col, y="score", data=df)
+            plt.title(f"Score Distribution by {col}")
+            plt.ylabel("Score")
+            plt.xticks(rotation=45)
+            plt.show()
 
-        correlations = df.corr()["score"].abs().sort_values(ascending=False)
-        top_params = correlations.index[1:3]
+        # Scatterplots for numeric parameters vs score
+        for col in numeric_cols:
+            if col != "score":
+                plt.figure(figsize=(10, 6))
+                sns.scatterplot(x=col, y="score", data=df)
+                plt.title(f"Score vs {col}")
+                plt.ylabel("Score")
+                plt.show()
 
-        fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-        for i, param in enumerate(top_params):
-            sns.scatterplot(data=df, x=param, y="score", ax=axes[i])
-            axes[i].set_title(f"{param} vs Score")
+        # Summary statistics of scores
+        print("Score Summary Statistics:")
+        print(df["score"].describe())
 
-        plt.tight_layout()
-        plt.show()
+        # Top 5 performing parameter combinations
+        print("\nTop 5 Performing Parameter Combinations:")
+        top_5 = df.sort_values("score", ascending=False).head()
+        print(top_5.to_string(index=False))
