@@ -168,12 +168,9 @@ class PromptTuner(BaseModel):
             print(f"Updated PromptTuner parameters: {params}")
 
 
-from openai import OpenAI
-import os
-from typing import List
-
-
-def custom_evaluate(response: str, evaluation_metrics: List[str]) -> dict:
+def custom_evaluate(
+    response: str, evaluation_metrics: List[str], openai_api_key: str
+) -> dict:
     metrics_prompt = "\n".join(
         [f"{i+1}. {metric}" for i, metric in enumerate(evaluation_metrics)]
     )
@@ -195,7 +192,7 @@ def custom_evaluate(response: str, evaluation_metrics: List[str]) -> dict:
     Brief explanation: [Your explanation of the strengths and weaknesses]
     """
 
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    client = OpenAI(api_key=openai_api_key)
     completion = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
@@ -231,6 +228,7 @@ def custom_evaluate(response: str, evaluation_metrics: List[str]) -> dict:
                 pass
         elif line.lower().startswith("brief explanation:"):
             explanation = line.split(":", 1)[1].strip()
+
     return {
         "scores": scores,
         "overall_score": overall_score,

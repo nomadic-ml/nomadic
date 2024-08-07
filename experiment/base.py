@@ -300,7 +300,16 @@ class Experiment(BaseModel):
                             raise ValueError(
                                 "evaluation_metrics must be provided when using custom_evaluate"
                             )
-                        eval_results.append(custom_evaluate(pred, evaluation_metrics))
+                        # Get the OpenAI API key from the model
+                        openai_api_key = (
+                            self.model.api_keys.get("OPENAI_API_KEY")
+                            if hasattr(self.model, "api_keys")
+                            else None
+                        )
+                        # Pass the OpenAI API key to custom_evaluate
+                        eval_results.append(
+                            custom_evaluate(pred, evaluation_metrics, openai_api_key)
+                        )
                     else:
                         raise ValueError("Invalid evaluator method")
                 elif callable(self.evaluator):
