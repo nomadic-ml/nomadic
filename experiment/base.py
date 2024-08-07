@@ -574,7 +574,7 @@ class Experiment(BaseModel):
             heatmap_pivot,
             annot=True,
             cmap="YlGnBu",
-            fmt=".1f",
+            fmt="",
             cbar_kws={"label": "Score"},
             mask=heatmap_pivot.isnull(),
         )
