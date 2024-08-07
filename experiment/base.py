@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+from scipy import stats
 
 
 class ExperimentStatus(Enum):
@@ -42,7 +43,7 @@ class Experiment(BaseModel):
         ..., description="A dictionary of parameters to iterate over."
     )
     evaluation_dataset: List[Dict] = Field(
-        default_factory=List,
+        default=list({}),
         description="Evaluation dataset in dictionary format.",
     )
     user_prompt_request: str = Field(
@@ -54,7 +55,7 @@ class Experiment(BaseModel):
         default=None,
         description="Evaluator of experiment (BaseEvaluator instance, callable, or dictionary)",
     )
-    tuner: Optional[Any] = Field(default=None, description="Placeholder for base tuner")
+    tuner: Optional[Any] = Field(default=None, description="Base Tuner")
     prompts: Optional[List[str]] = Field(
         default=None,
         description="Optional list of prompts to use in the experiment.",
@@ -300,6 +301,12 @@ class Experiment(BaseModel):
                             raise ValueError(
                                 "evaluation_metrics must be provided when using custom_evaluate"
                             )
+                        # Ensure all metrics have weights
+                        for metric in evaluation_metrics:
+                            if isinstance(metric, str):
+                                metric = {"metric": metric, "weight": 1.0}
+                            elif isinstance(metric, dict) and "weight" not in metric:
+                                metric["weight"] = 1.0
                         # Get the OpenAI API key from the model
                         openai_api_key = (
                             self.model.api_keys.get("OPENAI_API_KEY")
@@ -404,45 +411,213 @@ class Experiment(BaseModel):
         scores = [run.score for run in self.tuned_result.run_results]
         params = [run.params for run in self.tuned_result.run_results]
 
+        # Extract individual metric scores
+        metric_scores = {}
+        for run in self.tuned_result.run_results:
+            if "Custom Evaluator Results" in run.metadata:
+                eval_result = run.metadata["Custom Evaluator Results"][0]
+                if "scores" in eval_result:
+                    for metric, score in eval_result["scores"].items():
+                        if metric not in metric_scores:
+                            metric_scores[metric] = []
+                        metric_scores[metric].append(score)
+
         # Create a DataFrame
         df = pd.DataFrame(params)
-        df["score"] = scores
+        df["overall_score"] = scores
+        for metric, scores in metric_scores.items():
+            df[metric] = scores
 
         # Separate numeric and categorical columns
         numeric_cols = df.select_dtypes(include=[np.number]).columns
         categorical_cols = df.select_dtypes(exclude=[np.number]).columns
 
-        # Visualize score distribution
+        # Visualize overall score distribution
         plt.figure(figsize=(10, 6))
-        sns.histplot(data=df, x="score", kde=True)
-        plt.title("Distribution of Scores")
-        plt.xlabel("Score")
+        sns.histplot(data=df, x="overall_score", kde=True)
+        plt.title("Distribution of Overall Scores")
+        plt.xlabel("Overall Score")
         plt.ylabel("Frequency")
         plt.show()
 
-        # Boxplots for categorical parameters vs score
+        # Visualize individual metric score distributions
+        for metric in metric_scores.keys():
+            plt.figure(figsize=(10, 6))
+            sns.histplot(data=df, x=metric, kde=True)
+            plt.title(f"Distribution of {metric} Scores")
+            plt.xlabel(f"{metric} Score")
+            plt.ylabel("Frequency")
+            plt.show()
+
+        # Boxplots for categorical parameters vs overall score
         for col in categorical_cols:
             plt.figure(figsize=(10, 6))
-            sns.boxplot(x=col, y="score", data=df)
-            plt.title(f"Score Distribution by {col}")
-            plt.ylabel("Score")
+            sns.boxplot(x=col, y="overall_score", data=df)
+            plt.title(f"Overall Score Distribution by {col}")
+            plt.ylabel("Overall Score")
             plt.xticks(rotation=45)
             plt.show()
 
-        # Scatterplots for numeric parameters vs score
+        # Scatterplots for numeric parameters vs overall score
         for col in numeric_cols:
-            if col != "score":
+            if col != "overall_score" and col not in metric_scores.keys():
                 plt.figure(figsize=(10, 6))
-                sns.scatterplot(x=col, y="score", data=df)
-                plt.title(f"Score vs {col}")
-                plt.ylabel("Score")
+                sns.scatterplot(x=col, y="overall_score", data=df)
+                plt.title(f"Overall Score vs {col}")
+                plt.ylabel("Overall Score")
                 plt.show()
 
         # Summary statistics of scores
         print("Score Summary Statistics:")
-        print(df["score"].describe())
+        print(df[["overall_score"] + list(metric_scores.keys())].describe())
 
         # Top 5 performing parameter combinations
         print("\nTop 5 Performing Parameter Combinations:")
-        top_5 = df.sort_values("score", ascending=False).head()
+        top_5 = df.sort_values("overall_score", ascending=False).head()
         print(top_5.to_string(index=False))
+
+        # Correlation heatmap for numeric parameters and scores
+        plt.figure(figsize=(12, 10))
+        sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", center=0)
+        plt.title("Correlation Heatmap of Numeric Parameters and Scores")
+        plt.show()
+
+        # New heatmap visualization
+        plt.figure(figsize=(15, 10))
+
+        # Prepare data for heatmap
+        heatmap_data = df.copy()
+
+        # Create a combined parameter column
+        heatmap_data["param_combination"] = heatmap_data.apply(
+            lambda row: ", ".join(
+                [
+                    f"{col}: {val}"
+                    for col, val in row.items()
+                    if col not in metric_scores and col != "overall_score"
+                ]
+            ),
+            axis=1,
+        )
+
+        # Melt the dataframe to long format
+        heatmap_data_melted = pd.melt(
+            heatmap_data,
+            id_vars=["param_combination"],
+            value_vars=["overall_score"] + list(metric_scores.keys()),
+            var_name="Metric",
+            value_name="Score",
+        )
+
+        # Create pivot table
+        heatmap_pivot = heatmap_data_melted.pivot(
+            index="param_combination", columns="Metric", values="Score"
+        )
+
+        # Sort by overall score
+        heatmap_pivot = heatmap_pivot.sort_values("overall_score", ascending=False)
+
+        # Create heatmap
+        sns.heatmap(
+            heatmap_pivot,
+            annot=True,
+            cmap="YlGnBu",
+            fmt=".1f",
+            cbar_kws={"label": "Score"},
+        )
+        plt.title("Heatmap of Scores for Each Parameter Combination")
+        plt.ylabel("Parameter Combination")
+        plt.xlabel("Metric")
+        plt.xticks(rotation=45, ha="right")
+        plt.tight_layout()
+        plt.show()
+
+        # Score distribution by parameter ranges
+        for param in df.columns:
+            if param not in metric_scores and param != "overall_score":
+                if df[param].dtype in ["int64", "float64"]:
+                    plt.figure(figsize=(12, 6))
+                    df["param_range"] = pd.cut(df[param], bins=5)
+                    sns.boxplot(x="param_range", y="overall_score", data=df)
+                    plt.title(f"Score Distribution by {param} Ranges")
+                    plt.xlabel(param)
+                    plt.ylabel("Overall Score")
+                    plt.xticks(rotation=45)
+                    plt.tight_layout()
+                    plt.show()
+                elif df[param].dtype == "object":
+                    plt.figure(figsize=(12, 6))
+                    sns.boxplot(x=param, y="overall_score", data=df)
+                    plt.title(f"Score Distribution by {param}")
+                    plt.xlabel(param)
+                    plt.ylabel("Overall Score")
+                    plt.xticks(rotation=45)
+                    plt.tight_layout()
+                    plt.show()
+
+    def test_significance(self, n: int = 5):
+        if not self.tuned_result:
+            if self.enable_logging:
+                print("No results to test for significance.")
+            return
+
+        # Extract scores from run_results
+        scores = [run.score for run in self.tuned_result.run_results]
+
+        # Sort the scores in descending order
+        sorted_scores = sorted(scores, reverse=True)
+
+        if len(sorted_scores) <= n:
+            print(
+                f"Not enough data points to perform significance test. Need more than {n} results."
+            )
+            return
+
+        # Split the scores into two groups
+        top_n_scores = sorted_scores[:n]
+        rest_scores = sorted_scores[n:]
+
+        # Perform Mann-Whitney U test
+        statistic, p_value = stats.mannwhitneyu(
+            top_n_scores, rest_scores, alternative="two-sided"
+        )
+
+        print(f"Mann-Whitney U test results:")
+        print(f"Comparing top {n} scores against the rest")
+        print(f"U-statistic: {statistic}")
+        print(f"p-value: {p_value}")
+
+        # Interpret the results
+        alpha = 0.05  # Significance level
+        if p_value < alpha:
+            print(
+                f"The difference between the top {n} parameter combinations and the rest is statistically significant (p < {alpha})."
+            )
+        else:
+            print(
+                f"There is no statistically significant difference between the top {n} parameter combinations and the rest (p >= {alpha})."
+            )
+
+        # Calculate and print effect size (Cohen's d)
+        mean_top_n = np.mean(top_n_scores)
+        mean_rest = np.mean(rest_scores)
+        pooled_std = np.sqrt(
+            (np.std(top_n_scores, ddof=1) ** 2 + np.std(rest_scores, ddof=1) ** 2) / 2
+        )
+        cohen_d = (mean_top_n - mean_rest) / pooled_std
+
+        print(f"\nEffect size (Cohen's d): {cohen_d:.2f}")
+        if abs(cohen_d) < 0.2:
+            print("The effect size is small.")
+        elif abs(cohen_d) < 0.5:
+            print("The effect size is medium.")
+        else:
+            print("The effect size is large.")
+
+        # Visualize the comparison
+        plt.figure(figsize=(10, 6))
+        sns.boxplot(data=[top_n_scores, rest_scores], orient="h")
+        plt.title(f"Comparison of Top {n} Scores vs Rest")
+        plt.xlabel("Score")
+        plt.yticks([0, 1], [f"Top {n}", "Rest"])
+        plt.show()

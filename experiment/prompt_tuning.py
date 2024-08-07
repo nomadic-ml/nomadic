@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
@@ -128,7 +128,6 @@ class PromptTuner(BaseModel):
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Original prompt: {prompt}"},
                 ],
-                max_tokens=300,
                 n=self.num_iterations_per_prompt,
                 stop=None,
                 temperature=0.7,
@@ -169,12 +168,15 @@ class PromptTuner(BaseModel):
 
 
 def custom_evaluate(
-    response: str, evaluation_metrics: List[str], openai_api_key: str
+    response: str,
+    evaluation_metrics: List[Dict[str, Union[str, float]]],
+    openai_api_key: str,
 ) -> dict:
-    metrics_prompt = "\n".join(
-        [f"{i+1}. {metric}" for i, metric in enumerate(evaluation_metrics)]
-    )
-    metrics_format = "\n".join([f"{metric}: [score]" for metric in evaluation_metrics])
+    metrics = [metric["metric"] for metric in evaluation_metrics]
+    weights = {metric["metric"]: metric["weight"] for metric in evaluation_metrics}
+
+    metrics_prompt = "\n".join([f"{i+1}. {metric}" for i, metric in enumerate(metrics)])
+    metrics_format = "\n".join([f"{metric}: [score]" for metric in metrics])
 
     evaluation_prompt = f"""
     You are a judge evaluating the quality of a generated response for a financial advice summary.
@@ -187,7 +189,7 @@ def custom_evaluate(
 
     Provide your evaluation in the following format:
     {metrics_format}
-    Overall score: [total out of {len(evaluation_metrics) * 20}]
+    Overall score: [total out of {len(metrics) * 20}]
 
     Brief explanation: [Your explanation of the strengths and weaknesses]
     """
@@ -214,24 +216,35 @@ def custom_evaluate(
 
     for line in lines:
         if ":" in line:
-            metric, score = line.split(":")
-            metric = metric.strip()
-            try:
-                score = int(score.strip().split()[0])  # Extract the numeric score
-                scores[metric] = score
-            except ValueError:
-                pass  # Skip lines that don't contain a numeric score
+            parts = line.split(":", 1)  # Split only on the first colon
+            if len(parts) == 2:
+                metric, score_str = parts
+                metric = metric.strip()
+                try:
+                    score = float(
+                        score_str.strip().split()[0]
+                    )  # Extract the numeric score
+                    scores[metric] = score
+                except ValueError:
+                    pass  # Skip lines that don't contain a numeric score
         elif line.lower().startswith("overall score:"):
             try:
-                overall_score = int(line.split(":")[1].strip().split()[0])
+                overall_score = float(line.split(":", 1)[1].strip().split()[0])
             except ValueError:
                 pass
         elif line.lower().startswith("brief explanation:"):
             explanation = line.split(":", 1)[1].strip()
 
+    # Calculate weighted score
+    total_weight = sum(weights.values())
+    weighted_score = (
+        sum(scores.get(metric, 0) * weights.get(metric, 1) for metric in metrics)
+        / total_weight
+    )
+
     return {
         "scores": scores,
-        "overall_score": overall_score,
+        "overall_score": weighted_score,
         "explanation": explanation,
         "evaluation_prompt": evaluation_prompt,
     }
