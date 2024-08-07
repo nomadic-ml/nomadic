@@ -413,18 +413,31 @@ class Experiment(BaseModel):
 
         # Extract individual metric scores
         metric_scores = {}
-        for run in self.tuned_result.run_results:
+        for i, run in enumerate(self.tuned_result.run_results):
             if "Custom Evaluator Results" in run.metadata:
                 eval_result = run.metadata["Custom Evaluator Results"][0]
                 if "scores" in eval_result:
                     for metric, score in eval_result["scores"].items():
                         if metric not in metric_scores:
-                            metric_scores[metric] = []
-                        metric_scores[metric].append(score)
+                            metric_scores[metric] = [None] * len(
+                                self.tuned_result.run_results
+                            )
+                        metric_scores[metric][i] = score
 
         # Create a DataFrame
         df = pd.DataFrame(params)
         df["overall_score"] = scores
+
+        # Print debugging information
+        print(f"Number of runs: {len(self.tuned_result.run_results)}")
+        print(f"Number of overall scores: {len(scores)}")
+        for metric, scores in metric_scores.items():
+            print(f"Number of scores for {metric}: {len(scores)}")
+            print(
+                f"Number of non-None scores for {metric}: {sum(1 for score in scores if score is not None)}"
+            )
+
+        # Add metric scores to DataFrame, filling missing values
         for metric, scores in metric_scores.items():
             df[metric] = scores
 
@@ -483,39 +496,47 @@ class Experiment(BaseModel):
         plt.show()
 
         # New heatmap visualization
-        plt.figure(figsize=(15, 10))
+        plt.figure(figsize=(20, 12))
 
         # Prepare data for heatmap
         heatmap_data = df.copy()
 
-        # Create a combined parameter column
-        heatmap_data["param_combination"] = heatmap_data.apply(
-            lambda row: ", ".join(
-                [
-                    f"{col}: {val}"
-                    for col, val in row.items()
-                    if col not in metric_scores and col != "overall_score"
-                ]
-            ),
-            axis=1,
+        # Create columns for each parameter
+        param_columns = [
+            "temperature",
+            "max_tokens",
+            "prompt_tuning_approach",
+            "prompt_tuning_complexity",
+            "prompt_tuning_focus",
+        ]
+        for param in param_columns:
+            heatmap_data[param] = heatmap_data[param].astype(str)
+
+        # Combine parameter columns
+        heatmap_data["param_combination"] = heatmap_data[param_columns].agg(
+            " | ".join, axis=1
         )
 
-        # Melt the dataframe to long format
+        # Melt the dataframe to long format, excluding 'overall_score'
         heatmap_data_melted = pd.melt(
             heatmap_data,
-            id_vars=["param_combination"],
-            value_vars=["overall_score"] + list(metric_scores.keys()),
+            id_vars=["param_combination"] + param_columns,
+            value_vars=[col for col in metric_scores.keys() if col != "overall_score"],
             var_name="Metric",
             value_name="Score",
         )
 
         # Create pivot table
         heatmap_pivot = heatmap_data_melted.pivot(
-            index="param_combination", columns="Metric", values="Score"
+            index=["param_combination"] + param_columns,
+            columns="Metric",
+            values="Score",
         )
 
-        # Sort by overall score
-        heatmap_pivot = heatmap_pivot.sort_values("overall_score", ascending=False)
+        # Sort by the first metric (assuming it's the most important)
+        heatmap_pivot = heatmap_pivot.sort_values(
+            heatmap_pivot.columns[0], ascending=False
+        )
 
         # Create heatmap
         sns.heatmap(
@@ -525,10 +546,13 @@ class Experiment(BaseModel):
             fmt=".1f",
             cbar_kws={"label": "Score"},
         )
-        plt.title("Heatmap of Scores for Each Parameter Combination")
-        plt.ylabel("Parameter Combination")
-        plt.xlabel("Metric")
-        plt.xticks(rotation=45, ha="right")
+        plt.title("Heatmap of Scores for Each Parameter Combination", fontsize=16)
+        plt.ylabel("Parameter Combination", fontsize=12)
+        plt.xlabel("Metric", fontsize=12)
+        plt.xticks(rotation=45, ha="right", fontsize=10)
+        plt.yticks(fontsize=8)
+
+        # Adjust layout and display
         plt.tight_layout()
         plt.show()
 
