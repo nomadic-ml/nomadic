@@ -25,70 +25,6 @@ class PromptTuner(BaseModel):
         description="Flag to enable or disable print logging.",
     )
 
-    def _generate_zero_shot_prompt(self, prompt: str) -> str:
-        return f"""
-        Given the following task, provide a direct response without any examples or additional context:
-
-        Task: {prompt}
-        """
-
-    def _generate_few_shot_prompt(self, prompt: str) -> str:
-        return f"""
-        Here are a few examples of how to approach similar tasks:
-
-        Example 1:
-        Task: Summarize the key points of a financial report.
-        Response: 1. Review revenue and profit figures. 2. Analyze growth trends. 3. Examine debt levels and cash flow. 4. Highlight major business segments. 5. Note any significant events or changes.
-
-        Example 2:
-        Task: Explain the concept of diversification in investing.
-        Response: Diversification involves spreading investments across various assets to reduce risk. It can include different asset classes, industries, and geographic regions.
-
-        Now, please address the following task:
-
-        Task: {prompt}
-        """
-
-    def _generate_chain_of_thought_prompt(self, prompt: str) -> str:
-        return f"""
-        For the following task, provide a detailed step-by-step solution, showing your reasoning at each stage:
-
-        Task: {prompt}
-
-        Your response should follow this structure:
-        1. Initial thoughts
-        2. Breaking down the problem
-        3. Step-by-step solution
-        4. Final answer or conclusion
-        5. Verification or sanity check
-        """
-
-    def _generate_task_decomposition_prompt(self, prompt: str) -> str:
-        return f"""
-        For the following task, break it down into smaller, manageable subtasks:
-
-        Main Task: {prompt}
-
-        Your response should follow this structure:
-        1. List of subtasks
-        2. Brief explanation of each subtask
-        3. Suggested order of completion
-        4. Any dependencies between subtasks
-        """
-
-    def _generate_self_consistency_prompt(self, prompt: str) -> str:
-        return f"""
-        Please provide multiple different approaches or solutions to the following task:
-
-        Task: {prompt}
-
-        Your response should include:
-        1. At least three different approaches or solutions
-        2. A brief explanation of each approach
-        3. A comparison of the strengths and weaknesses of each approach
-        4. A final recommendation on the best approach and why
-        """
-
     def generate_similar_prompts(
         self,
         prompt: str,
@@ -211,7 +147,6 @@ def custom_evaluate(
     # Parse the evaluation result
     lines = evaluation_result.split("\n")
     scores = {}
-    overall_score = 0
     explanation = ""
 
     for line in lines:
