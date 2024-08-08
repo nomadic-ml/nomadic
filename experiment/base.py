@@ -50,6 +50,9 @@ class Experiment(BaseModel):
         default="",
         description="User request for GPT prompt.",
     )
+    param_fn: Optional[Callable[[Dict[str, Any]], Any]] = Field(
+        default=None, description="Function to run with parameters."
+    )
     model: Optional[Any] = Field(default=None, description="Model to run experiment")
     evaluator: Optional[Union[BaseEvaluator, Callable, Dict[str, Any]]] = Field(
         default=None,
@@ -87,7 +90,7 @@ class Experiment(BaseModel):
         description="Detailed description of Experiment status during error.",
     )
     enable_logging: bool = Field(
-        default=True,
+        default=False,
         description="Flag to enable or disable print logging.",
     )
     prompt_tuner: Optional[PromptTuner] = Field(
@@ -377,6 +380,14 @@ class Experiment(BaseModel):
                     current_param_dict=self.current_param_dict,
                     show_progress=self.enable_logging,
                 )
+        else:
+            if self.param_fn:
+                self.tuner.param_fn = self.param_fn
+            if self.param_dict:
+                self.tuner.param_dict = self.param_dict
+            if self.fixed_param_dict:
+                self.tuner.fixed_param_dict = self.fixed_param_dict
+            self.tuner.show_progress = self.enable_logging
 
     def _format_error_message(self, exception: Exception) -> str:
         return f"Exception: {str(exception)}\n\nStack Trace:\n{traceback.format_exc()}"

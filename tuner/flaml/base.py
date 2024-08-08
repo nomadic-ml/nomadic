@@ -22,9 +22,6 @@ class FlamlParamTuner(BaseParamTuner):
         description="FLAML search algorithm",
     )
     num_samples: Optional[int] = Field(default=-1, description="FLAML num samples")
-    run_config_dict: Optional[dict] = Field(
-        default=None, description="Run config dict for Ray Tune."
-    )
     scheduler: Optional[str] = Field(default=None, description="FLAML scheduler")
 
     def model_post_init(self, ctx):

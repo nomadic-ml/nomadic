@@ -57,15 +57,8 @@ class TAPParamTuner(BaseParamTuner):
         default_factory=dict,
         description="A dictionary of fixed parameters passed to each job.",
     )
-    evaluation_method: int = Field(default=3, description="Evaluation method to use.")
-    run_config_dict: Optional[Dict[str, Any]] = Field(
-        default=None, description="Optional run configuration dictionary."
-    )
     search_method: str = Field(
-        default="grid", description="Search method to use for hyperparameter tuning."
-    )
-    enhanced_function: Optional[Callable[[Any], RunResult]] = Field(
-        default=None, description="Enhanced function for FLAML optimization."
+        default="flaml", description="Search method to use for hyperparameter tuning."
     )
     num_simulations: int = Field(
         default=-1,
@@ -74,8 +67,8 @@ class TAPParamTuner(BaseParamTuner):
     time_budget_s: Optional[int] = Field(
         default=None, description="Time budget (sec) for the experiment to run."
     )
-    evaluator: Optional[Any] = Field(..., description="Evaluator instance")
-    target: Optional[Any] = Field(..., description="Target instance")
+    evaluator_llm: Optional[Any] = Field(..., description="Evaluator instance")
+    target_llm: Optional[Any] = Field(..., description="Target instance")
     attack_llm: Optional[Any] = Field(..., description="Attack LLM instance")
 
     def fit(self) -> TunedResult:
@@ -205,18 +198,18 @@ class TAPParamTuner(BaseParamTuner):
             self.fixed_param_dict["target_strs"][goal_i],
         )
 
-        self.evaluator.goal = goal
-        self.evaluator.target_str = target_str
+        self.evaluator_llm.goal = goal
+        self.evaluator_llm.target_str = target_str
 
         self.fixed_param_dict["args"].goal = goal
         self.fixed_param_dict["args"].target_str = target_str
 
-        print(self.evaluator.goal)
-        result = self.enhanced_function(
+        print(self.evaluator_llm.goal)
+        result = self.param_fn(
             attack_params=param_dict,
             attack_llm=self.attack_llm,
-            target_llm=self.target,
-            evaluator_llm=self.evaluator,
+            target_llm=self.target_llm,
+            evaluator_llm=self.evaluator_llm,
             args=self.fixed_param_dict["args"],
             top_p=param_dict.get("top_p", 1.0),
             temperature=param_dict.get("temperature", 0.7),
