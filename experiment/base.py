@@ -506,91 +506,94 @@ class Experiment(BaseModel):
         plt.title("Correlation Heatmap of Numeric Parameters and Scores")
         plt.show()
 
-        # New heatmap visualization
-        plt.figure(figsize=(20, 14))  # Increased figure size to accommodate the new row
+        # TODO: Remove below try/catch due to the below indicated TODO error
+        try:
+            # New heatmap visualization
+            plt.figure(
+                figsize=(20, 14)
+            )  # Increased figure size to accommodate the new row
 
-        # Prepare data for heatmap
-        heatmap_data = df.copy()
+            # Prepare data for heatmap
+            heatmap_data = df.copy()
 
-        # Create columns for each parameter
-        param_columns = [
-            "temperature",
-            "max_tokens",
-            "prompt_tuning_approach",
-            "prompt_tuning_complexity",
-            "prompt_tuning_focus",
-        ]
-        for param in param_columns:
-            heatmap_data[param] = heatmap_data[param].astype(str)
+            # Create columns for each parameter
+            param_columns = list(self.param_dict.keys())
+            for param in param_columns:
+                heatmap_data[param] = heatmap_data[param].astype(str)
 
-        # Combine parameter columns
-        heatmap_data["param_combination"] = heatmap_data[param_columns].agg(
-            " | ".join, axis=1
-        )
+            # Combine parameter columns
+            heatmap_data["param_combination"] = heatmap_data[param_columns].agg(
+                " | ".join, axis=1
+            )
 
-        # Melt the dataframe to long format, excluding 'overall_score'
-        heatmap_data_melted = pd.melt(
-            heatmap_data,
-            id_vars=["param_combination"] + param_columns,
-            value_vars=[col for col in metric_scores.keys() if col != "overall_score"],
-            var_name="Metric",
-            value_name="Score",
-        )
+            # Melt the dataframe to long format, excluding 'overall_score'
+            heatmap_data_melted = pd.melt(
+                heatmap_data,
+                id_vars=["param_combination"] + param_columns,
+                value_vars=[
+                    col for col in metric_scores.keys() if col != "overall_score"
+                ],
+                var_name="Metric",
+                value_name="Score",
+            )
 
-        # Create pivot table
-        heatmap_pivot = heatmap_data_melted.pivot(
-            index=["param_combination"] + param_columns,
-            columns="Metric",
-            values="Score",
-        )
+            # Create pivot table
+            heatmap_pivot = heatmap_data_melted.pivot(
+                index=["param_combination"] + param_columns,
+                columns="Metric",
+                values="Score",
+            )
 
-        # Sort by the first metric (assuming it's the most important)
-        heatmap_pivot = heatmap_pivot.sort_values(
-            heatmap_pivot.columns[0], ascending=False
-        )
+            # TODO: Fix below issue: "index 0 is out of bounds for axis 0 with size 0"
+            # Sort by the first metric (assuming it's the most important)
+            heatmap_pivot = heatmap_pivot.sort_values(
+                heatmap_pivot.columns[0], ascending=False
+            )
 
-        # Create heatmap
-        ax = sns.heatmap(
-            heatmap_pivot,
-            annot=True,
-            cmap="YlGnBu",
-            fmt=".1f",
-            cbar_kws={"label": "Score"},
-            mask=heatmap_pivot.isnull(),
-        )
+            # Create heatmap
+            ax = sns.heatmap(
+                heatmap_pivot,
+                annot=True,
+                cmap="YlGnBu",
+                fmt=".1f",
+                cbar_kws={"label": "Score"},
+                mask=heatmap_pivot.isnull(),
+            )
 
-        plt.title("Heatmap of Scores for Each Parameter Combination", fontsize=16)
-        plt.ylabel("Parameter Combination", fontsize=12)
-        plt.xlabel("Metric", fontsize=12)
-        plt.xticks(rotation=45, ha="right", fontsize=10)
-        plt.yticks(fontsize=8)
+            plt.title("Heatmap of Scores for Each Parameter Combination", fontsize=16)
+            plt.ylabel("Parameter Combination", fontsize=12)
+            plt.xlabel("Metric", fontsize=12)
+            plt.xticks(rotation=45, ha="right", fontsize=10)
+            plt.yticks(fontsize=8)
 
-        # Adjust layout and display
-        plt.tight_layout()
-        plt.show()
+            # Adjust layout and display
+            plt.tight_layout()
+            plt.show()
 
-        # Score distribution by parameter ranges
-        for param in df.columns:
-            if param not in metric_scores and param != "overall_score":
-                if df[param].dtype in ["int64", "float64"]:
-                    plt.figure(figsize=(12, 6))
-                    df["param_range"] = pd.cut(df[param], bins=5)
-                    sns.boxplot(x="param_range", y="overall_score", data=df)
-                    plt.title(f"Score Distribution by {param} Ranges")
-                    plt.xlabel(param)
-                    plt.ylabel("Overall Score")
-                    plt.xticks(rotation=45)
-                    plt.tight_layout()
-                    plt.show()
-                elif df[param].dtype == "object":
-                    plt.figure(figsize=(12, 6))
-                    sns.boxplot(x=param, y="overall_score", data=df)
-                    plt.title(f"Score Distribution by {param}")
-                    plt.xlabel(param)
-                    plt.ylabel("Overall Score")
-                    plt.xticks(rotation=45)
-                    plt.tight_layout()
-                    plt.show()
+            # Score distribution by parameter ranges
+            for param in df.columns:
+                if param not in metric_scores and param != "overall_score":
+                    if df[param].dtype in ["int64", "float64"]:
+                        plt.figure(figsize=(12, 6))
+                        df["param_range"] = pd.cut(df[param], bins=5)
+                        sns.boxplot(x="param_range", y="overall_score", data=df)
+                        plt.title(f"Score Distribution by {param} Ranges")
+                        plt.xlabel(param)
+                        plt.ylabel("Overall Score")
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        plt.show()
+                    elif df[param].dtype == "object":
+                        plt.figure(figsize=(12, 6))
+                        sns.boxplot(x=param, y="overall_score", data=df)
+                        plt.title(f"Score Distribution by {param}")
+                        plt.xlabel(param)
+                        plt.ylabel("Overall Score")
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        plt.show()
+        except Exception as e:
+            pass
 
     def test_significance(self, n: int = 5):
         if not self.tuned_result:
