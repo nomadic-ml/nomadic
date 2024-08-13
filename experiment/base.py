@@ -40,7 +40,7 @@ class Experiment(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     param_dict: Dict[str, Any] = Field(
-        ..., description="A dictionary of parameters to iterate over."
+        default=None, description="A dictionary of parameters to iterate over."
     )
     evaluation_dataset: List[Dict] = Field(
         default=list({}),
@@ -100,6 +100,21 @@ class Experiment(BaseModel):
     num_example_prompts: Optional[int] = Field(
         default=0,
         description="Number of example prompts to include for few-shot prompting.",
+    )
+    num_samples: Optional[int] = Field(
+        default=-1,
+        description="Number of HP tuning samples to run. Only active for FLAML",
+    )
+    use_flaml_library: Optional[bool] = Field(
+        default=True,
+        description="Whether to use FLAML as parameter tuning library. If False, Ray Tune will be used.",
+    )
+    use_ray_backend: Optional[bool] = Field(
+        default=False,
+        description="Whether to use Ray Tune as parameter tuning backend. If False, Optuna will be used.",
+    )
+    results_filepath: Optional[str] = Field(
+        default=None, description="Path of outputting tuner run results."
     )
 
     @field_validator("tuner")
@@ -341,6 +356,8 @@ class Experiment(BaseModel):
                 scores.append(result["scores"]["Overall score"])
             elif "overall_score" in result and result["overall_score"] != 0:
                 scores.append(result["overall_score"])
+            elif hasattr(result, "score"):
+                scores.append(result.score)
 
         return sum(scores) / len(scores) if scores else 0
 
@@ -348,7 +365,20 @@ class Experiment(BaseModel):
         if not self.tuner:
             if self.enable_logging:
                 print("\nSetting up tuner...")
-            if is_ray_installed():
+            if self.use_flaml_library:
+                from nomadic.tuner import FlamlParamTuner
+
+                self.tuner = FlamlParamTuner(
+                    param_fn=param_function,
+                    param_dict=self.param_dict,
+                    search_method=self.search_method,
+                    fixed_param_dict=self.fixed_param_dict,
+                    current_param_dict=self.current_param_dict,
+                    show_progress=self.enable_logging,
+                    use_ray=self.use_ray_backend,
+                    num_samples=self.num_samples,
+                )
+            elif is_ray_installed():
                 from nomadic.tuner.ray import RayTuneParamTuner
                 from ray import tune as ray_tune
 
@@ -369,25 +399,19 @@ class Experiment(BaseModel):
                     show_progress=self.enable_logging,
                 )
             else:
-                # FlamlParamTuner setup remains unchanged
-                from nomadic.tuner import FlamlParamTuner
-
-                self.tuner = FlamlParamTuner(
-                    param_fn=param_function,
-                    param_dict=self.param_dict,
-                    search_method=self.search_method,
-                    fixed_param_dict=self.fixed_param_dict,
-                    current_param_dict=self.current_param_dict,
-                    show_progress=self.enable_logging,
+                raise NotImplemented(
+                    "Only FLAML and Ray Tune are supported as tuning backends."
                 )
-        else:
-            if self.param_fn:
-                self.tuner.param_fn = self.param_fn
-            if self.param_dict:
-                self.tuner.param_dict = self.param_dict
-            if self.fixed_param_dict:
-                self.tuner.fixed_param_dict = self.fixed_param_dict
-            self.tuner.show_progress = self.enable_logging
+
+        if self.param_fn:
+            self.tuner.param_fn = self.param_fn
+        if self.param_dict:
+            self.tuner.param_dict = self.param_dict
+        if self.fixed_param_dict:
+            self.tuner.fixed_param_dict = self.fixed_param_dict
+        if self.results_filepath:
+            self.tuner.results_filepath = self.results_filepath
+        self.tuner.show_progress = self.enable_logging
 
     def _format_error_message(self, exception: Exception) -> str:
         return f"Exception: {str(exception)}\n\nStack Trace:\n{traceback.format_exc()}"

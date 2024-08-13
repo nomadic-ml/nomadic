@@ -44,7 +44,7 @@ class RayTuneParamTuner(BaseParamTuner):
         fixed_param_dict: Optional[Dict] = None,
     ) -> Dict:
         # need a wrapper to pass in parameters to ray_tune + fixed params
-        fixed_param_dict = fixed_param_dict or {}
+        fixed_param_dict = fixed_param_dict if fixed_param_dict is not None else {}
         full_param_dict = {
             **fixed_param_dict,
             **ray_param_dict,
@@ -82,6 +82,7 @@ class RayTuneParamTuner(BaseParamTuner):
             new_param_space = {
                 hp_name: ray_tune.grid_search(val.categories)
                 for hp_name, val in param_space.items()
+                if hasattr(val, "categories")
             }
             ray_tuner = ray_tune.Tuner(
                 ray_tune.with_parameters(
@@ -96,6 +97,7 @@ class RayTuneParamTuner(BaseParamTuner):
             new_param_space = {
                 hp_name: ray_tune.uniform(*tuple(val["uniform"]))
                 for hp_name, val in param_space.items()
+                if hasattr(val, "uniform")
             }
             ray_tuner = ray_tune.Tuner(
                 ray_tune.with_parameters(

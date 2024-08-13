@@ -5,12 +5,12 @@ import pandas as pd
 
 
 class RunResult(BaseModel):
-    """Run result."""
+    """Run result"""
 
     score: float
     params: Dict[str, Any]
     metadata: Optional[Dict[str, Any]] = Field(
-        default_factory=dict, description="Metadata."
+        default_factory=dict, description="Metadata"
     )
 
 

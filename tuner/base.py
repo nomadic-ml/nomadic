@@ -20,8 +20,8 @@ class BaseParamTuner(BaseModel):
     param_fn: Callable[[Dict[str, Any]], Any] = Field(
         ..., description="Function to run with parameters."
     )
-    param_dict: Dict[str, Any] = Field(
-        ..., description="A dictionary of parameters to iterate over."
+    param_dict: Optional[Dict[str, Any]] = Field(
+        default=None, description="A dictionary of parameters to iterate over."
     )
     fixed_param_dict: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
