@@ -16,7 +16,13 @@ class RunResult(BaseModel):
 
 class TunedResult(BaseModel):
     run_results: List[RunResult]
-    best_idx: int
+    best_idx: Optional[int] = Field(
+        default=0, description="Position of the best RunResult in run_results."
+    )
+
+    def model_post_init(self, __context):
+        self.run_results = sorted(self.run_results, key=lambda x: x.score, reverse=True)
+        self.best_idx = 0
 
     @property
     def best_run_result(self) -> RunResult:

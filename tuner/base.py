@@ -117,9 +117,4 @@ class ParamTuner(BaseParamTuner):
                     RunResult(score=result, params=full_param_dict, metadata={})
                 )
 
-        # sort the results by score
-        sorted_run_results = sorted(
-            all_run_results, key=lambda x: x.score, reverse=True
-        )
-
-        return TunedResult(run_results=sorted_run_results, best_idx=0)
+        return TunedResult(run_results=all_run_results)

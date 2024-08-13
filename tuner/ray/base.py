@@ -62,10 +62,10 @@ class RayTuneParamTuner(BaseParamTuner):
         # result.metrics to those keys
         try:
             run_result = RunResult.model_validate(result_grid.metrics)
-        except ValidationError:
+        except ValidationError as e:
             # Tuning function may have errored out (e.g. due to objective function erroring)
             # Handle gracefully
-            run_result = RunResult(score=-1, params={})
+            run_result = RunResult(score=-1, params={}, metadata={"error": e.stderr})
 
         # add some more metadata to run_result (e.g. timestamp)
         run_result.metadata["timestamp"] = (
@@ -150,9 +150,4 @@ class RayTuneParamTuner(BaseParamTuner):
                     )
                 )
 
-        # sort the results by score
-        sorted_run_results = sorted(
-            all_run_results, key=lambda x: x.score, reverse=True
-        )
-
-        return TunedResult(run_results=sorted_run_results, best_idx=0)
+        return TunedResult(run_results=all_run_results)

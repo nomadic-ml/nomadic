@@ -103,11 +103,7 @@ class TAPParamTuner(BaseParamTuner):
             # Write ongoing result to file
             self.add_entries_to_results_json_file(result)
 
-        return TunedResult(
-            best_params=best_params,
-            best_score=best_score,
-            results=results,
-        )
+        return TunedResult(run_results=results)
 
     def _bayesian_optimization(self) -> TunedResult:
         def objective(params):
@@ -178,11 +174,7 @@ class TAPParamTuner(BaseParamTuner):
             for trial in analysis.trials
         ]
 
-        best_idx = run_results.index(
-            next(result for result in run_results if result.params == best_params)
-        )
-
-        return TunedResult(run_results=run_results, best_idx=best_idx)
+        return TunedResult(run_results=run_results)
 
     def _evaluate_params(self, param_dict: Dict[str, Any]) -> RunResult:
         # Use the enhanced function to evaluate the parameters

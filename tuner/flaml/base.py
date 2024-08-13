@@ -87,6 +87,4 @@ class FlamlParamTuner(BaseParamTuner):
                     metadata=trial.last_result["metadata"],
                 )
             )
-        sorted_run_results = sorted(run_results, key=lambda x: x.score, reverse=True)
-
-        return TunedResult(run_results=sorted_run_results, best_idx=0)
+        return TunedResult(run_results=run_results)

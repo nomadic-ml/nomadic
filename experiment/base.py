@@ -424,10 +424,7 @@ class Experiment(BaseModel):
         )
 
     def _create_default_tuned_result(self) -> TunedResult:
-        return TunedResult(
-            run_results=[RunResult(score=-1, params={}, metadata={})],
-            best_idx=0,
-        )
+        return TunedResult(run_results=[RunResult(score=-1, params={}, metadata={})])
 
     def save_experiment(self, folder_path: Path):
         file_name = (
