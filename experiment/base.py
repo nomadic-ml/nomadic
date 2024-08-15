@@ -42,13 +42,9 @@ class Experiment(BaseModel):
     param_dict: Dict[str, Any] = Field(
         default=None, description="A dictionary of parameters to iterate over."
     )
-    evaluation_dataset: List[Dict] = Field(
+    evaluation_dataset: Optional[List[Dict]] = Field(
         default=list({}),
         description="Evaluation dataset in dictionary format.",
-    )
-    user_prompt_request: str = Field(
-        default="",
-        description="User request for GPT prompt.",
     )
     param_fn: Optional[Callable[[Dict[str, Any]], Any]] = Field(
         default=None, description="Function to run with parameters."
@@ -96,6 +92,10 @@ class Experiment(BaseModel):
     prompt_tuner: Optional[PromptTuner] = Field(
         default=None,
         description="PromptTuner instance for generating prompt variants.",
+    )
+    user_prompt_request: Optional[str] = Field(
+        default="",
+        description="User request for GPT prompt.",
     )
     num_example_prompts: Optional[int] = Field(
         default=0,
