@@ -129,16 +129,12 @@ class Experiment(BaseModel):
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
 
-    # The get_fewshot_prompt_template method has been removed as it's no longer needed.
-    # Prompt generation is now handled by the PromptTuner class in prompt_tuning.py.
-
     def run(self) -> TunedResult:
         is_error = False
 
         def get_responses(type_safe_param_values):
             all_pred_responses, all_eval_qs, all_ref_responses = [], [], []
 
-            # Unpack the tuple returned by _enforce_param_types
             openai_params, prompt_tuning_params = type_safe_param_values
 
             if self.prompts:
@@ -169,7 +165,7 @@ class Experiment(BaseModel):
                 if not self.evaluation_dataset:
                     completion_response: CompletionResponse = self.model.run(
                         prompt=prompt_variant,
-                        parameters=openai_params,  # Use openai_params here
+                        parameters=openai_params,
                     )
                     pred_response = self._extract_response(completion_response)
                     pred_responses.append(pred_response)
@@ -183,14 +179,14 @@ class Experiment(BaseModel):
                             print(
                                 f"Processing example {j+1}/{len(self.evaluation_dataset)}"
                             )
-                        prompt = self._construct_prompt(prompt_variant, example)
+                        full_prompt = self._construct_prompt(prompt_variant, example)
                         completion_response: CompletionResponse = self.model.run(
-                            prompt=prompt,
-                            parameters=openai_params,  # Use openai_params here
+                            prompt=full_prompt,
+                            parameters=openai_params,
                         )
                         pred_response = self._extract_response(completion_response)
                         pred_responses.append(pred_response)
-                        eval_qs.append(prompt)
+                        eval_qs.append(full_prompt)
                         ref_responses.append(example.get("Answer", None))
                         if self.enable_logging:
                             print(f"Response: {pred_response[:100]}...")
@@ -219,6 +215,7 @@ class Experiment(BaseModel):
                 "Answers": pred_responses,
                 "Ground Truth": ref_responses,
                 "Custom Evaluator Results": eval_results,
+                "Full Prompts": eval_qs,
             }
 
             if self.prompt_tuner:
@@ -227,9 +224,6 @@ class Experiment(BaseModel):
                 metadata["Prompt Focuses"] = self.prompt_tuner.focus
             if hasattr(self, "evaluation_metrics"):
                 metadata["Evaluation Metrics"] = self.evaluation_metrics
-
-            if eval_qs:
-                metadata["Prompts"] = eval_qs
 
             return RunResult(
                 score=mean_score,
@@ -280,8 +274,6 @@ class Experiment(BaseModel):
             few_shot_examples += f"Answer: {example['Answer']}\n\n"
         return few_shot_examples
 
-    # This method has been removed as it's no longer needed
-
     def _extract_response(self, completion_response: CompletionResponse) -> str:
         if isinstance(self.model, OpenAIModel):
             return completion_response.text
@@ -319,19 +311,16 @@ class Experiment(BaseModel):
                             raise ValueError(
                                 "evaluation_metrics must be provided when using custom_evaluate"
                             )
-                        # Ensure all metrics have weights
                         for metric in evaluation_metrics:
                             if isinstance(metric, str):
                                 metric = {"metric": metric, "weight": 1.0}
                             elif isinstance(metric, dict) and "weight" not in metric:
                                 metric["weight"] = 1.0
-                        # Get the OpenAI API key from the model
                         openai_api_key = (
                             self.model.api_keys.get("OPENAI_API_KEY")
                             if hasattr(self.model, "api_keys")
                             else None
                         )
-                        # Pass the OpenAI API key to custom_evaluate
                         eval_results.append(
                             custom_evaluate(pred, evaluation_metrics, openai_api_key)
                         )
