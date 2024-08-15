@@ -98,7 +98,7 @@ class SagemakerModel(Model):
         )
 
 
-DEFAULT_OPENAI_MODEL: str = "gpt-3.5-turbo"
+DEFAULT_OPENAI_MODEL: str = "gpt-4o-mini"
 OPENAI_EXTRA_HYPERPARAMETER_SEARCH_SPACE: Dict[str, Any] = {
     "frequency_penalty": {"type": float, "values": "[-2.0, -1.0, 0.0, 1.0, 2.0]"},
     "presence_penalty": {"type": float, "values": "[-2.0, -1.0, 0.0, 1.0, 2.0]"},
@@ -115,12 +115,15 @@ class OpenAIModel(Model):
         },
         description="Set of hyperparameters to tune",
     )
+    model: Optional[str] = Field(
+        default=DEFAULT_OPENAI_MODEL, description="OpenAI model to use"
+    )
 
     def _set_model(self, **kwargs):
         """Set OpenAI model"""
         openai.api_key = self.api_keys["OPENAI_API_KEY"]
         self.llm = OpenAI(
-            model=kwargs.get("model", DEFAULT_OPENAI_MODEL),
+            model=self.model,
             api_key=self.api_keys["OPENAI_API_KEY"],
         )
 

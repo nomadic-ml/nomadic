@@ -1,3 +1,3 @@
-from nomadic.model.base import Model, SagemakerModel, OpenAIModel
+from nomadic.model.base import Model, SagemakerModel, OpenAIModel, DEFAULT_OPENAI_MODEL
 
-__all__ = ["Model", "SagemakerModel", "OpenAIModel"]
+__all__ = ["Model", "SagemakerModel", "OpenAIModel", "DEFAULT_OPENAI_MODEL"]

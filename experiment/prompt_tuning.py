@@ -2,6 +2,8 @@ from typing import List, Optional, Dict, Union
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from nomadic.model import DEFAULT_OPENAI_MODEL
+
 
 class PromptTuner(BaseModel):
     num_iterations_per_prompt: int = Field(
@@ -132,7 +134,7 @@ def custom_evaluate(
 
     client = OpenAI(api_key=openai_api_key)
     completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=DEFAULT_OPENAI_MODEL,
         messages=[
             {
                 "role": "system",
