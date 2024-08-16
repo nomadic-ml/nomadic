@@ -56,7 +56,7 @@ class Experiment(BaseModel):
     )
     tuner: Optional[Any] = Field(default=None, description="Base Tuner")
     prompts: Optional[List[str]] = Field(
-        default=None,
+        default=PromptTuner(enable_logging=False),
         description="Optional list of prompts to use in the experiment.",
     )
     fixed_param_dict: Optional[Dict[str, Any]] = Field(
@@ -132,45 +132,61 @@ class Experiment(BaseModel):
     def run(self) -> TunedResult:
         is_error = False
 
-        def get_responses(type_safe_param_values):
-            all_pred_responses, all_eval_qs, all_ref_responses = [], [], []
+        def get_responses(
+            type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]]
+        ) -> Tuple[List[str], List[str], List[str], List[str]]:
+            all_pred_responses, all_eval_qs, all_ref_responses, all_prompt_variants = (
+                [],
+                [],
+                [],
+                [],
+            )
 
             openai_params, prompt_tuning_params = type_safe_param_values
 
-            if self.prompts:
-                prompt_variants = self.prompts
-                if self.enable_logging:
-                    print(f"Using {len(prompt_variants)} provided prompts.")
-            elif self.prompt_tuner is None:
-                prompt_variants = [self.user_prompt_request]
-                if self.enable_logging:
-                    print("Prompt tuner is None. Using baseline prompt.")
-            else:
-                self.prompt_tuner.update_params(prompt_tuning_params)
-                prompt_variants = self.prompt_tuner.generate_prompt_variants(
-                    self.user_prompt_request,
-                    (
-                        self.model.api_keys.get("OPENAI_API_KEY")
-                        if hasattr(self.model, "api_keys")
-                        else None
-                    ),
-                )
+            # Initialize PromptTuner with the current parameters
+            prompt_tuner = PromptTuner(
+                prompting_approaches=[
+                    prompt_tuning_params.get("prompt_tuning_approach", "zero-shot")
+                ],
+                prompt_complexities=[
+                    prompt_tuning_params.get("prompt_tuning_complexity", "simple")
+                ],
+                prompt_focuses=[
+                    prompt_tuning_params.get("prompt_tuning_focus", "fact extraction")
+                ],
+                enable_logging=self.enable_logging,
+            )
+
+            # Generate prompt variants using PromptTuner
+            prompt_variants = prompt_tuner.generate_prompt_variants(
+                self.user_prompt_request,
+                (
+                    self.model.api_keys.get("OPENAI_API_KEY")
+                    if hasattr(self.model, "api_keys")
+                    else None
+                ),
+            )
 
             for i, prompt_variant in enumerate(prompt_variants):
                 if self.enable_logging:
                     print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
-                    print(f"Prompt: {prompt_variant[:100]}...")
+                    print(
+                        f"Prompt variant: {prompt_variant[:200]}..."
+                    )  # Print part of the variant
 
                 pred_responses, eval_qs, ref_responses = [], [], []
                 if not self.evaluation_dataset:
+                    full_prompt = prompt_variant
                     completion_response: CompletionResponse = self.model.run(
-                        prompt=prompt_variant,
+                        prompt=full_prompt,
                         parameters=openai_params,
                     )
                     pred_response = self._extract_response(completion_response)
                     pred_responses.append(pred_response)
-                    eval_qs.append(prompt_variant)
+                    eval_qs.append(full_prompt)
                     ref_responses.append(None)
+                    all_prompt_variants.append(prompt_variant)
                     if self.enable_logging:
                         print(f"Response: {pred_response[:100]}...")
                 else:
@@ -188,12 +204,18 @@ class Experiment(BaseModel):
                         pred_responses.append(pred_response)
                         eval_qs.append(full_prompt)
                         ref_responses.append(example.get("Answer", None))
+                        all_prompt_variants.append(prompt_variant)
                         if self.enable_logging:
                             print(f"Response: {pred_response[:100]}...")
                 all_pred_responses.extend(pred_responses)
                 all_eval_qs.extend(eval_qs)
                 all_ref_responses.extend(ref_responses)
-            return (all_pred_responses, all_eval_qs, all_ref_responses)
+            return (
+                all_pred_responses,
+                all_eval_qs,
+                all_ref_responses,
+                all_prompt_variants,
+            )
 
         def default_param_function(param_values: Dict[str, Any]) -> RunResult:
             if self.enable_logging:
@@ -202,7 +224,7 @@ class Experiment(BaseModel):
                     print(f"{param}: {value}")
 
             type_safe_param_values = self._enforce_param_types(param_values)
-            pred_responses, eval_qs, ref_responses = get_responses(
+            pred_responses, eval_qs, ref_responses, prompt_variants = get_responses(
                 type_safe_param_values
             )
             eval_results = self._evaluate_responses(pred_responses, ref_responses)
@@ -216,12 +238,19 @@ class Experiment(BaseModel):
                 "Ground Truth": ref_responses,
                 "Custom Evaluator Results": eval_results,
                 "Full Prompts": eval_qs,
+                "Prompt Variants": prompt_variants,
+                "Prompt Parameters": {
+                    k: v
+                    for k, v in param_values.items()
+                    if k
+                    in [
+                        "prompt_tuning_approach",
+                        "prompt_tuning_complexity",
+                        "prompt_tuning_focus",
+                    ]
+                },
             }
 
-            if self.prompt_tuner:
-                metadata["Prompting Approaches"] = self.prompt_tuner.approach
-                metadata["Prompt Complexities"] = self.prompt_tuner.complexity
-                metadata["Prompt Focuses"] = self.prompt_tuner.focus
             if hasattr(self, "evaluation_metrics"):
                 metadata["Evaluation Metrics"] = self.evaluation_metrics
 
@@ -255,24 +284,15 @@ class Experiment(BaseModel):
         return self.tuned_result
 
     def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:
-        prompt = f"{prompt_variant}\n\n"
-        if self.num_example_prompts > 0:
-            prompt += self._add_few_shot_examples()
-        prompt += f"Context: {example['Context']}\n\n"
-        prompt += f"Instruction: {example['Instruction']}\n\n"
-        prompt += f"Question: {example['Question']}\n\n"
-        return prompt
+        # Use the prompt variant as the base, which should already include any tuning modifications
+        prompt = prompt_variant
 
-    def _add_few_shot_examples(self) -> str:
-        few_shot_examples = ""
-        for i in range(min(self.num_example_prompts, len(self.evaluation_dataset) - 1)):
-            example = self.evaluation_dataset[i]
-            few_shot_examples += f"Example {i+1}:\n"
-            few_shot_examples += f"Context: {example['Context']}\n"
-            few_shot_examples += f"Instruction: {example['Instruction']}\n"
-            few_shot_examples += f"Question: {example['Question']}\n"
-            few_shot_examples += f"Answer: {example['Answer']}\n\n"
-        return few_shot_examples
+        # Add example-specific information
+        prompt += f"\n\nContext: {example['Context']}"
+        prompt += f"\nInstruction: {example['Instruction']}"
+        prompt += f"\nQuestion: {example['Question']}"
+
+        return prompt
 
     def _extract_response(self, completion_response: CompletionResponse) -> str:
         if isinstance(self.model, OpenAIModel):
