@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from openai import OpenAI
 import re
+import time
 
 
 class PromptTuner(BaseModel):
@@ -196,6 +197,8 @@ def custom_evaluate(
     response: str,
     evaluation_metrics: List[Dict[str, Union[str, float]]],
     openai_api_key: str,
+    max_retries: int = 3,
+    retry_delay: int = 5,  # seconds
 ) -> dict:
     metrics = [metric["metric"] for metric in evaluation_metrics]
     weights = {metric["metric"]: metric["weight"] for metric in evaluation_metrics}
@@ -220,59 +223,76 @@ def custom_evaluate(
     """
 
     client = OpenAI(api_key=openai_api_key)
-    completion = client.chat.completions.create(
-        model=DEFAULT_OPENAI_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are an AI assistant tasked with evaluating responses.",
-            },
-            {"role": "user", "content": evaluation_prompt},
-        ],
-    )
 
-    evaluation_result = completion.choices[0].message.content
+    def get_evaluation_result(prompt):
+        completion = client.chat.completions.create(
+            model=DEFAULT_OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an AI assistant tasked with evaluating responses.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return completion.choices[0].message.content
 
-    # Parse the evaluation result
-    lines = evaluation_result.split("\n")
-    scores = {}
-    explanation = ""
-    overall_score = 0
+    def parse_evaluation_result(evaluation_result):
+        lines = evaluation_result.split("\n")
+        scores = {}
+        explanation = ""
+        overall_score = 0
 
-    for line in lines:
-        if ":" in line:
-            parts = line.split(":", 1)  # Split only on the first colon
-            if len(parts) == 2:
-                metric, score_str = parts
-                metric = metric.strip()
-                score_str = score_str.strip()
+        for line in lines:
+            if ":" in line:
+                parts = line.split(":", 1)  # Split only on the first colon
+                if len(parts) == 2:
+                    metric, score_str = parts
+                    metric = metric.strip()
+                    score_str = score_str.strip()
+                    try:
+                        # Use regular expression to find the first number in the string
+                        score_match = re.search(r"\d+(\.\d+)?", score_str)
+                        if score_match:
+                            score = float(score_match.group())
+                            scores[metric] = score
+                        else:
+                            print(
+                                f"Warning: No numeric score found for metric '{metric}'. Score string: '{score_str}'"
+                            )
+                    except ValueError as e:
+                        print(
+                            f"Error parsing score for metric '{metric}': {e}. Score string: '{score_str}'"
+                        )
+            elif line.lower().startswith("overall score:"):
                 try:
-                    # Use regular expression to find the first number in the string
-                    import re
-
-                    score_match = re.search(r"\d+(\.\d+)?", score_str)
-                    if score_match:
-                        score = float(score_match.group())
-                        scores[metric] = score
+                    overall_score_match = re.search(
+                        r"\d+(\.\d+)?", line.split(":", 1)[1]
+                    )
+                    if overall_score_match:
+                        overall_score = float(overall_score_match.group())
                     else:
                         print(
-                            f"Warning: No numeric score found for metric '{metric}'. Score string: '{score_str}'"
+                            f"Warning: No numeric overall score found. Line: '{line}'"
                         )
                 except ValueError as e:
-                    print(
-                        f"Error parsing score for metric '{metric}': {e}. Score string: '{score_str}'"
-                    )
-        elif line.lower().startswith("overall score:"):
-            try:
-                overall_score_match = re.search(r"\d+(\.\d+)?", line.split(":", 1)[1])
-                if overall_score_match:
-                    overall_score = float(overall_score_match.group())
-                else:
-                    print(f"Warning: No numeric overall score found. Line: '{line}'")
-            except ValueError as e:
-                print(f"Error parsing overall score: {e}. Line: '{line}'")
-        elif line.lower().startswith("brief explanation:"):
-            explanation = line.split(":", 1)[1].strip()
+                    print(f"Error parsing overall score: {e}. Line: '{line}'")
+            elif line.lower().startswith("brief explanation:"):
+                explanation = line.split(":", 1)[1].strip()
+
+        return scores, overall_score, explanation
+
+    retry_count = 0
+    while retry_count < max_retries:
+        evaluation_result = get_evaluation_result(evaluation_prompt)
+        scores, overall_score, explanation = parse_evaluation_result(evaluation_result)
+
+        if all(metric in scores for metric in metrics) and overall_score:
+            break  # Exit loop if all metrics are successfully scored
+
+        print(f"Retrying evaluation... ({retry_count + 1}/{max_retries})")
+        time.sleep(retry_delay)
+        retry_count += 1
 
     # Calculate weighted score
     if scores:

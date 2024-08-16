@@ -448,65 +448,85 @@ class Experiment(BaseModel):
                 print("No results to visualize.")
             return
 
-        # Extract scores and parameters from run_results
-        scores = [run.score for run in self.tuned_result.run_results]
-        params = [run.params for run in self.tuned_result.run_results]
+        # Initialize lists to store the data for all runs
+        all_scores = []
+        all_params = []
+        all_metric_scores = {}
 
-        # Extract individual metric scores
-        metric_scores = {}
-        for i, run in enumerate(self.tuned_result.run_results):
-            if "Custom Evaluator Results" in run.metadata:
-                eval_result = run.metadata["Custom Evaluator Results"][0]
-                if "scores" in eval_result:
-                    for metric, score in eval_result["scores"].items():
-                        if metric not in metric_scores:
-                            metric_scores[metric] = [None] * len(
-                                self.tuned_result.run_results
-                            )
-                        metric_scores[metric][i] = score
+        # Iterate over all run results
+        for run in self.tuned_result.run_results:
+            # Access the metadata
+            metadata = run.metadata
 
-        # Create a DataFrame
-        df = pd.DataFrame(params)
-        df["overall_score"] = scores
+            # Extract the overall score
+            score = metadata["Custom Evaluator Results"][0]["overall_score"]
+            all_scores.append(score)
 
-        # Print debugging information
-        print(f"Number of runs: {len(self.tuned_result.run_results)}")
-        print(f"Number of overall scores: {len(scores)}")
-        for metric, scores in metric_scores.items():
-            print(f"Number of scores for {metric}: {len(scores)}")
-            print(
-                f"Number of non-None scores for {metric}: {sum(1 for score in scores if score is not None)}"
-            )
+            # Extract the parameters
+            params = metadata["Prompt Parameters"]
+            all_params.append(params)
 
-        # Add metric scores to DataFrame, filling missing values
-        for metric, scores in metric_scores.items():
+            # Extract individual metric scores
+            eval_result = metadata["Custom Evaluator Results"][0]
+            if "scores" in eval_result:
+                for metric, score in eval_result["scores"].items():
+                    if metric not in all_metric_scores:
+                        all_metric_scores[metric] = []
+                    all_metric_scores[metric].append(score)
+
+        # Ensure that all_metric_scores entries have the same length as all_scores
+        for metric in all_metric_scores:
+            if len(all_metric_scores[metric]) != len(all_scores):
+                print(
+                    f"Warning: Length mismatch for metric '{metric}'. Adjusting size."
+                )
+                # Adjust by appending None or using the last valid value (you can change this logic)
+                all_metric_scores[metric] = (
+                    all_metric_scores[metric] + [None] * len(all_scores)
+                )[: len(all_scores)]
+
+        # Create a DataFrame from the parameters
+        df = pd.DataFrame(all_params)
+        df["overall_score"] = all_scores
+
+        # Add metric scores to DataFrame
+        for metric, scores in all_metric_scores.items():
             df[metric] = scores
 
+        # Drop rows with any missing values
+        df_cleaned = df.dropna()
+
+        # Keep only columns that do not contain any missing values
+        df_cleaned = df_cleaned.dropna(axis=1, how="any")
+
         # Separate numeric and categorical columns
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        categorical_cols = df.select_dtypes(exclude=[np.number]).columns
+        numeric_cols = df_cleaned.select_dtypes(include=[np.number]).columns
+        categorical_cols = df_cleaned.select_dtypes(exclude=[np.number]).columns
 
         # Visualize overall score distribution
         plt.figure(figsize=(10, 6))
-        sns.histplot(data=df, x="overall_score", kde=True)
+        sns.histplot(data=df_cleaned, x="overall_score", kde=True)
         plt.title("Distribution of Overall Scores")
         plt.xlabel("Overall Score")
         plt.ylabel("Frequency")
         plt.show()
 
         # Visualize individual metric score distributions
-        for metric in metric_scores.keys():
-            plt.figure(figsize=(10, 6))
-            sns.histplot(data=df, x=metric, kde=True)
-            plt.title(f"Distribution of {metric} Scores")
-            plt.xlabel(f"{metric} Score")
-            plt.ylabel("Frequency")
-            plt.show()
+        for metric in all_metric_scores.keys():
+            if (
+                metric in df_cleaned.columns
+            ):  # Only plot if the column exists after cleaning
+                plt.figure(figsize=(10, 6))
+                sns.histplot(data=df_cleaned, x=metric, kde=True)
+                plt.title(f"Distribution of {metric} Scores")
+                plt.xlabel(f"{metric} Score")
+                plt.ylabel("Frequency")
+                plt.show()
 
         # Boxplots for categorical parameters vs overall score
         for col in categorical_cols:
             plt.figure(figsize=(10, 6))
-            sns.boxplot(x=col, y="overall_score", data=df)
+            sns.boxplot(x=col, y="overall_score", data=df_cleaned)
             plt.title(f"Overall Score Distribution by {col}")
             plt.ylabel("Overall Score")
             plt.xticks(rotation=45)
@@ -514,40 +534,43 @@ class Experiment(BaseModel):
 
         # Scatterplots for numeric parameters vs overall score
         for col in numeric_cols:
-            if col != "overall_score" and col not in metric_scores.keys():
+            if col != "overall_score" and col not in all_metric_scores.keys():
                 plt.figure(figsize=(10, 6))
-                sns.scatterplot(x=col, y="overall_score", data=df)
+                sns.scatterplot(x=col, y="overall_score", data=df_cleaned)
                 plt.title(f"Overall Score vs {col}")
                 plt.ylabel("Overall Score")
                 plt.show()
 
         # Summary statistics of scores
         print("Score Summary Statistics:")
-        print(df[["overall_score"] + list(metric_scores.keys())].describe())
+        print(df_cleaned[["overall_score"] + list(all_metric_scores.keys())].describe())
 
         # Top 5 performing parameter combinations
         print("\nTop 5 Performing Parameter Combinations:")
-        top_5 = df.sort_values("overall_score", ascending=False).head()
+        top_5 = df_cleaned.sort_values("overall_score", ascending=False).head()
         print(top_5.to_string(index=False))
 
         # Correlation heatmap for numeric parameters and scores
         plt.figure(figsize=(12, 10))
-        sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", center=0)
+        sns.heatmap(
+            df_cleaned[numeric_cols].corr(), annot=True, cmap="coolwarm", center=0
+        )
         plt.title("Correlation Heatmap of Numeric Parameters and Scores")
         plt.show()
 
-        # TODO: Remove below try/catch due to the below indicated TODO error
         try:
             # New heatmap visualization
-            plt.figure(
-                figsize=(20, 14)
-            )  # Increased figure size to accommodate the new row
+            plt.figure(figsize=(20, 14))
 
             # Prepare data for heatmap
-            heatmap_data = df.copy()
+            heatmap_data = df_cleaned.copy()
 
             # Create columns for each parameter
-            param_columns = list(self.param_dict.keys())
+            param_columns = list(
+                df_cleaned.columns.difference(all_metric_scores.keys()).difference(
+                    ["overall_score"]
+                )
+            )
             for param in param_columns:
                 heatmap_data[param] = heatmap_data[param].astype(str)
 
@@ -561,7 +584,7 @@ class Experiment(BaseModel):
                 heatmap_data,
                 id_vars=["param_combination"] + param_columns,
                 value_vars=[
-                    col for col in metric_scores.keys() if col != "overall_score"
+                    col for col in all_metric_scores.keys() if col != "overall_score"
                 ],
                 var_name="Metric",
                 value_name="Score",
@@ -574,7 +597,6 @@ class Experiment(BaseModel):
                 values="Score",
             )
 
-            # TODO: Fix below issue: "index 0 is out of bounds for axis 0 with size 0"
             # Sort by the first metric (assuming it's the most important)
             heatmap_pivot = heatmap_pivot.sort_values(
                 heatmap_pivot.columns[0], ascending=False
@@ -596,32 +618,9 @@ class Experiment(BaseModel):
             plt.xticks(rotation=45, ha="right", fontsize=10)
             plt.yticks(fontsize=8)
 
-            # Adjust layout and display
             plt.tight_layout()
             plt.show()
 
-            # Score distribution by parameter ranges
-            for param in df.columns:
-                if param not in metric_scores and param != "overall_score":
-                    if df[param].dtype in ["int64", "float64"]:
-                        plt.figure(figsize=(12, 6))
-                        df["param_range"] = pd.cut(df[param], bins=5)
-                        sns.boxplot(x="param_range", y="overall_score", data=df)
-                        plt.title(f"Score Distribution by {param} Ranges")
-                        plt.xlabel(param)
-                        plt.ylabel("Overall Score")
-                        plt.xticks(rotation=45)
-                        plt.tight_layout()
-                        plt.show()
-                    elif df[param].dtype == "object":
-                        plt.figure(figsize=(12, 6))
-                        sns.boxplot(x=param, y="overall_score", data=df)
-                        plt.title(f"Score Distribution by {param}")
-                        plt.xlabel(param)
-                        plt.ylabel("Overall Score")
-                        plt.xticks(rotation=45)
-                        plt.tight_layout()
-                        plt.show()
         except Exception as e:
             pass
 
