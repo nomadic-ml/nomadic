@@ -22,7 +22,7 @@ class Model(BaseModel):
     api_keys: Dict[str, str] = Field(..., description="API keys needed to run model.")
     llm: Optional[LLM] = Field(default=None, description="Model to run experiment")
     name: ClassVar[str] = Field(default_value="Base Model", description="Name of model")
-    expected_api_keys: ClassVar[Set[str]] = Field(
+    required_api_keys: ClassVar[Set[str]] = Field(
         default_factory=set, description="Set of expected API keys"
     )
     hyperparameters: ClassVar[Dict] = Field(
@@ -36,8 +36,8 @@ class Model(BaseModel):
     def _set_model(self, **kwargs):
         """Set model"""
         any_missing, missing_keys = any(
-            item not in self.api_keys for item in self.expected_api_keys
-        ), list(item not in self.api_keys for item in self.expected_api_keys)
+            item not in self.api_keys for item in self.required_api_keys
+        ), list(item not in self.api_keys for item in self.required_api_keys)
         if any_missing:
             raise NameError(
                 f"The following keys are missing from the provided API keys: {missing_keys}"
@@ -45,7 +45,7 @@ class Model(BaseModel):
         # Set LLM in subclass's call
 
     def get_expected_api_keys(self):
-        return self.expected_api_keys
+        return self.required_api_keys
 
     def get_hyperparameters(self):
         return self.hyperparameters
@@ -116,7 +116,7 @@ class OpenAIModel(Model):
         description="Set of hyperparameters to tune",
     )
     model: Optional[str] = Field(
-        default=DEFAULT_OPENAI_MODEL, description="OpenAI model to use"
+        default=DEFAULT_OPENAI_MODEL, description="OpenAI model to use"  # GPT-4o
     )
 
     def _set_model(self, **kwargs):

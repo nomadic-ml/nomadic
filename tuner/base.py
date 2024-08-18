@@ -10,7 +10,7 @@ try:
 except (ImportError, AssertionError):
     import flaml.tune.sample as my_sample
 
-from nomadic.result import RunResult, TunedResult
+from nomadic.result import RunResult, ExperimentResult
 from nomadic.util import get_tqdm_iterable
 
 
@@ -41,7 +41,7 @@ class BaseParamTuner(BaseModel):
     )
 
     @abstractmethod
-    def fit(self) -> TunedResult:
+    def fit(self) -> ExperimentResult:
         """Tune parameters."""
 
     def add_entries_to_results_json_file(self, new_entry: RunResult) -> None:
@@ -71,9 +71,8 @@ class BaseParamTuner(BaseModel):
         df.to_csv(filepath, index=False)
 
 
-# TODO: Finish implementing ParamTuner
 class ParamTuner(BaseParamTuner):
-    def fit(self) -> TunedResult:
+    def fit(self) -> ExperimentResult:
         def generate_param_combinations(
             search_space: Dict[str, Any]
         ) -> List[Dict[str, Any]]:
@@ -117,4 +116,4 @@ class ParamTuner(BaseParamTuner):
                     RunResult(score=result, params=full_param_dict, metadata={})
                 )
 
-        return TunedResult(run_results=all_run_results)
+        return ExperimentResult(run_results=all_run_results)

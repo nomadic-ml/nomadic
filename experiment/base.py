@@ -10,7 +10,7 @@ from llama_index.core.llms import CompletionResponse
 from llama_index.core.base.response.schema import Response
 
 from nomadic.model import OpenAIModel, SagemakerModel
-from nomadic.result import RunResult, TunedResult
+from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner.base import BaseParamTuner
 from nomadic.util import is_ray_installed
 
@@ -74,7 +74,7 @@ class Experiment(BaseModel):
         default=None, description="Start datetime."
     )
     end_datetime: Optional[datetime] = Field(default=None, description="End datetime.")
-    tuned_result: Optional[TunedResult] = Field(
+    experiment_result: Optional[ExperimentResult] = Field(
         default=None, description="Tuned result of Experiment"
     )
     experiment_status: Optional[ExperimentStatus] = Field(
@@ -129,7 +129,7 @@ class Experiment(BaseModel):
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
 
-    def run(self) -> TunedResult:
+    def run(self) -> ExperimentResult:
         is_error = False
 
         def get_responses(
@@ -278,10 +278,10 @@ class Experiment(BaseModel):
 
         self.end_datetime = datetime.now()
         self.experiment_status = self._determine_experiment_status(is_error)
-        self.tuned_result = result or self._create_default_tuned_result()
+        self.experiment_result = result or self._create_default_tuned_result()
         if self.enable_logging:
             print(f"\nExperiment completed. Status: {self.experiment_status}")
-        return self.tuned_result
+        return self.experiment_result
 
     def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:
         # Use the prompt variant as the base, which should already include any tuning modifications
@@ -432,8 +432,10 @@ class Experiment(BaseModel):
             else ExperimentStatus("finished_error")
         )
 
-    def _create_default_tuned_result(self) -> TunedResult:
-        return TunedResult(run_results=[RunResult(score=-1, params={}, metadata={})])
+    def _create_default_tuned_result(self) -> ExperimentResult:
+        return ExperimentResult(
+            run_results=[RunResult(score=-1, params={}, metadata={})]
+        )
 
     def save_experiment(self, folder_path: Path):
         file_name = (
@@ -443,7 +445,7 @@ class Experiment(BaseModel):
             file.write(self.model_dump_json(exclude=("model", "evaluator")))
 
     def visualize_results(self):
-        if not self.tuned_result:
+        if not self.experiment_result:
             if self.enable_logging:
                 print("No results to visualize.")
             return
@@ -454,7 +456,7 @@ class Experiment(BaseModel):
         all_metric_scores = {}
 
         # Iterate over all run results
-        for run in self.tuned_result.run_results:
+        for run in self.experiment_result.run_results:
             # Access the metadata
             metadata = run.metadata
 
@@ -625,13 +627,13 @@ class Experiment(BaseModel):
             pass
 
     def test_significance(self, n: int = 5):
-        if not self.tuned_result:
+        if not self.experiment_result:
             if self.enable_logging:
                 print("No results to test for significance.")
             return
 
         # Extract scores from run_results
-        scores = [run.score for run in self.tuned_result.run_results]
+        scores = [run.score for run in self.experiment_result.run_results]
 
         # Sort the scores in descending order
         sorted_scores = sorted(scores, reverse=True)

@@ -8,7 +8,7 @@ from skopt.space import Integer
 from flaml import BlendSearch
 
 
-from nomadic.result import RunResult, TunedResult
+from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner import BaseParamTuner, tune
 from nomadic.util import get_tqdm_iterable
 
@@ -71,7 +71,7 @@ class TAPParamTuner(BaseParamTuner):
     target_llm: Optional[Any] = Field(..., description="Target instance")
     attack_llm: Optional[Any] = Field(..., description="Attack LLM instance")
 
-    def fit(self) -> TunedResult:
+    def fit(self) -> ExperimentResult:
         print("fitting")
         if self.search_method == "grid":
             return self._grid_search()
@@ -82,7 +82,7 @@ class TAPParamTuner(BaseParamTuner):
         else:
             raise ValueError(f"Unknown search method: {self.search_method}")
 
-    def _grid_search(self) -> TunedResult:
+    def _grid_search(self) -> ExperimentResult:
         param_keys, param_values = zip(*self.param_dict.items())
         param_combinations = list(itertools.product(*param_values))
 
@@ -103,9 +103,9 @@ class TAPParamTuner(BaseParamTuner):
             # Write ongoing result to file
             self.add_entries_to_results_json_file(result)
 
-        return TunedResult(run_results=results)
+        return ExperimentResult(run_results=results)
 
-    def _bayesian_optimization(self) -> TunedResult:
+    def _bayesian_optimization(self) -> ExperimentResult:
         def objective(params):
             # Evaluate given HP configuration
             param_dict = dict(zip(self.param_dict.keys(), params))
@@ -126,13 +126,13 @@ class TAPParamTuner(BaseParamTuner):
         best_params = dict(zip(self.param_dict.keys(), res.x))
         best_score = -res.fun
 
-        return TunedResult(
+        return ExperimentResult(
             best_params=best_params,
             best_score=best_score,
             results=[],  # We don't have detailed results for Bayesian optimization
         )
 
-    def _flaml_optimization(self) -> TunedResult:
+    def _flaml_optimization(self) -> ExperimentResult:
         print("starting flaml optimization")
 
         def objective(config):
@@ -174,7 +174,7 @@ class TAPParamTuner(BaseParamTuner):
             for trial in analysis.trials
         ]
 
-        return TunedResult(run_results=run_results)
+        return ExperimentResult(run_results=run_results)
 
     def _evaluate_params(self, param_dict: Dict[str, Any]) -> RunResult:
         # Use the enhanced function to evaluate the parameters

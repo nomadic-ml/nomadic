@@ -5,7 +5,7 @@ from flaml import tune
 from flaml import BlendSearch
 from flaml.tune.analysis import ExperimentAnalysis
 
-from nomadic.result import RunResult, TunedResult
+from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner import BaseParamTuner
 
 
@@ -41,7 +41,7 @@ class FlamlParamTuner(BaseParamTuner):
         ):
             raise NotImplementedError("Given FLAML scheduler option is not supported")
 
-    def fit(self) -> TunedResult:
+    def fit(self) -> ExperimentResult:
         def _param_fn_wrapper(param_dict) -> Dict:
             run_result = self.param_fn(param_dict)
             # need to convert RunResult to dict to obey
@@ -87,4 +87,4 @@ class FlamlParamTuner(BaseParamTuner):
                     metadata=trial.last_result["metadata"],
                 )
             )
-        return TunedResult(run_results=run_results)
+        return ExperimentResult(run_results=run_results)

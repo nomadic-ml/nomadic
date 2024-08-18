@@ -1,3 +1,3 @@
-from nomadic.result.base import RunResult, TunedResult
+from nomadic.result.base import RunResult, ExperimentResult
 
-__all__ = ["RunResult", "TunedResult"]
+__all__ = ["RunResult", "ExperimentResult"]

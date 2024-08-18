@@ -6,7 +6,7 @@ import time
 import pickle
 from pathlib import Path
 
-from nomadic.result.base import TunedResult
+from nomadic.result.base import ExperimentResult
 from pydantic import BaseModel
 
 
@@ -48,7 +48,7 @@ def execute_bash_command(command: str) -> str:
 
 
 def save_tuned_result_to_local(
-    tuned_result: TunedResult, sample_name, evals_folder_path
+    tuned_result: ExperimentResult, sample_name, evals_folder_path
 ):
     current_time = int(time.time())
     path = Path(f"{evals_folder_path}/{sample_name}")
@@ -57,7 +57,7 @@ def save_tuned_result_to_local(
         pickle.dump(tuned_result, picklefile)
 
 
-def read_serialized_tuned_result(pickled_file_path: str) -> TunedResult:
+def read_serialized_tuned_result(pickled_file_path: str) -> ExperimentResult:
     with open(pickled_file_path, "rb") as pickled_file:
         file_contents = pickle.load(pickled_file)
     return file_contents

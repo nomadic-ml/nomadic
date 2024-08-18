@@ -14,15 +14,19 @@ class RunResult(BaseModel):
     )
 
 
-class TunedResult(BaseModel):
+class ExperimentResult(BaseModel):
     run_results: List[RunResult]
     best_idx: Optional[int] = Field(
         default=0, description="Position of the best RunResult in run_results."
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="Metadata"
     )
 
     def model_post_init(self, __context):
         self.run_results = sorted(self.run_results, key=lambda x: x.score, reverse=True)
         self.best_idx = 0
+        self.metadata = []
 
     @property
     def best_run_result(self) -> RunResult:
@@ -38,11 +42,18 @@ class TunedResult(BaseModel):
         for run_result in self.run_results:
             metadata = {}
             if include_metadata:
-                metadata = {f"metadata_{k}": v for k, v in run_result.metadata.items()}
+                metadata = {
+                    f"run_result_metadata_{k}": v
+                    for k, v in run_result.metadata.items()
+                }
             row = {
                 "score": run_result.score,
                 **{f"param_{k}": v for k, v in run_result.params.items()},
                 **metadata,
             }
             data.append(row)
+        metadata.append(
+            {"experiment_result_metadata": ""}
+        )  # TO-DO update this with experiment result metadata
+        data.append(self.metadata)
         return pd.DataFrame(data)

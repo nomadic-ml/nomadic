@@ -6,7 +6,7 @@ from pydantic import Field, ValidationError
 from ray import tune as ray_tune
 from ray.train import RunConfig
 
-from nomadic.result import RunResult, TunedResult
+from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner import BaseParamTuner
 
 
@@ -114,7 +114,7 @@ class RayTuneParamTuner(BaseParamTuner):
             raise NotImplementedError
         return ray_tuner
 
-    def fit(self) -> TunedResult:
+    def fit(self) -> ExperimentResult:
         """Run tuning."""
         ray_param_dict = self.param_dict
         tuner = self._set_ray_tuner(ray_param_dict)
@@ -150,4 +150,4 @@ class RayTuneParamTuner(BaseParamTuner):
                     )
                 )
 
-        return TunedResult(run_results=all_run_results)
+        return ExperimentResult(run_results=all_run_results)
