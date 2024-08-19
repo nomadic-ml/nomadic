@@ -9,7 +9,7 @@ from llama_index.core.evaluation import BaseEvaluator
 from llama_index.core.llms import CompletionResponse
 from llama_index.core.base.response.schema import Response
 
-from nomadic.model import OpenAIModel, SagemakerModel
+from nomadic.model import OpenAIModel, TogetherAIModel, SagemakerModel
 from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner.base import BaseParamTuner
 from nomadic.util import is_ray_installed
@@ -295,7 +295,9 @@ class Experiment(BaseModel):
         return prompt
 
     def _extract_response(self, completion_response: CompletionResponse) -> str:
-        if isinstance(self.model, OpenAIModel):
+        if isinstance(self.model, OpenAIModel) or isinstance(
+            self.model, TogetherAIModel
+        ):
             return completion_response.text
         elif isinstance(self.model, SagemakerModel):
             return completion_response.raw["Body"]

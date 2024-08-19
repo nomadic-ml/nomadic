@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from llama_index.core.llms import LLM, CompletionResponse
 from llama_index.llms.openai import OpenAI
 from llama_index.llms.sagemaker_endpoint import SageMakerLLM
+from llama_index.llms.together import TogetherLLM
 import openai
 
 from nomadic.result import RunResult
@@ -80,6 +81,39 @@ class SagemakerModel(Model):
             region_name=self.api_keys["AWS_DEFAULT_REGION"],  # Due to bug in LlamaIndex
             aws_region_name=self.api_keys["AWS_DEFAULT_REGION"],
             temperature=temperature,
+            model_kwargs=model_kwargs,
+            kwargs=kwargs,
+        )
+
+    def run(self, **kwargs) -> CompletionResponse:
+        """Run Sagemaker model"""
+        # Sagemaker accepts hyperparameter values within
+        # the `model_kwargs` field.
+        self._set_model(
+            temperature=kwargs["parameters"].get("temperature", None),
+            model_kwargs=kwargs["parameters"],
+        )
+        return self.llm.complete(
+            prompt=kwargs["prompt"],
+            formatted=True,
+        )
+
+
+class TogetherAIModel(Model):
+    name: ClassVar[str] = "Together.AI"
+    required_api_keys: ClassVar[Set[str]] = ("TOGETHER_API_KEY",)
+    model: str = Field(..., description="Model to use to Together.AI")
+
+    def _set_model(
+        self,
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ):
+        """Set Sagemaker model"""
+        super()._set_model(**kwargs)
+        self.llm = TogetherLLM(
+            model=self.model,
+            api_key=self.api_keys["TOGETHER_API_KEY"],
             model_kwargs=model_kwargs,
             kwargs=kwargs,
         )
