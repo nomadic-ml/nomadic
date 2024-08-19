@@ -49,10 +49,10 @@ class RayTuneParamTuner(BaseParamTuner):
             **fixed_param_dict,
             **ray_param_dict,
         }
-        tuned_result = self.param_fn(full_param_dict)
+        experiment_result = self.param_fn(full_param_dict)
         # need to convert RunResult to dict to obey
         # Ray Tune's API
-        return tuned_result.model_dump()
+        return experiment_result.model_dump()
 
     def _convert_ray_tune_run_result(
         self, result_grid: ray_tune.ResultGrid

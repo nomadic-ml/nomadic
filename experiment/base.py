@@ -86,7 +86,7 @@ class Experiment(BaseModel):
         description="Detailed description of Experiment status during error.",
     )
     enable_logging: bool = Field(
-        default=False,
+        default=True,
         description="Flag to enable or disable print logging.",
     )
     prompt_tuner: Optional[PromptTuner] = Field(
@@ -106,7 +106,7 @@ class Experiment(BaseModel):
         description="Number of HP tuning samples to run. Only active for FLAML",
     )
     use_flaml_library: Optional[bool] = Field(
-        default=True,
+        default=False,
         description="Whether to use FLAML as parameter tuning library. If False, Ray Tune will be used.",
     )
     use_ray_backend: Optional[bool] = Field(

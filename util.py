@@ -47,14 +47,14 @@ def execute_bash_command(command: str) -> str:
         return f"An error occurred: {e.stderr}"
 
 
-def save_tuned_result_to_local(
-    tuned_result: ExperimentResult, sample_name, evals_folder_path
+def save_experiment_result_to_local(
+    experiment_result: ExperimentResult, sample_name, evals_folder_path
 ):
     current_time = int(time.time())
     path = Path(f"{evals_folder_path}/{sample_name}")
     path.mkdir(parents=True, exist_ok=True)
     with open(f"{path}/TunedResult_{current_time}.pkl", "wb") as picklefile:
-        pickle.dump(tuned_result, picklefile)
+        pickle.dump(experiment_result, picklefile)
 
 
 def read_serialized_tuned_result(pickled_file_path: str) -> ExperimentResult:

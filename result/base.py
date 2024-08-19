@@ -26,7 +26,7 @@ class ExperimentResult(BaseModel):
     def model_post_init(self, __context):
         self.run_results = sorted(self.run_results, key=lambda x: x.score, reverse=True)
         self.best_idx = 0
-        self.metadata = []
+        self.metadata = {}  # Corrected to be an empty dictionary
 
     @property
     def best_run_result(self) -> RunResult:
@@ -37,7 +37,7 @@ class ExperimentResult(BaseModel):
         return len(self.run_results)
 
     def to_df(self, include_metadata=True) -> pd.DataFrame:
-        """Export TunedResult to a DataFrame."""
+        """Export ExperimentResult to a DataFrame."""
         data = []
         for run_result in self.run_results:
             metadata = {}
@@ -52,8 +52,12 @@ class ExperimentResult(BaseModel):
                 **metadata,
             }
             data.append(row)
-        metadata.append(
-            {"experiment_result_metadata": ""}
-        )  # TO-DO update this with experiment result metadata
-        data.append(self.metadata)
+
+        # Adding experiment result metadata as a row (if needed)
+        if include_metadata and self.metadata:
+            experiment_metadata = {
+                f"experiment_result_metadata_{k}": v for k, v in self.metadata.items()
+            }
+            data.append(experiment_metadata)
+
         return pd.DataFrame(data)
