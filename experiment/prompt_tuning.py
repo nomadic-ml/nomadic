@@ -66,7 +66,6 @@ class PromptTuner(BaseModel):
 
                         generated_prompt = response.choices[0].message.content.strip()
 
-                        # For few-shot approach, generate examples and incorporate them
                         if approach == "few-shot":
                             examples = self._generate_examples(
                                 client, user_prompt_request, complexity, focus
@@ -78,9 +77,7 @@ class PromptTuner(BaseModel):
                         prompt_variants.append(generated_prompt)
 
                         if self.enable_logging:
-                            print(
-                                f"Generated prompt:\n{generated_prompt[:500]}..."
-                            )  # Increased preview length
+                            print(f"Generated prompt:\n{generated_prompt[:500]}...")
 
                     except Exception as e:
                         if self.enable_logging:
@@ -92,33 +89,33 @@ class PromptTuner(BaseModel):
         self, user_prompt_request: str, approach: str, complexity: str, focus: str
     ) -> str:
         base_message = f"""
-        You are an AI assistant specialized in generating prompts for various tasks.
-        Generate a prompt based on the following parameters:
-        - Prompting Approach: {approach}
-        - Prompt Complexity: {complexity}
-        - Prompt Focus: {focus}
+        You are an AI assistant specialized in generating concise prompts.
+        Generate a prompt based on these parameters:
+        - Approach: {approach}
+        - Complexity: {complexity}
+        - Focus: {focus}
 
-        Use the following user-provided prompt as a basis:
+        User prompt:
 
         {user_prompt_request}
 
-        Adjust the prompt based on the specified approach, complexity, and focus:
+        Adjust the prompt accordingly:
         """
 
         approach_instructions = {
-            "zero-shot": "Create a prompt that doesn't provide any examples but clearly explains the task and expected output.",
-            "few-shot": "Create a prompt that includes placeholder markers for examples. Use [EXAMPLE_1], [EXAMPLE_2], etc. These will be replaced with relevant examples later.",
-            "chain-of-thought": "Create a prompt that encourages step-by-step reasoning. Include instructions for the model to explain its thought process and break down complex tasks into smaller steps.",
+            "zero-shot": "Create a clear, concise prompt without examples.",
+            "few-shot": "Include placeholders for concise examples like [EXAMPLE_1].",
+            "chain-of-thought": "Encourage brief step-by-step reasoning.",
         }
 
         complexity_instructions = {
-            "simple": "Use straightforward language and keep the instructions concise. Focus on the core task without adding too many details.",
-            "complex": "Use more sophisticated language and provide detailed instructions. Include nuanced aspects of the task and potential considerations.",
+            "simple": "Use straightforward, concise language.",
+            "complex": "Use detailed but concise instructions.",
         }
 
         focus_instructions = {
-            "fact extraction": "Optimize the prompt to emphasize identifying and extracting key factual information from the given context.",
-            "action points": "Tailor the prompt to focus on deriving actionable insights or specific steps to be taken based on the information provided.",
+            "fact extraction": "Emphasize concise key facts.",
+            "action points": "Focus on concise actionable insights.",
         }
 
         return base_message + "\n".join(
@@ -126,7 +123,7 @@ class PromptTuner(BaseModel):
                 approach_instructions[approach],
                 complexity_instructions[complexity],
                 focus_instructions[focus],
-                "\nEnsure that the generated prompt variant clearly reflects the specified approach, complexity, and focus.",
+                "\nEnsure the prompt reflects the approach, complexity, and focus.",
             ]
         )
 
@@ -134,23 +131,22 @@ class PromptTuner(BaseModel):
         self, client: OpenAI, user_prompt_request: str, complexity: str, focus: str
     ) -> List[Dict[str, str]]:
         system_message = f"""
-        Based on the following prompt, generate 3 example input-output pairs that would be suitable for few-shot learning.
-        The examples should be relevant to the topic and task described in the prompt.
-        Adjust the complexity and focus of the examples according to these parameters:
+        Generate 3 concise input-output pairs for few-shot learning.
+        Tailor examples to these parameters:
         - Complexity: {complexity}
         - Focus: {focus}
 
         Prompt: {user_prompt_request}
 
-        Provide the examples in the following format:
+        Format:
         Input: [input text]
         Output: [output text]
 
-        Ensure that the examples are diverse and cover different aspects of the task.
+        Ensure answers match input length.
         """
 
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": "Generate the examples."},
