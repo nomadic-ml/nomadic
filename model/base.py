@@ -44,7 +44,7 @@ class Model(BaseModel):
             )
         # Set LLM in subclass's call
 
-    def get_expected_api_keys(self):
+    def get_required_api_keys(self):
         return self.required_api_keys
 
     def get_hyperparameters(self):
@@ -57,7 +57,7 @@ class Model(BaseModel):
 
 class SagemakerModel(Model):
     name: ClassVar[str] = "Sagemaker"
-    expected_api_keys: ClassVar[Set[str]] = (
+    required_api_keys: ClassVar[Set[str]] = (
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
         "AWS_DEFAULT_REGION",
@@ -107,7 +107,7 @@ OPENAI_EXTRA_HYPERPARAMETER_SEARCH_SPACE: Dict[str, Any] = {
 
 class OpenAIModel(Model):
     name: ClassVar[str] = "OpenAI"
-    expected_api_keys: ClassVar[Set[str]] = ("OPENAI_API_KEY",)
+    required_api_keys: ClassVar[Set[str]] = ("OPENAI_API_KEY",)
     hyperparameters: ClassVar[Dict] = Field(
         default={
             **DEFAULT_HYPERPARAMETER_SEARCH_SPACE,
