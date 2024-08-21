@@ -20,15 +20,26 @@ DEFAULT_HYPERPARAMETER_SEARCH_SPACE: Dict[str, Any] = {
 class Model(BaseModel):
     """Base model"""
 
-    api_keys: Dict[str, str] = Field(..., description="API keys needed to run model.")
+    name: str = Field(default="my model", description="Descriptive name of model")
+    api_keys: Dict[str, str] = Field(..., description="API keys needed to run model")
     llm: Optional[LLM] = Field(default=None, description="Model to run experiment")
-    name: ClassVar[str] = Field(default_value="Base Model", description="Name of model")
+    key_name: ClassVar[str] = Field(
+        ...,
+        description="Model key name (i.e. openai, sagemaker, together.ai, ...)",
+    )
+    pretty_key_name: ClassVar[str] = Field(
+        ...,
+        description="Pretty Model key name (i.e. OpenAI, AWS Sagemaker, Together.AI, ...)",
+    )
     required_api_keys: ClassVar[Set[str]] = Field(
         default_factory=set, description="Set of expected API keys"
     )
     hyperparameters: ClassVar[Dict] = Field(
         default=DEFAULT_HYPERPARAMETER_SEARCH_SPACE,
         description="Set of hyperparameters to tune",
+    )
+    client_id: Optional[int] = Field(
+        default=None, description="ID of Model in Workspace"
     )
 
     def model_post_init(self, ctx):
@@ -57,7 +68,8 @@ class Model(BaseModel):
 
 
 class SagemakerModel(Model):
-    name: ClassVar[str] = "Sagemaker"
+    key_name: ClassVar[str] = "sagemaker"
+    pretty_key_name: ClassVar[str] = "AWS Sagemaker"
     required_api_keys: ClassVar[Set[str]] = (
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
@@ -100,7 +112,8 @@ class SagemakerModel(Model):
 
 
 class TogetherAIModel(Model):
-    name: ClassVar[str] = "Together.AI"
+    key_name: ClassVar[str] = "together.ai"
+    pretty_key_name: ClassVar[str] = "Together.AI"
     required_api_keys: ClassVar[Set[str]] = ("TOGETHER_API_KEY",)
     model: str = Field(..., description="Model to use to Together.AI")
 
@@ -140,7 +153,8 @@ OPENAI_EXTRA_HYPERPARAMETER_SEARCH_SPACE: Dict[str, Any] = {
 
 
 class OpenAIModel(Model):
-    name: ClassVar[str] = "OpenAI"
+    key_name: ClassVar[str] = "openai"
+    pretty_key_name: ClassVar[str] = "OpenAI"
     required_api_keys: ClassVar[Set[str]] = ("OPENAI_API_KEY",)
     hyperparameters: ClassVar[Dict] = Field(
         default={

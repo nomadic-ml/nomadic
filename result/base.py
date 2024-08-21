@@ -13,14 +13,24 @@ class RunResult(BaseModel):
         default_factory=dict, description="Metadata"
     )
 
+    def get_json(self):
+        # TODO: Fix LlamaIndex's `EvaluationResult` object not giving JSON with model_dump_json
+        # that exists as a key to the 'Custom Evaluator Results' key of metadata
+        # return {"score": self.score, "params": self.params, "metadata": self.metadata}
+        return {"score": self.score, "params": self.params}
+
 
 class ExperimentResult(BaseModel):
     run_results: List[RunResult]
+    metadata: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="Metadata"
+    )
     best_idx: Optional[int] = Field(
         default=0, description="Position of the best RunResult in run_results."
     )
-    metadata: Optional[Dict[str, Any]] = Field(
-        default_factory=dict, description="Metadata"
+    name: Optional[str] = Field(default=None, description="Name of ExperimentResult")
+    client_id: Optional[int] = Field(
+        default=None, description="ID of ExperimentResult in Workspace"
     )
 
     def model_post_init(self, __context):

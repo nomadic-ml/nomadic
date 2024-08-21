@@ -9,6 +9,7 @@ from llama_index.core.evaluation import BaseEvaluator
 from llama_index.core.llms import CompletionResponse
 from llama_index.core.base.response.schema import Response
 
+# from nomadic.client import Client
 from nomadic.model import OpenAIModel, TogetherAIModel, SagemakerModel
 from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner.base import BaseParamTuner
@@ -39,8 +40,8 @@ class ExperimentMode(Enum):
 class Experiment(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    param_dict: Dict[str, Any] = Field(
-        default=None, description="A dictionary of parameters to iterate over."
+    param_dict: Optional[Dict[str, Any]] = Field(
+        default={}, description="A dictionary of parameters to iterate over."
     )
     evaluation_dataset: Optional[List[Dict]] = Field(
         default=list({}),
@@ -116,6 +117,13 @@ class Experiment(BaseModel):
     results_filepath: Optional[str] = Field(
         default=None, description="Path of outputting tuner run results."
     )
+    name: Optional[str] = Field(default=None, description="Name of experiment")
+    client_id: Optional[int] = Field(
+        default=None, description="ID of Experiment in Workspace"
+    )
+    # client: Optional[Client] = Field(
+    #     default=None, description="Client to use for synching experiments."
+    # )
 
     @field_validator("tuner")
     def check_tuner_class(cls, value):
@@ -130,9 +138,7 @@ class Experiment(BaseModel):
             )
 
     def run(self) -> ExperimentResult:
-        is_error = False
-
-        def get_responses(
+        def _get_responses(
             type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]]
         ) -> Tuple[List[str], List[str], List[str], List[str]]:
             all_pred_responses, all_eval_qs, all_ref_responses, all_prompt_variants = (
@@ -217,14 +223,14 @@ class Experiment(BaseModel):
                 all_prompt_variants,
             )
 
-        def default_param_function(param_values: Dict[str, Any]) -> RunResult:
+        def _default_param_function(param_values: Dict[str, Any]) -> RunResult:
             if self.enable_logging:
                 print("\nStarting new experiment run with parameters:")
                 for param, value in param_values.items():
                     print(f"{param}: {value}")
 
             type_safe_param_values = self._enforce_param_types(param_values)
-            pred_responses, eval_qs, ref_responses, prompt_variants = get_responses(
+            pred_responses, eval_qs, ref_responses, prompt_variants = _get_responses(
                 type_safe_param_values
             )
             eval_results = self._evaluate_responses(pred_responses, ref_responses)
@@ -260,13 +266,17 @@ class Experiment(BaseModel):
                 metadata=metadata,
             )
 
+        is_error = False
         self.experiment_status = ExperimentStatus("running")
         self.start_datetime = datetime.now()
         result = None
         try:
+            # if self.enable_logging:
+            #     print("Setting up client...")
+            #     self._setup_client()
             if self.enable_logging:
-                print("\nSetting up tuner...")
-            self._setup_tuner(default_param_function)
+                print("Setting up tuner...")
+            self._setup_tuner(_default_param_function)
             if self.enable_logging:
                 print("Starting experiment...")
             result = self.tuner.fit()
@@ -278,7 +288,7 @@ class Experiment(BaseModel):
 
         self.end_datetime = datetime.now()
         self.experiment_status = self._determine_experiment_status(is_error)
-        self.experiment_result = result or self._create_default_tuned_result()
+        self.experiment_result = result or self._create_default_experiment_result()
         if self.enable_logging:
             print(f"\nExperiment completed. Status: {self.experiment_status}")
         return self.experiment_result
@@ -434,7 +444,7 @@ class Experiment(BaseModel):
             else ExperimentStatus("finished_error")
         )
 
-    def _create_default_tuned_result(self) -> ExperimentResult:
+    def _create_default_experiment_result(self) -> ExperimentResult:
         return ExperimentResult(
             run_results=[RunResult(score=-1, params={}, metadata={})]
         )
