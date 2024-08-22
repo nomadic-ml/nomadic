@@ -1,6 +1,7 @@
 from typing import List, Optional
 from nomadic.client.resources import APIResource
 from nomadic.client.resources.experiment_results import ExperimentResults
+from nomadic.client.resources.models import Models
 from nomadic.experiment import Experiment
 
 from nomadic.experiment import ExperimentStatus
@@ -17,7 +18,7 @@ class Experiments(APIResource):
             resp_data = self._client.request("GET", f"/experiments/{id}")
             if not resp_data:
                 return None
-            return _to_experiment(resp_data)
+            return self._to_experiment(resp_data)
         else:
             return next(
                 (experiment for experiment in self.list() if experiment.name == name),
@@ -26,7 +27,7 @@ class Experiments(APIResource):
 
     def list(self) -> List[Experiment]:
         resp_data = self._client.request("GET", "/experiments")
-        return [_to_experiment(d) for d in resp_data]
+        return [self._to_experiment(d) for d in resp_data]
 
     def list_runs(self) -> List[ExperimentResult]:
         pass
@@ -64,24 +65,27 @@ class Experiments(APIResource):
     def delete_registration_by_id(self, id: int):
         return self._client.request("DELETE", f"/experiments/{id}")
 
+    def _to_experiment(self, resp_data: dict) -> Experiment:
+        evaluator = get_evaluator(resp_data.get("evaluation_metric"))
 
-def _to_experiment(resp_data: dict) -> Experiment:
-    evaluator = get_evaluator(resp_data.get("evaluation_metric"))
+        # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
+        param_dict = {key: None for key in resp_data.get("hyperparameters", [])}
 
-    # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
-    param_dict = {key: None for key in resp_data.get("hyperparameters", [])}
+        # Get model of experiment
+        workspace_models = Models(self._client)
+        model = workspace_models.load(resp_data.get("model_registration_key"))
 
-    return Experiment(
-        name=resp_data.get("name"),
-        param_dict=param_dict,
-        evaluation_dataset=resp_data.get("evaluation_dataset"),
-        evaluator=evaluator,
-        model_key=resp_data.get("model_registration_key"),
-        model=None,  # This should be updated with the actual model loading logic
-        start_datetime=resp_data.get("created_at"),
-        experiment_status=ExperimentStatus.not_started,
-        client_id=resp_data.get("id"),
-    )
+        return Experiment(
+            name=resp_data.get("name"),
+            param_dict=param_dict,
+            evaluation_dataset=resp_data.get("evaluation_dataset"),
+            evaluator=evaluator,
+            model_key=resp_data.get("model_registration_key"),
+            model=model,
+            start_datetime=resp_data.get("created_at"),
+            experiment_status=ExperimentStatus.not_started,
+            client_id=resp_data.get("id"),
+        )
 
 
 # TODO: Get actual evaluator

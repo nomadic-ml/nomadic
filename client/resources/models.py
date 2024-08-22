@@ -11,11 +11,11 @@ class Models(APIResource):
         )
         if not resp_data:
             return None
-        return _to_model(resp_data)
+        return self._to_model(resp_data)
 
     def list(self) -> List[Model]:
         resp_data = self._client.request("GET", "/models/registrations/")
-        return [_to_model(d) for d in resp_data]
+        return [self._to_model(d) for d in resp_data]
 
     def register(self, model: Model):
         upload_data = {
@@ -35,29 +35,28 @@ class Models(APIResource):
             "DELETE", f"/models/registrations/id/{model.client_id}"
         )
 
+    def _to_model(self, resp_data: dict) -> Model:
+        model_key = resp_data.get("model_key")
 
-def _to_model(resp_data: dict) -> Model:
-    model_key = resp_data.get("model_key")
-
-    if model_key == "openai":
-        return OpenAIModel(
-            name=resp_data.get("name"),
-            api_keys=resp_data.get("config"),
-            client_id=resp_data.get("id"),
-        )
-    elif model_key == "together.ai":
-        return TogetherAIModel(
-            name=resp_data.get("name"),
-            api_keys=resp_data.get("config"),
-            client_id=resp_data.get("id"),
-        )
-    elif model_key == "sagemaker":
-        return SagemakerModel(
-            name=resp_data.get("name"),
-            api_keys=resp_data.get("config"),
-            client_id=resp_data.get("id"),
-        )
-    else:
-        raise NotImplementedError(
-            "Only OpenAI, Together.AI and Sagemaker Model types are supported"
-        )
+        if model_key == "openai":
+            return OpenAIModel(
+                name=resp_data.get("name"),
+                api_keys=resp_data.get("config"),
+                client_id=resp_data.get("id"),
+            )
+        elif model_key == "together.ai":
+            return TogetherAIModel(
+                name=resp_data.get("name"),
+                api_keys=resp_data.get("config"),
+                client_id=resp_data.get("id"),
+            )
+        elif model_key == "sagemaker":
+            return SagemakerModel(
+                name=resp_data.get("name"),
+                api_keys=resp_data.get("config"),
+                client_id=resp_data.get("id"),
+            )
+        else:
+            raise NotImplementedError(
+                "Only OpenAI, Together.AI and Sagemaker Model types are supported"
+            )
