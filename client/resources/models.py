@@ -40,14 +40,22 @@ def _to_model(resp_data: dict) -> Model:
     model_key = resp_data.get("model_key")
 
     if model_key == "openai":
-        return OpenAIModel(name=resp_data.get("name"), api_keys=resp_data.get("config"))
+        return OpenAIModel(
+            name=resp_data.get("name"),
+            api_keys=resp_data.get("config"),
+            client_id=resp_data.get("id"),
+        )
     elif model_key == "together.ai":
         return TogetherAIModel(
-            name=resp_data.get("name"), api_keys=resp_data.get("config")
+            name=resp_data.get("name"),
+            api_keys=resp_data.get("config"),
+            client_id=resp_data.get("id"),
         )
     elif model_key == "sagemaker":
         return SagemakerModel(
-            name=resp_data.get("name"), api_keys=resp_data.get("config")
+            name=resp_data.get("name"),
+            api_keys=resp_data.get("config"),
+            client_id=resp_data.get("id"),
         )
     else:
         raise NotImplementedError(

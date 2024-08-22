@@ -14,13 +14,13 @@ class ExperimentResults(APIResource):
         )
         if not resp_data:
             return None
-        return _to_experiment_result(**resp_data)
+        return _to_experiment_result(resp_data)
 
     def list(self, experiment_result: ExperimentResult) -> List[ExperimentResult]:
         resp_data = self._client.request(
             "GET", f"/experiment-runs{experiment_result.client_id}"
         )
-        return [_to_experiment_result(**d) for d in resp_data]
+        return [_to_experiment_result(d) for d in resp_data]
 
     def register(self, experiment_result: ExperimentResult, experiment: Experiment):
         # If given experiment doesn't exist in Client, create that first
@@ -54,21 +54,13 @@ class ExperimentResults(APIResource):
         )
 
 
-def _to_experiment_result(
-    id: int,
-    overall_score: float,
-    created_at: str,
-    hyperparameters: dict,
-    user_id: str,
-    results: dict,
-    experiment_id: int,
-    status: str,
-    name: str,
-) -> ExperimentResult:
-    run_results = [RunResult(**r) for r in results.get("run_results", {})]
+def _to_experiment_result(resp_data: dict) -> ExperimentResult:
+    run_results = [
+        RunResult(**r) for r in resp_data.get("results").get("run_results", {})
+    ]
     return ExperimentResult(
         run_results=run_results,
-        best_idx=results.get("best_idx", 0),
-        name=name,
-        client_id=user_id,
+        best_idx=resp_data.get("results").get("best_idx", 0),
+        name=resp_data.get("name"),
+        client_id=id,
     )
