@@ -29,7 +29,7 @@ class ExperimentResult(BaseModel):
         default=0, description="Position of the best RunResult in run_results."
     )
     name: Optional[str] = Field(default=None, description="Name of ExperimentResult")
-    client_id: Optional[int] = Field(
+    client_id: Optional[str] = Field(
         default=None, description="ID of ExperimentResult in Workspace"
     )
 

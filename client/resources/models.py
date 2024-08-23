@@ -5,10 +5,8 @@ from nomadic.model import Model, OpenAIModel, TogetherAIModel, SagemakerModel
 
 
 class Models(APIResource):
-    def load(self, model_registration_key: str) -> Optional[Model]:
-        resp_data = self._client.request(
-            "GET", f"/models/registrations/{model_registration_key}"
-        )
+    def load(self, id: str) -> Optional[Model]:
+        resp_data = self._client.request("GET", f"/models/registrations/{id}")
         if not resp_data:
             return None
         return self._to_model(resp_data)
@@ -21,7 +19,6 @@ class Models(APIResource):
         upload_data = {
             "name": model.name,
             "config": model.api_keys,
-            "key": model.name.lower().replace(" ", "-"),
             "model_key": model.key_name,
         }
         response = self._client.request(
@@ -32,7 +29,7 @@ class Models(APIResource):
 
     def delete_registration(self, model: Model):
         return self._client.request(
-            "DELETE", f"/models/registrations/id/{model.client_id}"
+            "DELETE", f"/models/registrations/{model.client_id}"
         )
 
     def _to_model(self, resp_data: dict) -> Model:

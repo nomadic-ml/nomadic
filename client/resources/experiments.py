@@ -5,7 +5,8 @@ from nomadic.client.resources.models import Models
 from nomadic.experiment import Experiment
 
 from nomadic.experiment import ExperimentStatus
-from nomadic.result.base import ExperimentResult
+from nomadic.model import Model, OpenAIModel
+from nomadic.result import ExperimentResult
 
 
 class Experiments(APIResource):
@@ -34,18 +35,20 @@ class Experiments(APIResource):
 
     def register(self, experiment: Experiment):
         # Upload experiment & experiment results
+        model = experiment.model
+        if not model:
+            model = Model(name="Custom model", api_keys={})
 
-        # Step 1: Upload experiments
+        # Step 1: Upload experiment
         upload_data = {
             "name": experiment.name,
             "config": None,
-            "evaluation_dataset": experiment.evaluation_dataset,
+            # TODO: Address evaluation_dataset type of nomadic.Experiment.evaluation_dataset as Dict on webapp and not List[Dict]
+            "evaluation_dataset": experiment.evaluation_dataset[0],
             "evaluation_metric": get_evaluation_metric(),
             # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
             "hyperparameters": [param for param in experiment.param_dict.keys()],
-            # TODO: Change below logic for obtaining model_registration_key, as we shouldn't be
-            # uniquely identifiying the model with its name, but rather with id
-            "model_registration_key": experiment.model.name.lower().replace(" ", "-"),
+            "model_registration_id": experiment.model.client_id,
         }
         response = self._client.request("POST", "/experiments", json=upload_data)
         experiment.client_id = response["id"]
@@ -73,12 +76,18 @@ class Experiments(APIResource):
 
         # Get model of experiment
         workspace_models = Models(self._client)
-        model = workspace_models.load(resp_data.get("model_registration_key"))
+        try:
+            model = workspace_models.load(resp_data.get("model_registration_id"))
+        except Exception as e:
+            # The model of the experiment may have been deleted. If so,
+            # handle properly by making a fake new model to display that
+            # the original model was deleted.
+            model = None
 
         return Experiment(
             name=resp_data.get("name"),
             param_dict=param_dict,
-            evaluation_dataset=resp_data.get("evaluation_dataset"),
+            evaluation_dataset=[resp_data.get("evaluation_dataset")],
             evaluator=evaluator,
             model_key=resp_data.get("model_registration_key"),
             model=model,

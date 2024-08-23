@@ -38,7 +38,7 @@ class Model(BaseModel):
         default=DEFAULT_HYPERPARAMETER_SEARCH_SPACE,
         description="Set of hyperparameters to tune",
     )
-    client_id: Optional[int] = Field(
+    client_id: Optional[str] = Field(
         default=None, description="ID of Model in Workspace"
     )
 
@@ -62,7 +62,6 @@ class Model(BaseModel):
     def get_hyperparameters(self):
         return self.hyperparameters
 
-    @abstractmethod
     def run(self, **kwargs) -> RunResult:
         """Run model"""
 

@@ -118,7 +118,7 @@ class Experiment(BaseModel):
         default=None, description="Path of outputting tuner run results."
     )
     name: Optional[str] = Field(default=None, description="Name of experiment")
-    client_id: Optional[int] = Field(
+    client_id: Optional[str] = Field(
         default=None, description="ID of Experiment in Workspace"
     )
     # client: Optional[Client] = Field(
