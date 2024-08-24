@@ -36,8 +36,34 @@ class Experiments(APIResource):
     def register(self, experiment: Experiment):
         # Upload experiment & experiment results
         model = experiment.model
+        # If provided model is None, use a placeholder model to mark.
         if not model:
-            model = Model(name="Custom model", api_keys={})
+            model = Model(
+                name="Placeholder model - No model provided",
+                api_keys={},
+                client_id=None,
+            )
+        # If a model is provided, but that model doesn't exist in the database:
+        #   1. Try registering model, then registering experiment.
+        #   2. If registration of model fails, use placeholder model.
+        else:
+            workspace_models = Models(self._client)
+            try:
+                model_from_db = workspace_models.load(model.client_id)
+                if model_from_db is None:
+                    model_registration_resp = workspace_models.register(model)
+                    if model_registration_resp is None:
+                        raise Exception
+                    else:
+                        print(
+                            "Registered model for an experiment that wasn't stored in database"
+                        )
+            except Exception as e:
+                model = Model(
+                    name="Placeholder model - Provided model couldn't be registered",
+                    api_keys={},
+                    client_id=None,
+                )
 
         # Step 1: Upload experiment
         upload_data = {

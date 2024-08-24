@@ -32,7 +32,7 @@ class Model(BaseModel):
         description="Pretty Model key name (i.e. OpenAI, AWS Sagemaker, Together.AI, ...)",
     )
     required_api_keys: ClassVar[Set[str]] = Field(
-        default_factory=set, description="Set of expected API keys"
+        default=set(), description="Set of expected API keys"
     )
     hyperparameters: ClassVar[Dict] = Field(
         default=DEFAULT_HYPERPARAMETER_SEARCH_SPACE,
