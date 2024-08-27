@@ -614,98 +614,58 @@ class Experiment(BaseModel):
     def _create_parameter_combination_heatmap(self, tuned_result):
         run_results = tuned_result.run_results
 
-        # Function to automatically abbreviate parameter names and values
-        def auto_abbreviate(s):
-            if isinstance(s, str):
-                words = s.split("_")
-                return "".join(word[0] for word in words)
-            return str(s)
-
-        # Extract data from run_results
         data = []
+        param_names = set()
         for run in run_results:
-            row = run.params.copy()  # Start with all params
+            row = run.params.copy()
+            param_names.update(row.keys())
             row["overall_score"] = run.score
 
-            # Extract custom evaluator scores if available
             if (
                 "Custom Evaluator Results" in run.metadata
                 and run.metadata["Custom Evaluator Results"]
             ):
                 scores = run.metadata["Custom Evaluator Results"][0].get("scores", {})
-                row.update(scores)
+                if isinstance(scores, dict):
+                    row.update(scores)
+                elif isinstance(scores, (int, float)):
+                    row["single_score"] = scores
 
             data.append(row)
 
-        # Create DataFrame
         df = pd.DataFrame(data)
 
         # Remove columns with less than 50% of entries
         threshold = len(df) * 0.5
         df = df.dropna(axis=1, thresh=threshold)
 
-        # Create a string representation of the parameter combination for grouping
-        df["param_combination"] = df.apply(
-            lambda row: tuple(row.drop("overall_score")), axis=1
-        )
+        # Separate hyperparameters and score columns
+        hyperparameter_cols = list(param_names)
+        score_cols = [
+            col
+            for col in df.columns
+            if col not in hyperparameter_cols and col != "overall_score"
+        ]
+        score_cols = ["overall_score"] + score_cols  # Ensure overall_score is first
 
-        # Group by parameter combination and calculate mean for each metric
-        grouped_df = df.groupby("param_combination").agg(
-            {col: "mean" for col in df.columns if col != "param_combination"}
-        )
+        # Create param_combination string
+        def format_param_combination(row):
+            parts = []
+            for k in hyperparameter_cols:
+                parts.append(f"{k}: {row[k]}")
+            return "\n".join(parts)
+
+        df["param_combination"] = df.apply(format_param_combination, axis=1)
+
+        # Group by parameter combination
+        grouped_df = df.groupby("param_combination")[score_cols].mean()
         grouped_df["num_simulations"] = df.groupby("param_combination").size()
 
-        # Create abbreviated parameter combination column
-        grouped_df["param_combination_abbr"] = grouped_df.index.map(
-            lambda x: " | ".join(
-                f"{auto_abbreviate(k)}:{auto_abbreviate(v)}" for k, v in dict(x).items()
-            )
-        )
-
-        # Select metric columns
-        metric_columns = [
-            col
-            for col in grouped_df.columns
-            if col not in ["num_simulations", "param_combination_abbr"]
-        ]
-        heatmap_data = grouped_df[metric_columns + ["num_simulations"]]
-
-        # Function to combine similar columns
-        def combine_similar_columns(df, threshold=0.95):
-            # Compute the correlation matrix
-            corr = df.drop("num_simulations", axis=1).corr().abs()
-            corr = corr.fillna(0)
-            linkage = hierarchy.linkage(pdist(corr), method="complete")
-            clusters = hierarchy.fcluster(
-                linkage, t=1 - threshold, criterion="distance"
-            )
-
-            new_df = pd.DataFrame()
-            for cluster_id in np.unique(clusters):
-                cols = df.drop("num_simulations", axis=1).columns[
-                    clusters == cluster_id
-                ]
-                if len(cols) == 1:
-                    new_df[cols[0]] = df[cols[0]]
-                else:
-                    new_col_name = " / ".join(cols)
-                    new_df[new_col_name] = df[cols].mean(axis=1)
-
-            new_df["num_simulations"] = df["num_simulations"]
-            return new_df
-
-        # Combine similar columns
-        heatmap_data = combine_similar_columns(heatmap_data)
-
-        # Ensure there's an overall score column
-        if "overall_score" not in heatmap_data.columns:
-            heatmap_data["overall_score"] = heatmap_data.mean(axis=1)
-
         # Sort by the overall score column
-        heatmap_data = heatmap_data.sort_values("overall_score", ascending=False)
+        grouped_df = grouped_df.sort_values("overall_score", ascending=False)
 
         # Calculate overall averages
-        metric_averages = heatmap_data.mean()
+        metric_averages = grouped_df[score_cols].mean()
 
         # Print average scores for each metric
         print("Average Scores Across All Parameter Sets:")
@@ -714,38 +674,45 @@ class Experiment(BaseModel):
 
         # Add overall average scores as a separate row
         avg_row = pd.DataFrame([metric_averages], index=["AVERAGE"])
-        heatmap_data = pd.concat([heatmap_data, avg_row])
+        grouped_df = pd.concat([grouped_df, avg_row])
 
         # Create heatmap
-        plt.figure(figsize=(15, len(heatmap_data) * 0.4 + 1))
+        fig, ax = plt.subplots(
+            figsize=(20, len(grouped_df) * 1.2)
+        )  # Increase vertical space
+
         sns.heatmap(
-            heatmap_data.drop("num_simulations", axis=1),
+            grouped_df[score_cols],
             annot=True,
             fmt=".2f",
             cmap="YlGnBu",
             cbar_kws={"label": "Score"},
+            ax=ax,
+            linewidths=0.5,  # Add space between cells
+            square=True,  # Make cells square
         )
-        plt.title("Heatmap of Scores for Each Parameter Combination")
-        plt.ylabel("Parameter Combination")
-        plt.xlabel("Metric")
+        plt.title("Heatmap of Scores for Each Parameter Combination", pad=20)
+        plt.xlabel("Metric", labelpad=20)
         plt.xticks(rotation=45, ha="right")
 
-        # Use abbreviated parameter combinations for y-axis labels
-        y_labels = grouped_df["param_combination_abbr"].tolist() + ["AVERAGE"]
-        plt.yticks(range(len(y_labels)), y_labels, rotation=0, ha="right")
+        # Adjust y-axis labels
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0, ha="right", va="center")
 
+        # Adjust layout to give more space to row labels
         plt.tight_layout()
-        plt.show()
+        fig.subplots_adjust(
+            left=0.4, bottom=0.1, top=0.95
+        )  # Adjust these values as needed
 
-        # Print num_simulations for each parameter combination
-        print("\nNumber of Simulations for Each Parameter Combination:")
-        for index, row in heatmap_data.iterrows():
-            if index != "AVERAGE":
-                print(
-                    f"{grouped_df.loc[index, 'param_combination_abbr']}: {row['num_simulations']:.0f}"
-                )
-            else:
-                print(f"AVERAGE: {row['num_simulations']:.2f}")
+        # Increase font size for better readability
+        plt.setp(ax.get_yticklabels(), fontsize=10)
+        plt.setp(ax.get_xticklabels(), fontsize=10)
+
+        # Add gridlines
+        ax.set_yticks(np.arange(grouped_df.shape[0]) + 0.5, minor=False)
+        ax.yaxis.grid(True, which="major", linestyle="-", linewidth=0.5, color="white")
+
+        plt.show()
 
         return grouped_df
 
