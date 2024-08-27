@@ -22,6 +22,37 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 from scipy import stats
+from scipy.cluster import hierarchy
+from scipy.spatial.distance import pdist
+
+import time
+import random
+from functools import wraps
+
+
+def retry_with_exponential_backoff(
+    max_retries=5, base_delay=1, max_delay=300, exceptions=(Exception,)
+):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    if attempt == max_retries - 1:
+                        raise e
+                    delay = min(
+                        max_delay, (base_delay * (2**attempt)) + random.uniform(0, 1)
+                    )
+                    print(
+                        f"Exception occurred: {str(e)}. Retrying in {delay:.2f} seconds..."
+                    )
+                    time.sleep(delay)
+
+        return wrapper
+
+    return decorator
 
 
 class ExperimentStatus(Enum):
@@ -456,198 +487,274 @@ class Experiment(BaseModel):
         with open(folder_path + file_name, "w") as file:
             file.write(self.model_dump_json(exclude=("model", "evaluator")))
 
-    def visualize_results(self):
-        if not self.experiment_result:
+    def visualize_results(self, tuned_result, graphs_to_include=None):
+        if not tuned_result or not tuned_result.run_results:
             if self.enable_logging:
                 print("No results to visualize.")
             return
 
-        # Initialize lists to store the data for all runs
+        if graphs_to_include is None:
+            graphs_to_include = [
+                "overall_score_distribution",
+                "metric_score_distributions",
+                "parameter_relationships",
+                "summary_statistics",
+                "correlation_heatmap",
+                "parameter_combination_heatmap",
+            ]
+
+        # Extract data from experiment results
+        data = self._extract_data_from_results(tuned_result)
+
+        # Create and clean DataFrame
+        df = self._create_and_clean_dataframe(data)
+
+        # Separate numeric and categorical columns
+        numeric_cols, categorical_cols = self._separate_column_types(df)
+
+        if "overall_score_distribution" in graphs_to_include:
+            self._plot_score_distribution(
+                df, "overall_score", "Distribution of Overall Scores"
+            )
+
+        if "metric_score_distributions" in graphs_to_include:
+            for metric in data["all_metric_scores"].keys():
+                if metric in df.columns:
+                    self._plot_score_distribution(
+                        df, metric, f"Distribution of {metric} Scores"
+                    )
+
+        if "parameter_relationships" in graphs_to_include:
+            self._visualize_parameter_relationships(df, numeric_cols, categorical_cols)
+
+        if "summary_statistics" in graphs_to_include:
+            self._print_summary_statistics(df, data["all_metric_scores"])
+
+        if "correlation_heatmap" in graphs_to_include:
+            self._create_correlation_heatmap(df, numeric_cols)
+
+        if "parameter_combination_heatmap" in graphs_to_include:
+            self._create_parameter_combination_heatmap(df, data["all_metric_scores"])
+
+    def _extract_data_from_results(self, tuned_result):
         all_scores = []
         all_params = []
         all_metric_scores = {}
 
-        # Iterate over all run results
-        for run in self.experiment_result.run_results:
-            # Access the metadata
+        for run in tuned_result.run_results:
             metadata = run.metadata
+            all_scores.append(run.score)
+            all_params.append(metadata.get("Prompt Parameters", {}))
 
-            # Extract the overall score
-            score = metadata["Custom Evaluator Results"][0]["overall_score"]
-            all_scores.append(score)
-
-            # Extract the parameters
-            params = metadata["Prompt Parameters"]
-            all_params.append(params)
-
-            # Extract individual metric scores
-            eval_result = metadata["Custom Evaluator Results"][0]
+            eval_result = metadata.get("Custom Evaluator Results", [{}])[0]
             if "scores" in eval_result:
                 for metric, score in eval_result["scores"].items():
-                    if metric not in all_metric_scores:
-                        all_metric_scores[metric] = []
-                    all_metric_scores[metric].append(score)
+                    all_metric_scores.setdefault(metric, []).append(score)
 
-        # Ensure that all_metric_scores entries have the same length as all_scores
-        for metric in all_metric_scores:
-            if len(all_metric_scores[metric]) != len(all_scores):
-                print(
-                    f"Warning: Length mismatch for metric '{metric}'. Adjusting size."
-                )
-                # Adjust by appending None or using the last valid value (you can change this logic)
-                all_metric_scores[metric] = (
-                    all_metric_scores[metric] + [None] * len(all_scores)
-                )[: len(all_scores)]
+        return {
+            "all_scores": all_scores,
+            "all_params": all_params,
+            "all_metric_scores": all_metric_scores,
+        }
 
-        # Create a DataFrame from the parameters
-        df = pd.DataFrame(all_params)
-        df["overall_score"] = all_scores
+    def _create_and_clean_dataframe(self, data):
+        df = pd.DataFrame(data["all_params"])
+        df["overall_score"] = data["all_scores"]
 
-        # Add metric scores to DataFrame
-        for metric, scores in all_metric_scores.items():
+        for metric, scores in data["all_metric_scores"].items():
             df[metric] = scores
 
-        # Drop rows with any missing values
-        df_cleaned = df.dropna()
+        return df.dropna(axis=1, how="any").dropna()
 
-        # Keep only columns that do not contain any missing values
-        df_cleaned = df_cleaned.dropna(axis=1, how="any")
+    def _separate_column_types(self, df):
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        categorical_cols = df.select_dtypes(exclude=[np.number]).columns
+        return numeric_cols, categorical_cols
 
-        # Separate numeric and categorical columns
-        numeric_cols = df_cleaned.select_dtypes(include=[np.number]).columns
-        categorical_cols = df_cleaned.select_dtypes(exclude=[np.number]).columns
-
-        # Visualize overall score distribution
+    def _plot_score_distribution(self, df, column, title):
         plt.figure(figsize=(10, 6))
-        sns.histplot(data=df_cleaned, x="overall_score", kde=True)
-        plt.title("Distribution of Overall Scores")
-        plt.xlabel("Overall Score")
+        sns.histplot(data=df, x=column, kde=True)
+        plt.title(title)
+        plt.xlabel(column)
         plt.ylabel("Frequency")
         plt.show()
 
-        # Visualize individual metric score distributions
-        for metric in all_metric_scores.keys():
-            if (
-                metric in df_cleaned.columns
-            ):  # Only plot if the column exists after cleaning
+    def _visualize_parameter_relationships(self, df, numeric_cols, categorical_cols):
+        for col in categorical_cols:
+            if col != "overall_score":
                 plt.figure(figsize=(10, 6))
-                sns.histplot(data=df_cleaned, x=metric, kde=True)
-                plt.title(f"Distribution of {metric} Scores")
-                plt.xlabel(f"{metric} Score")
-                plt.ylabel("Frequency")
+                sns.boxplot(x=col, y="overall_score", data=df)
+                plt.title(f"Overall Score Distribution by {col}")
+                plt.ylabel("Overall Score")
+                plt.xticks(rotation=45)
                 plt.show()
 
-        # Boxplots for categorical parameters vs overall score
-        for col in categorical_cols:
-            plt.figure(figsize=(10, 6))
-            sns.boxplot(x=col, y="overall_score", data=df_cleaned)
-            plt.title(f"Overall Score Distribution by {col}")
-            plt.ylabel("Overall Score")
-            plt.xticks(rotation=45)
-            plt.show()
-
-        # Scatterplots for numeric parameters vs overall score
         for col in numeric_cols:
-            if col != "overall_score" and col not in all_metric_scores.keys():
+            if col != "overall_score":
                 plt.figure(figsize=(10, 6))
-                sns.scatterplot(x=col, y="overall_score", data=df_cleaned)
+                sns.scatterplot(x=col, y="overall_score", data=df)
                 plt.title(f"Overall Score vs {col}")
                 plt.ylabel("Overall Score")
                 plt.show()
 
-        # Summary statistics of scores
+    def _print_summary_statistics(self, df, all_metric_scores):
         print("Score Summary Statistics:")
-        print(df_cleaned[["overall_score"] + list(all_metric_scores.keys())].describe())
+        print(df[["overall_score"] + list(all_metric_scores.keys())].describe())
 
-        # Top 5 performing parameter combinations
         print("\nTop 5 Performing Parameter Combinations:")
-        top_5 = df_cleaned.sort_values("overall_score", ascending=False).head()
+        top_5 = df.sort_values("overall_score", ascending=False).head()
         print(top_5.to_string(index=False))
 
-        # Correlation heatmap for numeric parameters and scores
+    def _create_correlation_heatmap(self, df, numeric_cols):
         plt.figure(figsize=(12, 10))
-        sns.heatmap(
-            df_cleaned[numeric_cols].corr(), annot=True, cmap="coolwarm", center=0
-        )
+        sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", center=0)
         plt.title("Correlation Heatmap of Numeric Parameters and Scores")
         plt.show()
 
-        try:
-            # New heatmap visualization
-            plt.figure(figsize=(20, 14))
+    def _create_parameter_combination_heatmap(self, tuned_result):
+        run_results = tuned_result.run_results
 
-            # Prepare data for heatmap
-            heatmap_data = df_cleaned.copy()
+        # Function to automatically abbreviate parameter names and values
+        def auto_abbreviate(s):
+            if isinstance(s, str):
+                words = s.split("_")
+                return "".join(word[0] for word in words)
+            return str(s)
 
-            # Create columns for each parameter
-            param_columns = list(
-                df_cleaned.columns.difference(all_metric_scores.keys()).difference(
-                    ["overall_score"]
+        # Extract data from run_results
+        data = []
+        for run in run_results:
+            row = run.params.copy()  # Start with all params
+            row["overall_score"] = run.score
+
+            # Extract custom evaluator scores if available
+            if (
+                "Custom Evaluator Results" in run.metadata
+                and run.metadata["Custom Evaluator Results"]
+            ):
+                scores = run.metadata["Custom Evaluator Results"][0].get("scores", {})
+                row.update(scores)
+
+            data.append(row)
+
+        # Create DataFrame
+        df = pd.DataFrame(data)
+
+        # Remove columns with less than 50% of entries
+        threshold = len(df) * 0.5
+        df = df.dropna(axis=1, thresh=threshold)
+
+        # Create a string representation of the parameter combination for grouping
+        df["param_combination"] = df.apply(
+            lambda row: tuple(row.drop("overall_score")), axis=1
+        )
+
+        # Group by parameter combination and calculate mean for each metric
+        grouped_df = df.groupby("param_combination").agg(
+            {col: "mean" for col in df.columns if col != "param_combination"}
+        )
+        grouped_df["num_simulations"] = df.groupby("param_combination").size()
+
+        # Create abbreviated parameter combination column
+        grouped_df["param_combination_abbr"] = grouped_df.index.map(
+            lambda x: " | ".join(
+                f"{auto_abbreviate(k)}:{auto_abbreviate(v)}" for k, v in dict(x).items()
+            )
+        )
+
+        # Select metric columns
+        metric_columns = [
+            col
+            for col in grouped_df.columns
+            if col not in ["num_simulations", "param_combination_abbr"]
+        ]
+        heatmap_data = grouped_df[metric_columns + ["num_simulations"]]
+
+        # Function to combine similar columns
+        def combine_similar_columns(df, threshold=0.95):
+            # Compute the correlation matrix
+            corr = df.drop("num_simulations", axis=1).corr().abs()
+            corr = corr.fillna(0)
+            linkage = hierarchy.linkage(pdist(corr), method="complete")
+            clusters = hierarchy.fcluster(
+                linkage, t=1 - threshold, criterion="distance"
+            )
+
+            new_df = pd.DataFrame()
+            for cluster_id in np.unique(clusters):
+                cols = df.drop("num_simulations", axis=1).columns[
+                    clusters == cluster_id
+                ]
+                if len(cols) == 1:
+                    new_df[cols[0]] = df[cols[0]]
+                else:
+                    new_col_name = " / ".join(cols)
+                    new_df[new_col_name] = df[cols].mean(axis=1)
+
+            new_df["num_simulations"] = df["num_simulations"]
+            return new_df
+
+        # Combine similar columns
+        heatmap_data = combine_similar_columns(heatmap_data)
+
+        # Ensure there's an overall score column
+        if "overall_score" not in heatmap_data.columns:
+            heatmap_data["overall_score"] = heatmap_data.mean(axis=1)
+
+        # Sort by the overall score column
+        heatmap_data = heatmap_data.sort_values("overall_score", ascending=False)
+
+        # Calculate overall averages
+        metric_averages = heatmap_data.mean()
+
+        # Print average scores for each metric
+        print("Average Scores Across All Parameter Sets:")
+        for metric, score in metric_averages.items():
+            print(f"{metric}: {score:.2f}")
+
+        # Add overall average scores as a separate row
+        avg_row = pd.DataFrame([metric_averages], index=["AVERAGE"])
+        heatmap_data = pd.concat([heatmap_data, avg_row])
+
+        # Create heatmap
+        plt.figure(figsize=(15, len(heatmap_data) * 0.4 + 1))
+        sns.heatmap(
+            heatmap_data.drop("num_simulations", axis=1),
+            annot=True,
+            fmt=".2f",
+            cmap="YlGnBu",
+            cbar_kws={"label": "Score"},
+        )
+        plt.title("Heatmap of Scores for Each Parameter Combination")
+        plt.ylabel("Parameter Combination")
+        plt.xlabel("Metric")
+        plt.xticks(rotation=45, ha="right")
+
+        # Use abbreviated parameter combinations for y-axis labels
+        y_labels = grouped_df["param_combination_abbr"].tolist() + ["AVERAGE"]
+        plt.yticks(range(len(y_labels)), y_labels, rotation=0, ha="right")
+
+        plt.tight_layout()
+        plt.show()
+
+        # Print num_simulations for each parameter combination
+        print("\nNumber of Simulations for Each Parameter Combination:")
+        for index, row in heatmap_data.iterrows():
+            if index != "AVERAGE":
+                print(
+                    f"{grouped_df.loc[index, 'param_combination_abbr']}: {row['num_simulations']:.0f}"
                 )
-            )
-            for param in param_columns:
-                heatmap_data[param] = heatmap_data[param].astype(str)
+            else:
+                print(f"AVERAGE: {row['num_simulations']:.2f}")
 
-            # Combine parameter columns
-            heatmap_data["param_combination"] = heatmap_data[param_columns].agg(
-                " | ".join, axis=1
-            )
+        return grouped_df
 
-            # Melt the dataframe to long format, excluding 'overall_score'
-            heatmap_data_melted = pd.melt(
-                heatmap_data,
-                id_vars=["param_combination"] + param_columns,
-                value_vars=[
-                    col for col in all_metric_scores.keys() if col != "overall_score"
-                ],
-                var_name="Metric",
-                value_name="Score",
-            )
-
-            # Create pivot table
-            heatmap_pivot = heatmap_data_melted.pivot(
-                index=["param_combination"] + param_columns,
-                columns="Metric",
-                values="Score",
-            )
-
-            # Sort by the first metric (assuming it's the most important)
-            heatmap_pivot = heatmap_pivot.sort_values(
-                heatmap_pivot.columns[0], ascending=False
-            )
-
-            # Create heatmap
-            ax = sns.heatmap(
-                heatmap_pivot,
-                annot=True,
-                cmap="YlGnBu",
-                fmt=".1f",
-                cbar_kws={"label": "Score"},
-                mask=heatmap_pivot.isnull(),
-            )
-
-            plt.title("Heatmap of Scores for Each Parameter Combination", fontsize=16)
-            plt.ylabel("Parameter Combination", fontsize=12)
-            plt.xlabel("Metric", fontsize=12)
-            plt.xticks(rotation=45, ha="right", fontsize=10)
-            plt.yticks(fontsize=8)
-
-            plt.tight_layout()
-            plt.show()
-
-        except Exception as e:
-            pass
-
-    def test_significance(self, n: int = 5):
-        if not self.experiment_result:
-            if self.enable_logging:
-                print("No results to test for significance.")
+    def test_significance(self, tuned_result: ExperimentResult, n: int = 5):
+        if not tuned_result or not tuned_result.run_results:
+            print("No results to test for significance.")
             return
 
-        # Extract scores from run_results
-        scores = [run.score for run in self.experiment_result.run_results]
-
-        # Sort the scores in descending order
+        scores = [run.score for run in tuned_result.run_results]
         sorted_scores = sorted(scores, reverse=True)
 
         if len(sorted_scores) <= n:
@@ -656,11 +763,9 @@ class Experiment(BaseModel):
             )
             return
 
-        # Split the scores into two groups
         top_n_scores = sorted_scores[:n]
         rest_scores = sorted_scores[n:]
 
-        # Perform Mann-Whitney U test
         statistic, p_value = stats.mannwhitneyu(
             top_n_scores, rest_scores, alternative="two-sided"
         )
@@ -670,8 +775,7 @@ class Experiment(BaseModel):
         print(f"U-statistic: {statistic}")
         print(f"p-value: {p_value}")
 
-        # Interpret the results
-        alpha = 0.05  # Significance level
+        alpha = 0.05
         if p_value < alpha:
             print(
                 f"The difference between the top {n} parameter combinations and the rest is statistically significant (p < {alpha})."
@@ -681,9 +785,7 @@ class Experiment(BaseModel):
                 f"There is no statistically significant difference between the top {n} parameter combinations and the rest (p >= {alpha})."
             )
 
-        # Calculate and print effect size (Cohen's d)
-        mean_top_n = np.mean(top_n_scores)
-        mean_rest = np.mean(rest_scores)
+        mean_top_n, mean_rest = np.mean(top_n_scores), np.mean(rest_scores)
         pooled_std = np.sqrt(
             (np.std(top_n_scores, ddof=1) ** 2 + np.std(rest_scores, ddof=1) ** 2) / 2
         )
@@ -697,10 +799,98 @@ class Experiment(BaseModel):
         else:
             print("The effect size is large.")
 
-        # Visualize the comparison
         plt.figure(figsize=(10, 6))
         sns.boxplot(data=[top_n_scores, rest_scores], orient="h")
         plt.title(f"Comparison of Top {n} Scores vs Rest")
         plt.xlabel("Score")
         plt.yticks([0, 1], [f"Top {n}", "Rest"])
         plt.show()
+
+        return {
+            "statistic": statistic,
+            "p_value": p_value,
+            "cohen_d": cohen_d,
+            "top_n_scores": top_n_scores,
+            "rest_scores": rest_scores,
+        }
+
+    def wrap_text(self, text, width):
+        # Wrap text to fit within the given width
+        from textwrap import wrap
+
+        return wrap(text, width)
+
+    def create_run_results_table(self, tuned_result, max_rows=None):
+        # Define column widths
+        score_width = 10
+        prompt_width = 40
+        answer_width = 40
+        param_width = 15
+
+        # Get all unique parameter names
+        all_params = set()
+        for run_result in tuned_result.run_results:
+            all_params.update(run_result.metadata.get("Prompt Parameters", {}).keys())
+
+        # Create header
+        header = f"| {'Score':^{score_width}} | {'Full Prompt':<{prompt_width}} | {'Answer':<{answer_width}}"
+        for param in all_params:
+            header += f" | {param:<{param_width}}"
+        header += " |"
+
+        separator = f"+{'-' * (score_width + 2)}+{'-' * (prompt_width + 2)}+{'-' * (answer_width + 2)}"
+        separator += f"+{'-' * (param_width + 2)}" * len(all_params) + "+"
+
+        # Create table string
+        table = [separator, header, separator]
+
+        row_count = 0
+        for run_result in tuned_result.run_results:
+            if max_rows is not None and row_count >= max_rows:
+                break
+
+            score = f"{run_result.score:.2f}"
+            prompt_variants = run_result.metadata.get("Prompt Variants", [])
+            full_prompt = (
+                self.wrap_text(prompt_variants[0][:1000], prompt_width)
+                if prompt_variants
+                else [""]
+            )
+            answer = self.wrap_text(
+                run_result.metadata.get("Answers", [""])[0][:1000], answer_width
+            )
+
+            prompt_params = run_result.metadata.get("Prompt Parameters", {})
+
+            max_lines = max(len(full_prompt), len(answer))
+            for i in range(max_lines):
+                if max_rows is not None and row_count >= max_rows:
+                    break
+
+                prompt_line = full_prompt[i] if i < len(full_prompt) else ""
+                answer_line = answer[i] if i < len(answer) else ""
+                row = f"| {score if i == 0 else ' ':^{score_width}} | {prompt_line:<{prompt_width}} | {answer_line:<{answer_width}}"
+                for param in all_params:
+                    param_value = prompt_params.get(param, "N/A")
+                    row += f" | {param_value if i == 0 else ' ':<{param_width}}"
+                row += " |"
+                table.append(row)
+                row_count += 1
+
+            if row_count < max_rows or max_rows is None:
+                table.append(separator)
+
+        # Add ellipsis if there are more rows
+        if (
+            max_rows is not None
+            and row_count >= max_rows
+            and row_count < len(tuned_result.run_results)
+        ):
+            table.append(
+                f"| {'...':^{score_width}} | {'...':^{prompt_width}} | {'...':^{answer_width}}"
+                + f" | {'...':^{param_width}}" * len(all_params)
+                + " |"
+            )
+            table.append(separator)
+
+        return "\n".join(table)

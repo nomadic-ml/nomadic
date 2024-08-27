@@ -200,22 +200,31 @@ def custom_evaluate(
     weights = {metric["metric"]: metric["weight"] for metric in evaluation_metrics}
 
     metrics_prompt = "\n".join([f"{i+1}. {metric}" for i, metric in enumerate(metrics)])
-    metrics_format = "\n".join([f"{metric}: [score]" for metric in metrics])
+    metrics_format = "\n".join([f'"{metric}": [NUMERIC_SCORE]' for metric in metrics])
 
     evaluation_prompt = f"""
     You are a judge evaluating the quality of a generated response for a financial advice summary.
-    Please evaluate the following response based on these criteria, scoring each from 0 to 20:
+    Please evaluate the following response based on these criteria, scoring each from 0 to 100 using ONLY numeric values:
 
     {metrics_prompt}
 
     Response to evaluate:
     {response}
 
-    Provide your evaluation in the following format:
+    Provide your evaluation in the following JSON format, ensuring ALL scores are NUMERIC values between 0 and 100:
+    {{
+        "scores": {{
     {metrics_format}
-    Overall score: [total out of {len(metrics) * 20}]
+        }},
+        "overall_score": [NUMERIC_TOTAL_SCORE],
+        "brief_explanation": "[Your concise explanation of the strengths and weaknesses]"
+    }}
 
-    Brief explanation: [Your explanation of the strengths and weaknesses]
+    CRITICAL INSTRUCTIONS:
+    1. ALL scores, including the overall score, MUST be numeric values between 0 and 100. DO NOT use any text in score fields.
+    2. The "brief_explanation" should be separate from the scores and contain your evaluation comments.
+    3. Strictly adhere to the JSON format provided above.
+    4. Double-check that you've only used numbers for all scores before submitting.
     """
 
     client = OpenAI(api_key=openai_api_key)
@@ -226,7 +235,7 @@ def custom_evaluate(
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an AI assistant tasked with evaluating responses.",
+                    "content": "You are an AI assistant tasked with evaluating responses. Your primary goal is to provide numeric scores for each metric and an overall score.",
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -234,49 +243,47 @@ def custom_evaluate(
         return completion.choices[0].message.content
 
     def parse_evaluation_result(evaluation_result):
-        lines = evaluation_result.split("\n")
-        scores = {}
-        explanation = ""
-        overall_score = 0
+        import json
 
-        for line in lines:
-            if ":" in line:
-                parts = line.split(":", 1)  # Split only on the first colon
-                if len(parts) == 2:
-                    metric, score_str = parts
-                    metric = metric.strip()
-                    score_str = score_str.strip()
-                    try:
-                        # Use regular expression to find the first number in the string
-                        score_match = re.search(r"\d+(\.\d+)?", score_str)
-                        if score_match:
-                            score = float(score_match.group())
-                            scores[metric] = score
-                        else:
-                            print(
-                                f"Warning: No numeric score found for metric '{metric}'. Score string: '{score_str}'"
-                            )
-                    except ValueError as e:
-                        print(
-                            f"Error parsing score for metric '{metric}': {e}. Score string: '{score_str}'"
-                        )
-            elif line.lower().startswith("overall score:"):
-                try:
-                    overall_score_match = re.search(
-                        r"\d+(\.\d+)?", line.split(":", 1)[1]
+        try:
+            result = json.loads(evaluation_result)
+            scores = result.get("scores", {})
+            overall_score = result.get("overall_score", 0)
+            explanation = result.get("brief_explanation", "")
+
+            # Ensure all scores are integers and within range
+            for metric in metrics:
+                if metric not in scores or not isinstance(scores[metric], (int, float)):
+                    print(
+                        f"Warning: Invalid or missing score for metric '{metric}'. Assigning default score of 10."
                     )
-                    if overall_score_match:
-                        overall_score = float(overall_score_match.group())
-                    else:
-                        print(
-                            f"Warning: No numeric overall score found. Line: '{line}'"
-                        )
-                except ValueError as e:
-                    print(f"Error parsing overall score: {e}. Line: '{line}'")
-            elif line.lower().startswith("brief explanation:"):
-                explanation = line.split(":", 1)[1].strip()
+                    scores[metric] = 10
+                else:
+                    # Round float values to nearest integer
+                    scores[metric] = round(scores[metric])
+                    # Ensure score is within valid range
+                    scores[metric] = max(0, min(scores[metric], 20))
 
-        return scores, overall_score, explanation
+            # Ensure overall score is an integer and within range
+            if not isinstance(overall_score, (int, float)):
+                print(
+                    f"Warning: Invalid overall score: {overall_score}. Calculating from individual scores."
+                )
+                overall_score = sum(scores.values())
+            else:
+                overall_score = round(overall_score)
+                overall_score = max(0, min(overall_score, len(metrics) * 20))
+
+            return scores, overall_score, explanation
+
+        except json.JSONDecodeError as e:
+            print(f"Error parsing evaluation result: {e}")
+            print(f"Raw evaluation result: {evaluation_result}")
+            return (
+                {metric: 10 for metric in metrics},
+                len(metrics) * 10,
+                "Error in evaluation.",
+            )
 
     retry_count = 0
     while retry_count < max_retries:
@@ -284,22 +291,18 @@ def custom_evaluate(
         scores, overall_score, explanation = parse_evaluation_result(evaluation_result)
 
         if all(metric in scores for metric in metrics) and overall_score:
-            break  # Exit loop if all metrics are successfully scored
+            break
 
         print(f"Retrying evaluation... ({retry_count + 1}/{max_retries})")
         time.sleep(retry_delay)
         retry_count += 1
 
     # Calculate weighted score
-    if scores:
-        total_weight = sum(weights.values())
-        weighted_score = (
-            sum(scores.get(metric, 0) * weights.get(metric, 1) for metric in metrics)
-            / total_weight
-        )
-    else:
-        print("Warning: No valid scores were found. Using overall score if available.")
-        weighted_score = overall_score
+    total_weight = sum(weights.values())
+    weighted_score = (
+        sum(scores.get(metric, 0) * weights.get(metric, 1) for metric in metrics)
+        / total_weight
+    )
 
     return {
         "scores": scores,
