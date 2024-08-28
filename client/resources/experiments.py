@@ -19,7 +19,7 @@ class Experiments(APIResource):
             resp_data = self._client.request("GET", f"/experiments/{id}")
             if not resp_data:
                 return None
-            return self._to_experiment(resp_data)
+            return self._to_experiment(resp_data[0])
         else:
             return next(
                 (experiment for experiment in self.list() if experiment.name == name),
@@ -115,11 +115,13 @@ class Experiments(APIResource):
             param_dict=param_dict,
             evaluation_dataset=[resp_data.get("evaluation_dataset")],
             evaluator=evaluator,
-            model_key=resp_data.get("model_registration_key"),
             model=model,
             start_datetime=resp_data.get("created_at"),
             experiment_status=ExperimentStatus.not_started,
             client_id=resp_data.get("id"),
+            all_experiment_results=ExperimentResults(self._client).list(
+                resp_data.get("id")
+            ),
         )
 
 

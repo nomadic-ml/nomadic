@@ -107,7 +107,11 @@ class Experiment(BaseModel):
     )
     end_datetime: Optional[datetime] = Field(default=None, description="End datetime.")
     experiment_result: Optional[ExperimentResult] = Field(
-        default=None, description="Tuned result of Experiment"
+        default=None, description="Experiment result of Experiment"
+    )
+    all_experiment_results: Optional[List[ExperimentResult]] = Field(
+        default=[],
+        description="All expeirment results of experiment (including from Workspace)",
     )
     experiment_status: Optional[ExperimentStatus] = Field(
         default=ExperimentStatus("not_started"),
@@ -167,6 +171,9 @@ class Experiment(BaseModel):
             raise ValueError(
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
+        # TODO: Fix logic w.r.t. having either one experiment result per experiment, or having multiple experiment results
+        if self.all_experiment_results and not self.experiment_result:
+            self.experiment_result = self.all_experiment_results[0]
 
     def run(self) -> ExperimentResult:
         def _get_responses(

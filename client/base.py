@@ -39,4 +39,8 @@ def _set_client(client: NomadicClient) -> None:
 
 
 def _get_base_url() -> str:
-    return os.environ["NOMADIC_BASE_API_URL"] or DEFAULT_BASE_API_URL
+    return (
+        DEFAULT_BASE_API_URL
+        if "NOMADIC_BASE_API_URL" not in os.environ
+        else os.environ["NOMADIC_BASE_API_URL"]
+    )

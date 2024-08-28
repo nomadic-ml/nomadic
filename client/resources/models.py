@@ -9,7 +9,7 @@ class Models(APIResource):
         resp_data = self._client.request("GET", f"/models/registrations/{id}")
         if not resp_data:
             return None
-        return self._to_model(resp_data)
+        return self._to_model(resp_data[0])
 
     def list(self) -> List[Model]:
         resp_data = self._client.request("GET", "/models/registrations/")

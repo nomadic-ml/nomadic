@@ -10,16 +10,14 @@ class ExperimentResults(APIResource):
     ) -> Optional[ExperimentResult]:
         resp_data = self._client.request(
             "GET",
-            f"/experiment-runs/{experiment.client_id}/{experiment_result.client_id}",
+            f"/experiments/{experiment.client_id}/{experiment_result.client_id}",
         )
         if not resp_data:
             return None
-        return self._to_experiment_result(resp_data)
+        return self._to_experiment_result(resp_data[0])
 
-    def list(self, experiment_result: ExperimentResult) -> List[ExperimentResult]:
-        resp_data = self._client.request(
-            "GET", f"/experiment-runs{experiment_result.client_id}"
-        )
+    def list(self, experiment_id: int) -> List[ExperimentResult]:
+        resp_data = self._client.request("GET", f"/experiment-runs/{experiment_id}")
         return [self._to_experiment_result(d) for d in resp_data]
 
     def register(self, experiment_result: ExperimentResult, experiment: Experiment):
@@ -28,9 +26,14 @@ class ExperimentResults(APIResource):
         # if not experiment.client_id:
         #     workspace_experiments = Experiments(self._client)
         #     workspace_experiments.register(experiment)
+        # TODO: Determine how to enter non discrete HP search spaces in `hyperparameters`
         upload_data = {
             "overall_score": experiment_result.best_run_result.score,
-            "hyperparameters": experiment_result.best_run_result.params,
+            "hyperparameters": {
+                hp_name: val.categories
+                for hp_name, val in experiment.param_dict.items()
+                if hasattr(val, "categories")
+            },
             "results": {
                 "best_idx": experiment_result.best_idx,
                 "run_results": [
@@ -61,5 +64,5 @@ class ExperimentResults(APIResource):
             run_results=run_results,
             best_idx=resp_data.get("results").get("best_idx", 0),
             name=resp_data.get("name"),
-            client_id=id,
+            client_id=resp_data.get("id"),
         )
