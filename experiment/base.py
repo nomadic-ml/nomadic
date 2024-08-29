@@ -400,9 +400,11 @@ class Experiment(BaseModel):
                     eval_results.append(self.evaluator(pred, ref))
                 elif isinstance(self.evaluator, BaseEvaluator):
                     eval_results.append(
-                        self.evaluator.evaluate_response(
-                            response=Response(pred), reference=ref
-                        )
+                        {
+                            "score": self.evaluator.evaluate_response(
+                                response=Response(pred), reference=ref
+                            ).score
+                        }
                     )
                 else:
                     raise ValueError("Invalid evaluator type")
@@ -415,6 +417,8 @@ class Experiment(BaseModel):
                 scores.append(result["scores"]["Overall score"])
             elif "overall_score" in result and result["overall_score"] != 0:
                 scores.append(result["overall_score"])
+            elif "score" in result:
+                scores.append(result["score"])
             elif hasattr(result, "score"):
                 scores.append(result.score)
 

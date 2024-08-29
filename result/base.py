@@ -16,8 +16,7 @@ class RunResult(BaseModel):
     def get_json(self):
         # TODO: Fix LlamaIndex's `EvaluationResult` object not giving JSON with model_dump_json
         # that exists as a key to the 'Custom Evaluator Results' key of metadata
-        # return {"score": self.score, "params": self.params, "metadata": self.metadata}
-        return {"score": self.score, "params": self.params}
+        return {"score": self.score, "params": self.params, "metadata": self.metadata}
 
 
 class ExperimentResult(BaseModel):
