@@ -1,3 +1,3 @@
-from nomadic.client.base import NomadicClient, ClientOptions
+from nomadic.client.base import NomadicClient, ClientOptions, get_client
 
-__all__ = ["NomadicClient", "ClientOptions"]
+__all__ = ["NomadicClient", "ClientOptions", "get_client"]

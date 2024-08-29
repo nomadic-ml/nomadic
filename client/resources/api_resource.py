@@ -1,10 +1,11 @@
-from __future__ import annotations
+from typing import TYPE_CHECKING
 
-from nomadic.client import NomadicClient
+if TYPE_CHECKING:
+    from nomadic.client.base import NomadicClient
 
 
 class APIResource:
-    _client: NomadicClient
+    _client: "NomadicClient"
 
-    def __init__(self, client: NomadicClient):
+    def __init__(self, client: "NomadicClient"):
         self._client = client

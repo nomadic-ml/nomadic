@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 
 import pandas as pd
 
+from nomadic.client import NomadicClient, get_client
+
 
 class RunResult(BaseModel):
     """Run result"""
@@ -21,9 +23,7 @@ class RunResult(BaseModel):
 
 class ExperimentResult(BaseModel):
     run_results: List[RunResult]
-    metadata: Optional[Dict[str, Any]] = Field(
-        default_factory=dict, description="Metadata"
-    )
+    metadata: Optional[Dict[str, Any]] = Field(default={}, description="Metadata")
     best_idx: Optional[int] = Field(
         default=0, description="Position of the best RunResult in run_results."
     )
@@ -35,7 +35,6 @@ class ExperimentResult(BaseModel):
     def model_post_init(self, __context):
         self.run_results = sorted(self.run_results, key=lambda x: x.score, reverse=True)
         self.best_idx = 0
-        self.metadata = {}  # Corrected to be an empty dictionary
 
     @property
     def best_run_result(self) -> RunResult:

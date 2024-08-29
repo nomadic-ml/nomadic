@@ -8,6 +8,7 @@ from llama_index.llms.sagemaker_endpoint import SageMakerLLM
 from llama_index.llms.together import TogetherLLM
 import openai
 
+from nomadic.client import get_client
 from nomadic.result import RunResult
 
 DEFAULT_HYPERPARAMETER_SEARCH_SPACE: Dict[str, Any] = {
@@ -43,7 +44,10 @@ class Model(BaseModel):
     )
 
     def model_post_init(self, ctx):
-        self._set_model()
+        if not self.client_id:  # Check this flag before registering
+            nomadic_client = get_client()
+            if nomadic_client.auto_sync_enabled:
+                nomadic_client.models.register(self)
 
     def _set_model(self, **kwargs):
         """Set model"""

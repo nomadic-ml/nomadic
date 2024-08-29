@@ -9,7 +9,7 @@ from llama_index.core.evaluation import BaseEvaluator
 from llama_index.core.llms import CompletionResponse
 from llama_index.core.base.response.schema import Response
 
-# from nomadic.client import Client
+from nomadic.client import get_client, NomadicClient
 from nomadic.model import OpenAIModel, TogetherAIModel, SagemakerModel
 from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner.base import BaseParamTuner
@@ -174,6 +174,10 @@ class Experiment(BaseModel):
         # TODO: Fix logic w.r.t. having either one experiment result per experiment, or having multiple experiment results
         if self.all_experiment_results and not self.experiment_result:
             self.experiment_result = self.all_experiment_results[0]
+        if not self.client_id:  # Check this flag before registering
+            nomadic_client: NomadicClient = get_client()
+            if nomadic_client.auto_sync_enabled:
+                nomadic_client.experiments.register(self)
 
     def run(self) -> ExperimentResult:
         def _get_responses(
@@ -329,6 +333,9 @@ class Experiment(BaseModel):
         self.experiment_result = result or self._create_default_experiment_result()
         if self.enable_logging:
             print(f"\nExperiment completed. Status: {self.experiment_status}")
+        nomadic_client: NomadicClient = get_client()
+        if nomadic_client.auto_sync_enabled:
+            nomadic_client.experiments.register(self)
         return self.experiment_result
 
     def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:

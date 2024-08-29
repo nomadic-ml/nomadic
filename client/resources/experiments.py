@@ -47,11 +47,10 @@ class Experiments(APIResource):
         #   1. Try registering model, then registering experiment.
         #   2. If registration of model fails, use placeholder model.
         else:
-            workspace_models = Models(self._client)
             try:
-                model_from_db = workspace_models.load(model.client_id)
+                model_from_db = self._client.models.load(model.client_id)
                 if model_from_db is None:
-                    model_registration_resp = workspace_models.register(model)
+                    model_registration_resp = self._client.models.register(model)
                     if model_registration_resp is None:
                         raise Exception
                     else:
@@ -65,7 +64,6 @@ class Experiments(APIResource):
                     client_id=None,
                 )
 
-        # Step 1: Upload experiment
         upload_data = {
             "name": experiment.name,
             "config": None,
@@ -76,23 +74,64 @@ class Experiments(APIResource):
             "hyperparameters": [param for param in experiment.param_dict.keys()],
             "model_registration_id": experiment.model.client_id,
         }
-        response = self._client.request("POST", "/experiments", json=upload_data)
-        experiment.client_id = response["id"]
 
-        # TODO: Fix circular dependency here
-        # Step 2: Upload experiment results, if any
+        # Check if experiment is already registered:
+        #   If already registered, check if an update to the registered experiment is required:
+        #       If an update is required, update experiment.
+        #       Else, NOP.
+        #   If not registered, register experiment.
+        response = None
+        if experiment.client_id:
+            experiment_from_client = self.load(experiment.client_id)
+            if not experiment_from_client or experiment != experiment_from_client:
+                method = "PUT" if experiment_from_client else "POST"
+                response = self._client.request(
+                    method, f"/experiments/{experiment.client_id}", json=upload_data
+                )
+                if not experiment_from_client:
+                    experiment.client_id = response["id"]
+        else:
+            response = self._client.request(
+                "POST",
+                "/experiments",
+                json=upload_data,
+            )
+            experiment.client_id = response["id"]
+
+        # Upload experiment results, if any
         if experiment.experiment_result:
-            workspace_experiment_results = ExperimentResults(self._client)
-            workspace_experiment_results.register(
-                experiment.experiment_result, experiment
+            self._client.experiment_results.register(
+                experiment, experiment.experiment_result
             )
         return response
 
-    def delete_registration(self, experiment: Experiment):
-        return self._client.request("DELETE", f"/experiments/{experiment.client_id}")
+    def update(self, experiment: Experiment):
+        upload_data = {
+            "name": experiment.name,
+            "config": None,
+            # TODO: Address evaluation_dataset type of nomadic.Experiment.evaluation_dataset as Dict on webapp and not List[Dict]
+            "evaluation_dataset": experiment.evaluation_dataset[0],
+            "evaluation_metric": get_evaluation_metric(),
+            # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
+            "hyperparameters": [param for param in experiment.param_dict.keys()],
+            "model_registration_id": experiment.model.client_id,
+        }
+        response = self._client.request(
+            "POST", f"/experiments/{experiment.client_id}", json=upload_data
+        )
+        return response
 
-    def delete_registration_by_id(self, id: int):
-        return self._client.request("DELETE", f"/experiments/{id}")
+    def delete_registration(self, experiment: Experiment):
+        experiment_runs = self._client.experiment_results.list(experiment.client_id)
+        for experiment_result in experiment_runs:
+            self._client.experiment_results.delete_registration(experiment_result)
+        response = self._client.request(
+            "DELETE", f"/experiments/{experiment.client_id}"
+        )
+        if not response:
+            return None
+        experiment.client_id = None
+        return response
 
     def _to_experiment(self, resp_data: dict) -> Experiment:
         evaluator = get_evaluator(resp_data.get("evaluation_metric"))
@@ -101,9 +140,8 @@ class Experiments(APIResource):
         param_dict = {key: None for key in resp_data.get("hyperparameters", [])}
 
         # Get model of experiment
-        workspace_models = Models(self._client)
         try:
-            model = workspace_models.load(resp_data.get("model_registration_id"))
+            model = self._client.models.load(resp_data.get("model_registration_id"))
         except Exception as e:
             # The model of the experiment may have been deleted. If so,
             # handle properly by making a fake new model to display that
@@ -119,7 +157,7 @@ class Experiments(APIResource):
             start_datetime=resp_data.get("created_at"),
             experiment_status=ExperimentStatus.not_started,
             client_id=resp_data.get("id"),
-            all_experiment_results=ExperimentResults(self._client).list(
+            all_experiment_results=self._client.experiment_results.list(
                 resp_data.get("id")
             ),
         )
