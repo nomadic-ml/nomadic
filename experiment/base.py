@@ -9,7 +9,7 @@ from llama_index.core.evaluation import BaseEvaluator
 from llama_index.core.llms import CompletionResponse
 from llama_index.core.base.response.schema import Response
 
-from nomadic.client import get_client, NomadicClient
+# from nomadic.client import Client
 from nomadic.model import OpenAIModel, TogetherAIModel, SagemakerModel
 from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner.base import BaseParamTuner
@@ -107,11 +107,7 @@ class Experiment(BaseModel):
     )
     end_datetime: Optional[datetime] = Field(default=None, description="End datetime.")
     experiment_result: Optional[ExperimentResult] = Field(
-        default=None, description="Experiment result of Experiment"
-    )
-    all_experiment_results: Optional[List[ExperimentResult]] = Field(
-        default=[],
-        description="All expeirment results of experiment (including from Workspace)",
+        default=None, description="Tuned result of Experiment"
     )
     experiment_status: Optional[ExperimentStatus] = Field(
         default=ExperimentStatus("not_started"),
@@ -171,13 +167,6 @@ class Experiment(BaseModel):
             raise ValueError(
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
-        # TODO: Fix logic w.r.t. having either one experiment result per experiment, or having multiple experiment results
-        if self.all_experiment_results and not self.experiment_result:
-            self.experiment_result = self.all_experiment_results[0]
-        if not self.client_id:  # Check this flag before registering
-            nomadic_client: NomadicClient = get_client()
-            if nomadic_client.auto_sync_enabled:
-                nomadic_client.experiments.register(self)
 
     def run(self) -> ExperimentResult:
         def _get_responses(
@@ -333,9 +322,6 @@ class Experiment(BaseModel):
         self.experiment_result = result or self._create_default_experiment_result()
         if self.enable_logging:
             print(f"\nExperiment completed. Status: {self.experiment_status}")
-        nomadic_client: NomadicClient = get_client()
-        if nomadic_client.auto_sync_enabled:
-            nomadic_client.experiments.register(self)
         return self.experiment_result
 
     def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:
@@ -407,11 +393,9 @@ class Experiment(BaseModel):
                     eval_results.append(self.evaluator(pred, ref))
                 elif isinstance(self.evaluator, BaseEvaluator):
                     eval_results.append(
-                        {
-                            "score": self.evaluator.evaluate_response(
-                                response=Response(pred), reference=ref
-                            ).score
-                        }
+                        self.evaluator.evaluate_response(
+                            response=Response(pred), reference=ref
+                        )
                     )
                 else:
                     raise ValueError("Invalid evaluator type")
@@ -424,8 +408,6 @@ class Experiment(BaseModel):
                 scores.append(result["scores"]["Overall score"])
             elif "overall_score" in result and result["overall_score"] != 0:
                 scores.append(result["overall_score"])
-            elif "score" in result:
-                scores.append(result["score"])
             elif hasattr(result, "score"):
                 scores.append(result.score)
 
@@ -671,7 +653,7 @@ class Experiment(BaseModel):
             parts = []
             for k in hyperparameter_cols:
                 parts.append(f"{k}: {row[k]}")
-            return "\n".join(parts)
+            return " | ".join(parts)
 
         df["param_combination"] = df.apply(format_param_combination, axis=1)
 
@@ -694,41 +676,42 @@ class Experiment(BaseModel):
         avg_row = pd.DataFrame([metric_averages], index=["AVERAGE"])
         grouped_df = pd.concat([grouped_df, avg_row])
 
+        # Transpose the DataFrame to swap rows and columns
+        grouped_df_t = grouped_df.transpose()
+
         # Create heatmap
         fig, ax = plt.subplots(
-            figsize=(20, len(grouped_df) * 1.2)
-        )  # Increase vertical space
+            figsize=(len(grouped_df) * 1.2, 10)
+        )  # Adjust figure size
 
         sns.heatmap(
-            grouped_df[score_cols],
+            grouped_df_t,
             annot=True,
             fmt=".2f",
             cmap="YlGnBu",
             cbar_kws={"label": "Score"},
             ax=ax,
-            linewidths=0.5,  # Add space between cells
-            square=True,  # Make cells square
+            linewidths=0.5,
+            square=True,
         )
         plt.title("Heatmap of Scores for Each Parameter Combination", pad=20)
-        plt.xlabel("Metric", labelpad=20)
+        plt.ylabel("Metric", labelpad=20)
+        plt.xlabel("Parameter Combination", labelpad=20)
+
+        # Rotate x-axis labels for better readability
         plt.xticks(rotation=45, ha="right")
+        plt.yticks(rotation=0)
 
-        # Adjust y-axis labels
-        ax.set_yticklabels(ax.get_yticklabels(), rotation=0, ha="right", va="center")
-
-        # Adjust layout to give more space to row labels
+        # Adjust layout
         plt.tight_layout()
-        fig.subplots_adjust(
-            left=0.4, bottom=0.1, top=0.95
-        )  # Adjust these values as needed
 
         # Increase font size for better readability
-        plt.setp(ax.get_yticklabels(), fontsize=10)
         plt.setp(ax.get_xticklabels(), fontsize=10)
+        plt.setp(ax.get_yticklabels(), fontsize=10)
 
         # Add gridlines
-        ax.set_yticks(np.arange(grouped_df.shape[0]) + 0.5, minor=False)
-        ax.yaxis.grid(True, which="major", linestyle="-", linewidth=0.5, color="white")
+        ax.set_xticks(np.arange(grouped_df.shape[0]) + 0.5, minor=False)
+        ax.xaxis.grid(True, which="major", linestyle="-", linewidth=0.5, color="white")
 
         plt.show()
 
@@ -805,77 +788,50 @@ class Experiment(BaseModel):
 
         return wrap(text, width)
 
-    def create_run_results_table(self, tuned_result, max_rows=None):
-        # Define column widths
-        score_width = 10
-        prompt_width = 40
-        answer_width = 40
-        param_width = 15
-
-        # Get all unique parameter names
-        all_params = set()
+    def create_run_results_table(
+        self, tuned_result, max_rows=None, max_prompt_length=100, max_answer_length=500
+    ):
+        data = []
         for run_result in tuned_result.run_results:
-            all_params.update(run_result.metadata.get("Prompt Parameters", {}).keys())
+            row = {
+                "Score": f"{run_result.score:.2f}",
+                "Full Prompt": self._wrap_text(
+                    run_result.metadata.get("Prompt Variants", [""])[0],
+                    max_prompt_length,
+                ),
+                "Answer": self._wrap_text(
+                    run_result.metadata.get("Answers", [""])[0], max_answer_length
+                ),
+            }
+            row.update(run_result.metadata.get("Prompt Parameters", {}))
+            data.append(row)
 
-        # Create header
-        header = f"| {'Score':^{score_width}} | {'Full Prompt':<{prompt_width}} | {'Answer':<{answer_width}}"
-        for param in all_params:
-            header += f" | {param:<{param_width}}"
-        header += " |"
+        df = pd.DataFrame(data)
 
-        separator = f"+{'-' * (score_width + 2)}+{'-' * (prompt_width + 2)}+{'-' * (answer_width + 2)}"
-        separator += f"+{'-' * (param_width + 2)}" * len(all_params) + "+"
+        if max_rows is not None:
+            df = df.head(max_rows)
 
-        # Create table string
-        table = [separator, header, separator]
+        return df
 
-        row_count = 0
-        for run_result in tuned_result.run_results:
-            if max_rows is not None and row_count >= max_rows:
-                break
+    def _wrap_text(self, text, max_length):
+        if len(text) <= max_length:
+            return text
 
-            score = f"{run_result.score:.2f}"
-            prompt_variants = run_result.metadata.get("Prompt Variants", [])
-            full_prompt = (
-                self.wrap_text(prompt_variants[0][:1000], prompt_width)
-                if prompt_variants
-                else [""]
-            )
-            answer = self.wrap_text(
-                run_result.metadata.get("Answers", [""])[0][:1000], answer_width
-            )
+        words = text.split()
+        lines = []
+        current_line = []
+        current_length = 0
 
-            prompt_params = run_result.metadata.get("Prompt Parameters", {})
+        for word in words:
+            if current_length + len(word) + 1 > max_length:
+                lines.append(" ".join(current_line))
+                current_line = [word]
+                current_length = len(word)
+            else:
+                current_line.append(word)
+                current_length += len(word) + 1
 
-            max_lines = max(len(full_prompt), len(answer))
-            for i in range(max_lines):
-                if max_rows is not None and row_count >= max_rows:
-                    break
+        if current_line:
+            lines.append(" ".join(current_line))
 
-                prompt_line = full_prompt[i] if i < len(full_prompt) else ""
-                answer_line = answer[i] if i < len(answer) else ""
-                row = f"| {score if i == 0 else ' ':^{score_width}} | {prompt_line:<{prompt_width}} | {answer_line:<{answer_width}}"
-                for param in all_params:
-                    param_value = prompt_params.get(param, "N/A")
-                    row += f" | {param_value if i == 0 else ' ':<{param_width}}"
-                row += " |"
-                table.append(row)
-                row_count += 1
-
-            if row_count < max_rows or max_rows is None:
-                table.append(separator)
-
-        # Add ellipsis if there are more rows
-        if (
-            max_rows is not None
-            and row_count >= max_rows
-            and row_count < len(tuned_result.run_results)
-        ):
-            table.append(
-                f"| {'...':^{score_width}} | {'...':^{prompt_width}} | {'...':^{answer_width}}"
-                + f" | {'...':^{param_width}}" * len(all_params)
-                + " |"
-            )
-            table.append(separator)
-
-        return "\n".join(table)
+        return "\n".join(lines)
