@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple
 import requests
 import numpy as np
 
@@ -93,60 +93,41 @@ def _build_index(
     return index
 
 
-def obtain_rag_inputs(
-    pdf_url: str = "https://arxiv.org/pdf/2307.09288.pdf",
-    eval_dataset_url: str = "https://www.dropbox.com/scl/fi/fh9vsmmm8vu0j50l3ss38/llama2_eval_qr_dataset.json?rlkey=kkoaez7aqeb4z25gzc06ak6kb&dl=1",
-    eval_json: Optional[Dict] = None,
-) -> Tuple[List[Document], List[str], List[str]]:
+def obtain_rag_inputs() -> Tuple[List[Document], List[str], List[str]]:
     """
     Obtain the necessary inputs for RAG experiments.
 
-    This function downloads and processes the specified PDF and evaluation dataset,
-    or uses a provided JSON for evaluation.
-
-    Args:
-        pdf_url (str): URL of the PDF to be used as the document source.
-        eval_dataset_url (str): URL of the evaluation dataset in JSON format (used if eval_json is None).
-        eval_json (Optional[Dict]): JSON containing evaluation questions and answers (if provided, eval_dataset_url is ignored).
+    This function downloads and processes the Llama 2 paper and evaluation dataset.
 
     Returns:
         Tuple[List[Document], List[str], List[str]]: A tuple containing:
-            - docs: List of Document objects representing the downloaded PDF.
+            - docs: List of Document objects representing the Llama 2 paper.
             - eval_qs: List of evaluation questions.
             - ref_response_strs: List of reference responses for evaluation.
     """
     CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # Obtain RAG inputs: docs, eval_qs, and ref_response_strs
     data_dir = Path(f"{CURRENT_FILE_DIR}/data")
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download and process PDF
-    pdf_filename = pdf_url.split("/")[-1]
-    pdf_path = data_dir / pdf_filename
+    llama2_pdf_path = data_dir / "llama2.pdf"
+    llama2_eval_qr_dataset_path = data_dir / "llama2_eval_qr_dataset.json"
 
-    if not pdf_path.exists():
-        download_file(pdf_url, pdf_path)
+    if not llama2_pdf_path.exists():
+        download_file("https://arxiv.org/pdf/2307.09288.pdf", llama2_pdf_path)
     loader = PDFReader()
-    docs0 = loader.load_data(file=pdf_path)
+    docs0 = loader.load_data(file=llama2_pdf_path)
     doc_text = "\n\n".join([d.get_content() for d in docs0])
     docs = [Document(text=doc_text)]
 
-    # Process evaluation data
-    if eval_json is not None:
-        # Use provided JSON for evaluation
-        eval_qs = list(eval_json["queries"].values())
-        ref_response_strs = list(eval_json["responses"].values())
-    else:
-        # Download and process evaluation dataset from URL
-        dataset_filename = eval_dataset_url.split("/")[-1].split("?")[
-            0
-        ]  # Remove query parameters
-        dataset_path = data_dir / dataset_filename
-
-        if not dataset_path.exists():
-            download_file(eval_dataset_url, dataset_path)
-        eval_dataset = QueryResponseDataset.from_json(dataset_path)
-        eval_qs = eval_dataset.questions
-        ref_response_strs = [r for (_, r) in eval_dataset.qr_pairs]
+    if not llama2_eval_qr_dataset_path.exists():
+        download_file(
+            "https://www.dropbox.com/scl/fi/fh9vsmmm8vu0j50l3ss38/llama2_eval_qr_dataset.json?rlkey=kkoaez7aqeb4z25gzc06ak6kb&dl=1",
+            llama2_eval_qr_dataset_path,
+        )
+    eval_dataset = QueryResponseDataset.from_json(llama2_eval_qr_dataset_path)
+    eval_qs = eval_dataset.questions
+    ref_response_strs = [r for (_, r) in eval_dataset.qr_pairs]
 
     return docs, eval_qs, ref_response_strs
 
