@@ -125,7 +125,7 @@ class TogetherAIModel(Model):
         model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-        """Set Sagemaker model"""
+        """Set Together.AI model"""
         super()._set_model(**kwargs)
         self.llm = TogetherLLM(
             model=self.model,
@@ -135,9 +135,7 @@ class TogetherAIModel(Model):
         )
 
     def run(self, **kwargs) -> CompletionResponse:
-        """Run Sagemaker model"""
-        # Sagemaker accepts hyperparameter values within
-        # the `model_kwargs` field.
+        """Run Together.AI model"""
         self._set_model(
             temperature=kwargs["parameters"].get("temperature", None),
             model_kwargs=kwargs["parameters"],
@@ -172,6 +170,7 @@ class OpenAIModel(Model):
 
     def _set_model(self, **kwargs):
         """Set OpenAI model"""
+        super()._set_model(**kwargs)
         openai.api_key = self.api_keys["OPENAI_API_KEY"]
         self.llm = OpenAI(
             model=self.model,
@@ -180,12 +179,15 @@ class OpenAIModel(Model):
 
     def run(self, **kwargs) -> CompletionResponse:
         """Run OpenAI model"""
+        self._set_model(**kwargs)
         if "temperature" in kwargs["parameters"]:
             self.llm = OpenAI(
                 model=kwargs.get("model", DEFAULT_OPENAI_MODEL),
                 api_key=self.api_keys["OPENAI_API_KEY"],
                 temperature=kwargs["parameters"].get("temperature", None),
             )
+        else:
+            self._set_model(**kwargs)
         return self.llm.complete(
             prompt=kwargs["prompt"],
             **kwargs["parameters"],

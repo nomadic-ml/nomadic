@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 import traceback
-from typing import Any, Dict, List, Optional, Callable, Union, Tuple
+from typing import Any, Dict, List, Optional, Callable, Set, Union, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from llama_index.core.evaluation import BaseEvaluator
@@ -71,8 +71,8 @@ class ExperimentMode(Enum):
 class Experiment(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    param_dict: Optional[Dict[str, Any]] = Field(
-        default={}, description="A dictionary of parameters to iterate over."
+    params: Optional[Set[str]] = Field(
+        default=set(), description="The set parameters to tune in experiment runs."
     )
     evaluation_dataset: Optional[List[Dict]] = Field(
         default=list({}),
@@ -179,7 +179,7 @@ class Experiment(BaseModel):
             if nomadic_client.auto_sync_enabled:
                 nomadic_client.experiments.register(self)
 
-    def run(self) -> ExperimentResult:
+    def run(self, param_dict: Dict[str, Any]) -> ExperimentResult:
         def _get_responses(
             type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]]
         ) -> Tuple[List[str], List[str], List[str], List[str]]:
@@ -311,17 +311,14 @@ class Experiment(BaseModel):
         is_error = False
         self.experiment_status = ExperimentStatus("running")
         self.start_datetime = datetime.now()
-        result = None
+        experiment_result: ExperimentResult = None
         try:
-            # if self.enable_logging:
-            #     print("Setting up client...")
-            #     self._setup_client()
             if self.enable_logging:
                 print("Setting up tuner...")
-            self._setup_tuner(_default_param_function)
+            self._setup_tuner(param_dict, _default_param_function)
             if self.enable_logging:
                 print("Starting experiment...")
-            result = self.tuner.fit()
+            experiment_result = self.tuner.fit()
         except Exception as e:
             is_error = True
             self.experiment_status_message = self._format_error_message(e)
@@ -330,7 +327,9 @@ class Experiment(BaseModel):
 
         self.end_datetime = datetime.now()
         self.experiment_status = self._determine_experiment_status(is_error)
-        self.experiment_result = result or self._create_default_experiment_result()
+        self.experiment_result = (
+            experiment_result or self._create_default_experiment_result(param_dict)
+        )
         if self.enable_logging:
             print(f"\nExperiment completed. Status: {self.experiment_status}")
         nomadic_client: NomadicClient = get_client()
@@ -431,7 +430,7 @@ class Experiment(BaseModel):
 
         return sum(scores) / len(scores) if scores else 0
 
-    def _setup_tuner(self, param_function: Callable):
+    def _setup_tuner(self, param_dict: Dict[str, Any], param_function: Callable):
         if not self.tuner:
             if self.enable_logging:
                 print("\nSetting up tuner...")
@@ -440,7 +439,7 @@ class Experiment(BaseModel):
 
                 self.tuner = FlamlParamTuner(
                     param_fn=param_function,
-                    param_dict=self.param_dict,
+                    param_dict=param_dict,
                     search_method=self.search_method,
                     fixed_param_dict=self.fixed_param_dict,
                     current_param_dict=self.current_param_dict,
@@ -454,7 +453,7 @@ class Experiment(BaseModel):
 
                 # Convert param_dict to Ray Tune format
                 ray_param_dict = {}
-                for param, value in self.param_dict.items():
+                for param, value in param_dict.items():
                     if isinstance(value, list):
                         ray_param_dict[param] = ray_tune.choice(value)
                     else:
@@ -473,10 +472,10 @@ class Experiment(BaseModel):
                     "Only FLAML and Ray Tune are supported as tuning backends."
                 )
 
+        if param_dict:
+            self.tuner.param_dict = param_dict
         if self.param_fn:
             self.tuner.param_fn = self.param_fn
-        if self.param_dict:
-            self.tuner.param_dict = self.param_dict
         if self.fixed_param_dict:
             self.tuner.fixed_param_dict = self.fixed_param_dict
         if self.results_filepath:
@@ -493,9 +492,12 @@ class Experiment(BaseModel):
             else ExperimentStatus("finished_error")
         )
 
-    def _create_default_experiment_result(self) -> ExperimentResult:
+    def _create_default_experiment_result(
+        self, param_dict: Dict[str, Any]
+    ) -> ExperimentResult:
         return ExperimentResult(
-            run_results=[RunResult(score=-1, params={}, metadata={})]
+            hp_search_space=param_dict,
+            run_results=[RunResult(score=-1, params={}, metadata={})],
         )
 
     def save_experiment(self, folder_path: Path):
@@ -505,8 +507,8 @@ class Experiment(BaseModel):
         with open(folder_path + file_name, "w") as file:
             file.write(self.model_dump_json(exclude=("model", "evaluator")))
 
-    def visualize_results(self, tuned_result, graphs_to_include=None):
-        if not tuned_result or not tuned_result.run_results:
+    def visualize_results(self, experiment_result, graphs_to_include=None):
+        if not experiment_result or not experiment_result.run_results:
             if self.enable_logging:
                 print("No results to visualize.")
             return
@@ -522,7 +524,7 @@ class Experiment(BaseModel):
             ]
 
         # Extract data from experiment results
-        data = self._extract_data_from_results(tuned_result)
+        data = self._extract_data_from_results(experiment_result)
 
         # Create and clean DataFrame
         df = self._create_and_clean_dataframe(data)
@@ -552,14 +554,14 @@ class Experiment(BaseModel):
             self._create_correlation_heatmap(df, numeric_cols)
 
         if "parameter_combination_heatmap" in graphs_to_include:
-            self._create_parameter_combination_heatmap(df, data["all_metric_scores"])
+            self._create_parameter_combination_heatmap(experiment_result)
 
-    def _extract_data_from_results(self, tuned_result):
+    def _extract_data_from_results(self, experiment_result):
         all_scores = []
         all_params = []
         all_metric_scores = {}
 
-        for run in tuned_result.run_results:
+        for run in experiment_result.run_results:
             metadata = run.metadata
             all_scores.append(run.score)
             all_params.append(metadata.get("Prompt Parameters", {}))
@@ -629,8 +631,8 @@ class Experiment(BaseModel):
         plt.title("Correlation Heatmap of Numeric Parameters and Scores")
         plt.show()
 
-    def _create_parameter_combination_heatmap(self, tuned_result):
-        run_results = tuned_result.run_results
+    def _create_parameter_combination_heatmap(self, experiment_result):
+        run_results = experiment_result.run_results
 
         data = []
         param_names = set()
@@ -734,12 +736,12 @@ class Experiment(BaseModel):
 
         return grouped_df
 
-    def test_significance(self, tuned_result: ExperimentResult, n: int = 5):
-        if not tuned_result or not tuned_result.run_results:
+    def test_significance(self, experiment_result: ExperimentResult, n: int = 5):
+        if not experiment_result or not experiment_result.run_results:
             print("No results to test for significance.")
             return
 
-        scores = [run.score for run in tuned_result.run_results]
+        scores = [run.score for run in experiment_result.run_results]
         sorted_scores = sorted(scores, reverse=True)
 
         if len(sorted_scores) <= n:
@@ -806,10 +808,14 @@ class Experiment(BaseModel):
         return wrap(text, width)
 
     def create_run_results_table(
-        self, tuned_result, max_rows=None, max_prompt_length=100, max_answer_length=500
+        self,
+        experiment_result,
+        max_rows=None,
+        max_prompt_length=100,
+        max_answer_length=500,
     ):
         data = []
-        for run_result in tuned_result.run_results:
+        for run_result in experiment_result.run_results:
             row = {
                 "Score": f"{run_result.score:.2f}",
                 "Full Prompt": self._wrap_text(

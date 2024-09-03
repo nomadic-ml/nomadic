@@ -22,6 +22,9 @@ class RunResult(BaseModel):
 
 
 class ExperimentResult(BaseModel):
+    hp_search_space: Dict[str, Any] = Field(
+        default=dict(), description="Hyperparameter search space of ExperimentResult"
+    )
     run_results: List[RunResult]
     metadata: Optional[Dict[str, Any]] = Field(default={}, description="Metadata")
     best_idx: Optional[int] = Field(

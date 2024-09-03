@@ -71,7 +71,7 @@ class Experiments(APIResource):
             "evaluation_dataset": experiment.evaluation_dataset[0],
             "evaluation_metric": get_evaluation_metric(),
             # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
-            "hyperparameters": [param for param in experiment.param_dict.keys()],
+            "hyperparameters": list(experiment.params),
             "model_registration_id": experiment.model.client_id,
         }
 
@@ -113,7 +113,7 @@ class Experiments(APIResource):
             "evaluation_dataset": experiment.evaluation_dataset[0],
             "evaluation_metric": get_evaluation_metric(),
             # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
-            "hyperparameters": [param for param in experiment.param_dict.keys()],
+            "hyperparameters": list(experiment.params),
             "model_registration_id": experiment.model.client_id,
         }
         response = self._client.request(
@@ -136,9 +136,6 @@ class Experiments(APIResource):
     def _to_experiment(self, resp_data: dict) -> Experiment:
         evaluator = get_evaluator(resp_data.get("evaluation_metric"))
 
-        # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
-        param_dict = {key: None for key in resp_data.get("hyperparameters", [])}
-
         # Get model of experiment
         try:
             model = self._client.models.load(resp_data.get("model_registration_id"))
@@ -150,7 +147,7 @@ class Experiments(APIResource):
 
         return Experiment(
             name=resp_data.get("name"),
-            param_dict=param_dict,
+            params=set(resp_data.get("hyperparameters")),
             evaluation_dataset=[resp_data.get("evaluation_dataset")],
             evaluator=evaluator,
             model=model,

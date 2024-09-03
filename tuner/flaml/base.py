@@ -87,4 +87,4 @@ class FlamlParamTuner(BaseParamTuner):
                     metadata=trial.last_result["metadata"],
                 )
             )
-        return ExperimentResult(run_results=run_results)
+        return ExperimentResult(hp_search_space=param_dict, run_results=run_results)

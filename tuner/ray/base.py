@@ -150,4 +150,6 @@ class RayTuneParamTuner(BaseParamTuner):
                     )
                 )
 
-        return ExperimentResult(run_results=all_run_results)
+        return ExperimentResult(
+            hp_search_space=self.param_dict, run_results=all_run_results
+        )

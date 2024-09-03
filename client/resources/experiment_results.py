@@ -32,7 +32,7 @@ class ExperimentResults(APIResource):
             "overall_score": experiment_result.best_run_result.score,
             "hyperparameters": {
                 hp_name: val.categories
-                for hp_name, val in experiment.param_dict.items()
+                for hp_name, val in experiment_result.hp_search_space.items()
                 if hasattr(val, "categories")
             },
             "results": {
@@ -93,6 +93,7 @@ class ExperimentResults(APIResource):
             else []
         )
         return ExperimentResult(
+            hp_search_space=resp_data.get("hyperparameters"),
             run_results=run_results,
             best_idx=(
                 resp_data.get("results").get("best_idx", 0)

@@ -151,12 +151,12 @@ def obtain_rag_inputs(
     return docs, eval_qs, ref_response_strs
 
 
-def run_rag_pipeline(params_dict: Dict[str, Any], evaluator: Any = None) -> RunResult:
+def run_rag_pipeline(param_dict: Dict[str, Any], evaluator: Any = None) -> RunResult:
     """
     Run the RAG pipeline with the given parameters and evaluator.
 
     Args:
-        params_dict (Dict[str, Any]): A dictionary containing pipeline parameters.
+        param_dict (Dict[str, Any]): A dictionary containing pipeline parameters.
         evaluator (Any, optional): The evaluator to use for assessing responses.
                                    If None, SemanticSimilarityEvaluator is used.
 
@@ -179,28 +179,26 @@ def run_rag_pipeline(params_dict: Dict[str, Any], evaluator: Any = None) -> RunR
 
     # Check for required parameters
     for param in required_params:
-        if param not in params_dict:
-            raise ValueError(
-                f"Required parameter '{param}' is missing from params_dict"
-            )
+        if param not in param_dict:
+            raise ValueError(f"Required parameter '{param}' is missing from param_dict")
 
     # Merge default parameters with provided parameters
     for key, value in default_params.items():
-        if key not in params_dict:
-            params_dict[key] = value
+        if key not in param_dict:
+            param_dict[key] = value
 
     # Extract parameters
-    chunk_size = params_dict["chunk_size"]
-    docs = params_dict["docs"]
-    top_k = params_dict["top_k"]
-    eval_qs = params_dict["eval_qs"]
-    ref_response_strs = params_dict["ref_response_strs"]
-    overlap = params_dict["overlap"]
-    similarity_threshold = params_dict["similarity_threshold"]
-    max_tokens = params_dict["max_tokens"]
-    temperature = params_dict["temperature"]
-    model_name = params_dict["model_name"]
-    embedding_model = params_dict["embedding_model"]
+    chunk_size = param_dict["chunk_size"]
+    docs = param_dict["docs"]
+    top_k = param_dict["top_k"]
+    eval_qs = param_dict["eval_qs"]
+    ref_response_strs = param_dict["ref_response_strs"]
+    overlap = param_dict["overlap"]
+    similarity_threshold = param_dict["similarity_threshold"]
+    max_tokens = param_dict["max_tokens"]
+    temperature = param_dict["temperature"]
+    model_name = param_dict["model_name"]
+    embedding_model = param_dict["embedding_model"]
 
     # Use SemanticSimilarityEvaluator if no evaluator is provided
     if evaluator is None:
@@ -238,6 +236,6 @@ def run_rag_pipeline(params_dict: Dict[str, Any], evaluator: Any = None) -> RunR
 
     return RunResult(
         score=mean_score,
-        params=params_dict,
+        params=param_dict,
         metadata={"pred_responses": pred_responses},
     )
