@@ -6,7 +6,7 @@ from nomadic.model import Model, OpenAIModel, TogetherAIModel, SagemakerModel
 
 class Models(APIResource):
     def load(self, id: str) -> Optional[Model]:
-        if id is None:
+        if id is None or id == "-1":
             return None
         resp_data = self._client.request("GET", f"/models/registrations/{id}")
         if not resp_data:

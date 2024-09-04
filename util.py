@@ -1,3 +1,4 @@
+import json
 from typing import Iterable, List, Type
 
 import ast
@@ -6,7 +7,6 @@ import time
 import pickle
 from pathlib import Path
 
-from nomadic.result.base import ExperimentResult
 from pydantic import BaseModel
 
 
@@ -47,9 +47,7 @@ def execute_bash_command(command: str) -> str:
         return f"An error occurred: {e.stderr}"
 
 
-def save_experiment_result_to_local(
-    experiment_result: ExperimentResult, sample_name, evals_folder_path
-):
+def save_experiment_result_to_local(experiment_result, sample_name, evals_folder_path):
     current_time = int(time.time())
     path = Path(f"{evals_folder_path}/{sample_name}")
     path.mkdir(parents=True, exist_ok=True)
@@ -57,7 +55,7 @@ def save_experiment_result_to_local(
         pickle.dump(experiment_result, picklefile)
 
 
-def read_serialized_tuned_result(pickled_file_path: str) -> ExperimentResult:
+def read_serialized_tuned_result(pickled_file_path: str):
     with open(pickled_file_path, "rb") as pickled_file:
         file_contents = pickle.load(pickled_file)
     return file_contents
@@ -82,3 +80,11 @@ def is_ray_installed() -> bool:
         return False
     else:
         return True
+
+
+def is_json_serializable(obj):
+    try:
+        json.dumps(obj)
+        return True
+    except (TypeError, OverflowError):
+        return False

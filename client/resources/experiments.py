@@ -1,12 +1,15 @@
 from typing import List, Optional
 from nomadic.client.resources import APIResource
-from nomadic.client.resources.experiment_results import ExperimentResults
-from nomadic.client.resources.models import Models
+from nomadic.client.resources.utils import (
+    convert_null_to_none,
+    deserialize_data,
+    serialize_data,
+)
 from nomadic.experiment import Experiment
 
-from nomadic.experiment import ExperimentStatus
-from nomadic.model import Model, OpenAIModel
+from nomadic.model import Model
 from nomadic.result import ExperimentResult
+from nomadic.util import is_json_serializable
 
 
 class Experiments(APIResource):
@@ -35,22 +38,23 @@ class Experiments(APIResource):
 
     def register(self, experiment: Experiment):
         # Upload experiment & experiment results
-        model = experiment.model
         # If provided model is None, use a placeholder model to mark.
-        if not model:
-            model = Model(
+        if not experiment.model:
+            experiment.model = Model(
                 name="Placeholder model - No model provided",
                 api_keys={},
-                client_id=None,
+                client_id="-1",  # Indicator to not register placeholder model
             )
         # If a model is provided, but that model doesn't exist in the database:
         #   1. Try registering model, then registering experiment.
         #   2. If registration of model fails, use placeholder model.
         else:
             try:
-                model_from_db = self._client.models.load(model.client_id)
+                model_from_db = self._client.models.load(experiment.model.client_id)
                 if model_from_db is None:
-                    model_registration_resp = self._client.models.register(model)
+                    model_registration_resp = self._client.models.register(
+                        experiment.model
+                    )
                     if model_registration_resp is None:
                         raise Exception
                     else:
@@ -58,22 +62,11 @@ class Experiments(APIResource):
                             "Registered model for an experiment that wasn't stored in database"
                         )
             except Exception as e:
-                model = Model(
+                experiment.model = Model(
                     name="Placeholder model - Provided model couldn't be registered",
                     api_keys={},
-                    client_id=None,
+                    client_id="-1",
                 )
-
-        upload_data = {
-            "name": experiment.name,
-            "config": None,
-            # TODO: Address evaluation_dataset type of nomadic.Experiment.evaluation_dataset as Dict on webapp and not List[Dict]
-            "evaluation_dataset": experiment.evaluation_dataset[0],
-            "evaluation_metric": get_evaluation_metric(),
-            # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
-            "hyperparameters": list(experiment.params),
-            "model_registration_id": experiment.model.client_id,
-        }
 
         # Check if experiment is already registered:
         #   If already registered, check if an update to the registered experiment is required:
@@ -86,7 +79,9 @@ class Experiments(APIResource):
             if not experiment_from_client or experiment != experiment_from_client:
                 method = "PUT" if experiment_from_client else "POST"
                 response = self._client.request(
-                    method, f"/experiments/{experiment.client_id}", json=upload_data
+                    method,
+                    f"/experiments/{experiment.client_id}",
+                    json=self._to_json(experiment),
                 )
                 if not experiment_from_client:
                     experiment.client_id = response["id"]
@@ -94,7 +89,7 @@ class Experiments(APIResource):
             response = self._client.request(
                 "POST",
                 "/experiments",
-                json=upload_data,
+                json=self._to_json(experiment),
             )
             experiment.client_id = response["id"]
 
@@ -106,18 +101,10 @@ class Experiments(APIResource):
         return response
 
     def update(self, experiment: Experiment):
-        upload_data = {
-            "name": experiment.name,
-            "config": None,
-            # TODO: Address evaluation_dataset type of nomadic.Experiment.evaluation_dataset as Dict on webapp and not List[Dict]
-            "evaluation_dataset": experiment.evaluation_dataset[0],
-            "evaluation_metric": get_evaluation_metric(),
-            # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
-            "hyperparameters": list(experiment.params),
-            "model_registration_id": experiment.model.client_id,
-        }
         response = self._client.request(
-            "POST", f"/experiments/{experiment.client_id}", json=upload_data
+            "POST",
+            f"/experiments/{experiment.client_id}",
+            json=self._to_json(experiment),
         )
         return response
 
@@ -133,8 +120,55 @@ class Experiments(APIResource):
         experiment.client_id = None
         return response
 
+    def _to_json(self, experiment: Experiment) -> dict:
+        upload_data = {
+            "name": experiment.name,
+            "config": None,
+            # TODO: Address evaluation_dataset type of nomadic.Experiment.evaluation_dataset as Dict on webapp and not List[Dict]
+            "evaluation_dataset": (
+                experiment.evaluation_dataset[0]
+                if experiment.evaluation_dataset
+                else {}
+            ),
+            "evaluation_metric": get_evaluation_metric(),
+            # TODO: Decide how to store and deal with hyperparameter search spaces on the Workspace vs. SDK.
+            "hyperparameters": list(experiment.params),
+            "model_registration_id": (
+                experiment.model.client_id
+                if experiment.model.client_id != "-1"
+                else None
+            ),
+            "config": {
+                "fixed_param_dict": (
+                    experiment.fixed_param_dict
+                    if is_json_serializable(experiment.fixed_param_dict)
+                    else None
+                ),
+                "current_param_dict": experiment.current_param_dict,
+                "search_method": experiment.search_method,
+                "user_prompt_request": experiment.user_prompt_request,
+                "start_datetime": serialize_data(experiment.start_datetime),
+                "end_datetime": serialize_data(experiment.end_datetime),
+                "experiment_status": experiment.experiment_status,
+                "experiment_status_message": experiment.experiment_status_message,
+                "num_samples": experiment.num_samples,
+                "use_flaml_library": experiment.use_flaml_library,
+                "use_ray_backend": experiment.use_ray_backend,
+            },
+        }
+        return upload_data
+
     def _to_experiment(self, resp_data: dict) -> Experiment:
         evaluator = get_evaluator(resp_data.get("evaluation_metric"))
+        if resp_data.get("evaluation_dataset"):
+            evaluation_dataset = [resp_data.get("evaluation_dataset")]
+        else:
+            evaluation_dataset = None
+        raw_config = resp_data.get("config", {}) or {}
+        config_data = convert_null_to_none(raw_config)
+        for datetime_var in ("start_datetime", "end_datetime"):
+            if datetime_var in config_data and config_data[datetime_var] is not None:
+                config_data[datetime_var] = deserialize_data(config_data[datetime_var])
 
         # Get model of experiment
         try:
@@ -148,15 +182,14 @@ class Experiments(APIResource):
         return Experiment(
             name=resp_data.get("name"),
             params=set(resp_data.get("hyperparameters")),
-            evaluation_dataset=[resp_data.get("evaluation_dataset")],
+            evaluation_dataset=evaluation_dataset,
             evaluator=evaluator,
             model=model,
-            start_datetime=resp_data.get("created_at"),
-            experiment_status=ExperimentStatus.not_started,
             client_id=resp_data.get("id"),
             all_experiment_results=self._client.experiment_results.list(
                 resp_data.get("id")
             ),
+            **config_data,
         )
 
 

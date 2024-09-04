@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 import pandas as pd
 
-from nomadic.client import NomadicClient, get_client
+from nomadic.util import is_json_serializable
 
 
 class RunResult(BaseModel):
@@ -16,9 +16,21 @@ class RunResult(BaseModel):
     )
 
     def get_json(self):
+        params_to_serialize = self.params.copy()
+        for key, value in params_to_serialize.items():
+            if not is_json_serializable(value):
+                params_to_serialize[key] = "Redacted for serialization"
+        metadata_to_serialize = self.metadata.copy()
+        for key, value in metadata_to_serialize.items():
+            if not is_json_serializable(value):
+                metadata_to_serialize[key] = "Redacted for serialization"
         # TODO: Fix LlamaIndex's `EvaluationResult` object not giving JSON with model_dump_json
         # that exists as a key to the 'Custom Evaluator Results' key of metadata
-        return {"score": self.score, "params": self.params, "metadata": self.metadata}
+        return {
+            "score": self.score,
+            "params": params_to_serialize,
+            "metadata": metadata_to_serialize,
+        }
 
 
 class ExperimentResult(BaseModel):

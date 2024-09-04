@@ -55,14 +55,14 @@ def retry_with_exponential_backoff(
     return decorator
 
 
-class ExperimentStatus(Enum):
+class ExperimentStatus(str, Enum):
     not_started = "not_started"
     running = "running"
     finished_success = "finished_success"
     finished_error = "finished_error"
 
 
-class ExperimentMode(Enum):
+class ExperimentMode(str, Enum):
     train = "training"
     fine_tune = "fine_tuning"
     inference = "inference"
@@ -75,7 +75,7 @@ class Experiment(BaseModel):
         default=set(), description="The set parameters to tune in experiment runs."
     )
     evaluation_dataset: Optional[List[Dict]] = Field(
-        default=list({}),
+        default=None,
         description="Evaluation dataset in dictionary format.",
     )
     param_fn: Optional[Callable[[Dict[str, Any]], Any]] = Field(
@@ -87,10 +87,6 @@ class Experiment(BaseModel):
         description="Evaluator of experiment (BaseEvaluator instance, callable, or dictionary)",
     )
     tuner: Optional[Any] = Field(default=None, description="Base Tuner")
-    prompts: Optional[List[str]] = Field(
-        default=PromptTuner(enable_logging=False),
-        description="Optional list of prompts to use in the experiment.",
-    )
     fixed_param_dict: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Optional dictionary of fixed hyperparameter values.",
@@ -125,17 +121,9 @@ class Experiment(BaseModel):
         default=True,
         description="Flag to enable or disable print logging.",
     )
-    prompt_tuner: Optional[PromptTuner] = Field(
-        default=None,
-        description="PromptTuner instance for generating prompt variants.",
-    )
     user_prompt_request: Optional[str] = Field(
         default="",
         description="User request for GPT prompt.",
-    )
-    num_example_prompts: Optional[int] = Field(
-        default=0,
-        description="Number of example prompts to include for few-shot prompting.",
     )
     num_samples: Optional[int] = Field(
         default=-1,
@@ -152,7 +140,7 @@ class Experiment(BaseModel):
     results_filepath: Optional[str] = Field(
         default=None, description="Path of outputting tuner run results."
     )
-    name: Optional[str] = Field(default=None, description="Name of experiment")
+    name: str = Field(default="my experiment", description="Name of experiment")
     client_id: Optional[str] = Field(
         default=None, description="ID of Experiment in Workspace"
     )

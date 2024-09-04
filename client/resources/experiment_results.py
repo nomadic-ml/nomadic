@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 from nomadic.client.resources import APIResource
-from nomadic.experiment import Experiment, ExperimentStatus
+from nomadic.experiment import Experiment
 from nomadic.result import ExperimentResult, RunResult
 
 
