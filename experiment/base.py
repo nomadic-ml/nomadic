@@ -195,13 +195,13 @@ class Experiment(BaseModel):
             # Initialize PromptTuner with the current parameters
             prompt_tuner = PromptTuner(
                 prompting_approaches=[
-                    prompt_tuning_params.get("prompt_tuning_approach", "zero-shot")
+                    prompt_tuning_params.get("prompt_tuning_approach", "None")
                 ],
                 prompt_complexities=[
-                    prompt_tuning_params.get("prompt_tuning_complexity", "simple")
+                    prompt_tuning_params.get("prompt_tuning_complexity", "None")
                 ],
                 prompt_focuses=[
-                    prompt_tuning_params.get("prompt_tuning_focus", "fact extraction")
+                    prompt_tuning_params.get("prompt_tuning_focus", "None")
                 ],
                 enable_logging=self.enable_logging,
             )

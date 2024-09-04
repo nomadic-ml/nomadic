@@ -11,19 +11,23 @@ from openai import OpenAI
 import re
 import time
 
+from typing import List, Optional
+from pydantic import BaseModel, Field
+from openai import OpenAI
+
 
 class PromptTuner(BaseModel):
     prompting_approaches: List[str] = Field(
-        default=["zero-shot", "few-shot", "chain-of-thought"],
-        description="List of prompting approaches to use.",
+        default=["None"],  # Default to ['None'] to indicate no tuning
+        description="List of prompting approaches to use. If ['None'], no tuning is applied.",
     )
     prompt_complexities: List[str] = Field(
-        default=["simple", "complex"],
-        description="List of prompt complexities to use.",
+        default=["None"],  # Default to ['None'] to indicate no tuning
+        description="List of prompt complexities to use. If ['None'], no tuning is applied.",
     )
     prompt_focuses: List[str] = Field(
-        default=["fact extraction", "action points"],
-        description="List of prompt focuses to use.",
+        default=["None"],  # Default to ['None'] to indicate no tuning
+        description="List of prompt focuses to use. If ['None'], no tuning is applied.",
     )
     enable_logging: bool = Field(
         default=True,
@@ -36,9 +40,22 @@ class PromptTuner(BaseModel):
         if not api_key:
             raise ValueError("OpenAI API key is required for prompt tuning.")
 
+        # Check for ['None'] values and return the normal prompt if any parameter is ['None']
+        if (
+            self.prompting_approaches == ["None"]
+            or self.prompt_complexities == ["None"]
+            or self.prompt_focuses == ["None"]
+        ):
+            if self.enable_logging:
+                print(
+                    "One or more prompt tuning parameters are set to ['None']. Returning the normal prompt."
+                )
+            return [user_prompt_request]  # Return normal prompt without tuning
+
         client = OpenAI(api_key=api_key)
         prompt_variants = []
 
+        # Original code for generating prompt variants
         for approach in self.prompting_approaches:
             for complexity in self.prompt_complexities:
                 for focus in self.prompt_focuses:
@@ -88,6 +105,10 @@ class PromptTuner(BaseModel):
     def _create_system_message(
         self, user_prompt_request: str, approach: str, complexity: str, focus: str
     ) -> str:
+        # If any of the parameters are 'None', return a default system message
+        if approach == "None" or complexity == "None" or focus == "None":
+            return "Standard prompt without tuning."
+
         base_message = f"""
         You are an AI assistant specialized in generating concise prompts.
         Generate a prompt based on these parameters:
@@ -128,8 +149,12 @@ class PromptTuner(BaseModel):
         )
 
     def _generate_examples(
-        self, client: OpenAI, user_prompt_request: str, complexity: str, focus: str
-    ) -> List[Dict[str, str]]:
+        self,
+        client,
+        user_prompt_request: str,
+        complexity: Optional[str],
+        focus: Optional[str],
+    ) -> List[str]:
         system_message = f"""
         Generate 3 concise input-output pairs for few-shot learning.
         Tailor examples to these parameters:
@@ -144,6 +169,8 @@ class PromptTuner(BaseModel):
 
         Ensure answers match input length.
         """
+        if complexity is None or focus is None:
+            return []
 
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -168,10 +195,13 @@ class PromptTuner(BaseModel):
 
         return examples
 
-    def _incorporate_examples(self, prompt: str, examples: List[Dict[str, str]]) -> str:
+    def _incorporate_examples(self, generated_prompt: str, examples: List[str]) -> str:
+        # Handle empty examples list
+        if not examples:
+            return generated_prompt
         for i, example in enumerate(examples, 1):
             example_text = f"Example {i}:\nInput: {example['input']}\nOutput: {example['output']}\n\n"
-            prompt = prompt.replace(f"[EXAMPLE_{i}]", example_text)
+            prompt = generated_prompt.replace(f"[EXAMPLE_{i}]", example_text)
         return prompt
 
     def update_params(self, params: Dict[str, Any]):
