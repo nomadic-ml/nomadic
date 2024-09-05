@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Nomadic is an enterprise-grade toolkit focused on parameter search for ML teams to continuously optimize AI systems, from pre to post-production. Rapidly experiment and keep hyperparameters, prompts, and all aspects of your system production-ready. Teams use Nomadic to deeply understand their AI system's best levers to boost performance as it scales.
+  Nomadic is an enterprise-grade toolkit focused on parameter search for ML teams to continuously optimize compound AI systems, from pre to post-production. Rapidly experiment and keep hyperparameters, prompts, and all aspects of your system production-ready. Teams use Nomadic to deeply understand their AI system's best levers to boost performance as it scales.
 </p>
 
 <p align="center">
