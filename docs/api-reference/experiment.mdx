@@ -1,0 +1,146 @@
+---
+title: 'Experiment'
+description: 'Creating Nomadic Experiments'
+---
+
+## Overview
+
+An `Experiment` specifies one setting of a problem: evaluating performance of a particular configuration of models, hyperparameters, search methods for those hyperparameters, prompt, and datasets.
+Running Experiments is a systematic way to measure the performance of your system across Runs.
+
+There are two ways to create an Experiment:
+1. Through the Python SDK by invoking `nomadic.experiment(...)` as noted in the [Example Usage](#example-usage), and
+2. Through the [Nomadic Workspace](https://app.nomadicml.com/dashboard/experiments/create), under "Experiments --> `+` (on the top right section)".
+
+## Evaluators
+Specify your evaluator to assess the LLM system in two ways.
+
+### Option 1: Specify the model, evaluator, and evaluation dataset
+Provide the `model`, `evaluator`, and `evaluation_dataset` parameters and inputs to the `nomadic.Experiment` class.
+
+This is recommended if you plan to use:
+
+* **Evaluator**:
+    * An evaluator supported through LlamaIndex's `BaseEvaluator`, or
+    * An evaluator for prompt tuning, by defining a `custom_evaluator` dict and your own weights of metrics, and an LLM-as-a-judge evaluates the produced scores as the weighted result.
+* **Model**: A model supported through LlamaIndex's `BaseLLM` classes.
+
+### Option 2: Define your own custom evaluation function
+`param_fn` is an objective function provides the most flexibility for you to specify custom params, success metrics, or your own model definitions.
+
+This is recommended if you plan to use models or evaluators that are not supported by LlamaIndex, or if you are doing prompt tuning.
+
+See the [Cookbooks](https://docs.nomadicml.com/get-started/cookbooks) for full examples. To define your own objective function, provide the following parameters to the `nomadic.Experiment` class.:
+* `param_fn`: Your defined function to score the LLM.
+* `params`: Your set of hyperparameters to iterate over during the experiment.
+    * Optionally, provide `fixed_param_dict` to fix certain hyperparameters during the experiment.
+    * Optionally, provide `current_param_dict` to compare your current parameter settings with the settings explored during the experiment.  Specified `current_param_dict` settings are included in experiment results.
+* `model`, `evaluator`, and `evaluation_dataset` are not required.
+
+## Fields (`Experiment` class)
+
+
+| Parameter                | Type                                                        | Default                 | Description                                                                                                         | Required |
+|--------------------------|-------------------------------------------------------------|-------------------------|---------------------------------------------------------------------------------------------------------------------|----------|
+| `params`                 | `Set[str]`                                                  | `N/a`                   | A set of hyperparameters to iterate over during the experiment.                                                   | Yes      |
+| `evaluation_dataset`     | `Optional[List[Dict]]`                                      | `[{}]`                  | Evaluation dataset in dictionary format.                                                                            | No       |
+| `param_fn`               | `Optional[Callable[[Dict[str, Any]], Any]]`                 | `None`                  | The objective function that scores the LLM system being optimized on the specified parameters.                                                                                    | No       |
+| `model`                  | `Optional[Model]`                                           | `None`                  | Model to run the experiment.                                                                                        | No      |
+| `evaluator`              | `Optional[Union[BaseEvaluator, Callable, Dict[str, Any]]]`  | `None`                  | Evaluator of the experiment (can be a LlamaIndex `BaseEvaluator`).                           | No       |
+| `tuner`                  | `Optional[BaseParamTuner]`                                             | `None`                  | Instance of a tuner class for hyperparameter tuning.                                                                | No       |
+| `fixed_param_dict`       | `Optional[Dict[str, Any]]`                                  | `None`                  | Optional dictionary of fixed hyperparameter values.                                                                 | No       |
+| `current_param_dict`     | `Optional[Dict[str, Any]]`                                  | `None`                  | Optional dictionary of current hyperparameter values.                                                               | No       |
+| `experiment_result`           | `Optional[ExperimentResult]`                                     | `None`                  | The tuned result of the experiment.                                                                                 | No       |
+| `user_prompt_request`    | `Optional[str]`                                             | `""`                    | User request for GPT prompt.                                                                                        | No       |
+| `num_samples`            | `Optional[int]`                                             | `-1`                    | Number of hyperparameter tuning samples to run. Only active for FLAML.                                              | No       |
+| `results_filepath`       | `Optional[str]`                                             | `None`                  | Path to output tuner run results.                                                                                   | No       |
+| `name`               | `str`            | `"my experiment"`                 | The name of the Experiment.                                                                       | No       |
+| `client_id`          | `Optional[str]`            | `None`                 | ID of `Experiment` on the Nomadic Workspace, if synched                                                                        | No       |
+
+## Methods
+
+### `run(param_dict: Dict[str, Any]) -> ExperimentResult`
+Runs the experiment using the specified model, parameters, and evaluator. Returns the `ExperimentResult` containing the best result and other metadata.
+
+### `save_experiment(folder_path: Path)`
+Saves the experiment's configuration and results to a specified folder path.
+
+### `visualize_results()`
+Generates visualizations of the experiment's results, including score distributions, boxplots, and heatmaps.
+
+### `test_significance(n: int)`
+Performs a significance test (Mann-Whitney U test) on the top `n` results against the rest. Outputs the statistical results and effect size.
+
+## Example Usage
+
+### Basic Experiment Example
+
+```python
+import json
+import requests
+
+from llama_index.core.evaluation import SemanticSimilarityEvaluator
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+from nomadic.experiment import Experiment
+from nomadic.model import OpenAIModel
+from nomadic.tuner import tune
+
+# Run a generic experiment
+experiment = Experiment(
+    model=OpenAIModel(api_keys={"OPENAI_API_KEY": "<Your OpenAI API Key>"}),
+    params={"temperature","max_tokens"},
+    evaluation_dataset=json.loads(
+        requests.get(
+            "https://example.com/evaluation_dataset.json"
+        ).content
+    ),
+    evaluator=SemanticSimilarityEvaluator(embed_model=OpenAIEmbedding()),
+)
+
+results = experiment.run({
+        "temperature": tune.choice([0.1, 0.5, 0.9]),
+        "max_tokens": tune.choice([50, 100, 200]),
+    })
+best_result = experiment.experiment_result.best_run_result
+
+print(f"Best score: {best_result.score} - Optimal params: {best_result.params} - Metadata: {best_result.metadata}")
+```
+
+### Advanced Experiment with Custom Objective Function
+```python
+from nomadic.experiment import Experiment
+from nomadic.result import ExperimentResult, RunResult
+from nomadic.tuner import tune
+
+
+# Custom objective function
+def objective_function(param_dict):
+    # Simulate a score calculation based on param_dict
+    score = param_dict['param1'] * param_dict['param2']
+    return RunResult(
+        score=score,
+        params=param_dict,
+        metadata={"alternate_score": param_dict['param1'] + param_dict['param2']}
+    )
+
+# Define experiment
+experiment: Experiment = Experiment(
+    param_fn=objective_function,
+    params={"param1","param2"},
+)
+
+# Run experiment
+experiment_results: ExperimentResult = experiment.run({
+        "param1": tune.choice([1, 2, 3]),
+        "param2": tune.choice([10, 20, 30]),
+    })
+
+# Obtain best RunResult
+best_result: RunResult = experiment_results.best_run_result
+print(f"Best Result - Score: {best_result.score} -  Params: {best_result.params}")
+```
+
+## Notes
+* The Experiment class is highly configurable and supports integration with different [Tuners](https://docs.nomadicml.com/api-reference/tuner),  like FLAML and Ray Tune.
+* Use Visualizations and statistical tests to better understand the results of your Experiments.

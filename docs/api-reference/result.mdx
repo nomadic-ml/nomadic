@@ -1,0 +1,86 @@
+---
+title: 'RunResult & ExperimentResult'
+description: 'Interpreting Nomadic results'
+---
+
+A `RunResult` is the outcome of a single hyperparameter configuration run of an `Experiment`. An `ExperimentResult` is a collection of all `RunResult`s from a full `Experiment`, encapsulating all of the defined hyperparameter configurations and their produced outputs.
+
+## `RunResult` Class
+
+### Overview
+The `RunResult` class captures the outcome of a single hyperparameter configuration run of an experiment from the defined hyperparameter search space, including the score achieved, the parameters used, and any additional metadata related to the run.
+
+### Fields
+
+| Parameter  | Type                       | Default          | Description                                               | Required |
+|------------|----------------------------|------------------|-----------------------------------------------------------|----------|
+| `score`    | `float`                    | N/A              | The score achieved in this run.                           | Yes      |
+| `params`   | `Dict[str, Any]`           | N/A              | A dictionary of parameters used in this run.              | Yes      |
+| `metadata` | `Optional[Dict[str, Any]]` | `{}`             | Optional metadata related to the run.                     | No       |
+
+### Example Usage
+
+```python
+from nomadic.result import RunResult
+
+# Example usage of RunResult
+result = RunResult(
+    score=0.85,
+    params={"learning_rate": 0.01, "batch_size": 32},
+    metadata={"run_id": "001", "experiment": "baseline"}
+)
+
+print(result.score)  # Output: 0.85
+print(result.params)  # Output: {'learning_rate': 0.01, 'batch_size': 32}
+print(result.metadata)  # Output: {'run_id': '001', 'experiment': 'baseline'}
+```
+## `ExperimentResult` Class
+
+### Overview
+The `ExperimentResult` class aggregates the results from multiple hyperparameter configuration runs in an experiment, identifying the best run based on the score and providing methods to analyze and export the results.
+
+### Fields
+
+| Parameter         | Type             | Default | Description                                                           | Required |
+|-------------------|------------------|---------|-----------------------------------------------------------------------|----------|
+| `hp_search_space` | `Dict[str, Any]` | N/A     | The explored hyperparameter search space for this `ExperimentRun`     | Yes      |
+| `run_results`     | `List[RunResult]`| N/A     | A list of `RunResult` instances, representing each run's outcome      | Yes      |
+| `best_idx`        | `Optional[int]`  | `0`     | The position of the best `RunResult` in `run_results`                 | No       |
+| `name`            | `Optional[str]`  | `None`  | Name of the Experiment Result                                       | No       |
+| `client_id`       | `Optional[str]`  | `None`  | ID of `ExperimentResult` on the Nomadic Workspace, if synched    | No       |
+
+
+### Methods
+
+#### `best_run_result() -> RunResult`
+Returns the `RunResult` with the highest score.
+
+#### `to_df(include_metadata=True) -> pd.DataFrame`
+Exports the `ExperimentResult` to a pandas DataFrame. If `include_metadata` is `True`, metadata fields are included as additional columns.
+
+### Example Usage
+
+```python
+from nomadic.result import RunResult, ExperimentResult
+from nomadic.tuner import tune
+
+# Example usage of ExperimentResult
+run1 = RunResult(score=0.85, params={"learning_rate": 0.01, "batch_size": 32})
+run2 = RunResult(score=0.90, params={"learning_rate": 0.02, "batch_size": 32})
+run3 = RunResult(score=0.83, params={"learning_rate": 0.01, "batch_size": 64})
+run4 = RunResult(score=0.89, params={"learning_rate": 0.02, "batch_size": 64})
+
+experiment_result = ExperimentResult(
+    hp_search_space={
+        'learning_rate': tune.choice([0.01, 0.02]),
+        'batch_size': tune.choice([32, 64]),
+    },
+    run_results=[run1, run2, run3, run4]
+)
+
+print(experiment_result.best_run_result.score)  # Output: 0.90
+
+# Export to DataFrame
+df = experiment_result.to_df()
+print(df)
+```

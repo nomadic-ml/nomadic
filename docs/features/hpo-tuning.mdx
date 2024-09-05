@@ -1,0 +1,45 @@
+---
+title: 'Auto Hyperparameter Optimization'
+description: 'Set your model parameters in a systematic way'
+---
+
+## Overview of Auto-HPO (Hyperparameter Optimization)
+
+Nomadic started from an emerging customer need for auto-hyperparameter optimization (HPO). Setting model parameters across ML development stages (such as temperature, or learning rate/epochs during training) is often intuition-based or full of guesswork.
+
+Nomadic’s unique HPO tuner library enables teams to identify the best model parameter configurations in a systematic way. We make available state-of-the-art search techniques developed by Microsoft Research and the latest HPO libraries off-the-shelf, so that you can easily search, set and test your parameters based on evolving priorities, such as increased cost-awareness or maximum performance.
+
+## Choose a Tuner
+To use Auto-HPO, choose a supported `Tuner` from [Tuner](docs.nomadicml.com/api-reference/tuner). Nomadic Tuners employ different search techniques based on your needs, and iterate over hyperparameters to find the best configuration based on an evaluator.
+
+## Create an Experiment using the Tuner
+
+The following is an example using `FlamlParamTuner`.
+
+`FlamlParamTuner` uses FLAML (Fast Library for Automated Machine Learning) for efficient hyperparameter tuning. FLAML leverages the structure of the search space to optimize for both cost and model performance simultaneously. It contains two new methods developed by Microsoft Research:
+- Cost-Frugal Optimization (CFO)
+- BlendSearch
+
+Using FLAML, you can specify budget constraints on your parameter search.
+
+```python
+from nomadic.experiment import Experiment
+from nomadic.tuner import tune, FlamlParamTuner
+
+# Define a parameter function
+def example_param_fn(params):
+    score = params["param1"] * params["param2"]
+    return RunResult(score=score, params=params)
+
+# Define FLAML-based tuner
+tuner = FlamlParamTuner(
+    param_fn=example_param_fn,
+    param_dict={"param1": tune.choice([1, 2, 3]), "param2": tune.choice([4, 5, 6])},
+    time_budget_s=60,
+    show_progress=True,
+)
+
+# Run the tuning process
+experiment_result = tuner.fit()
+print(experiment_result.best_run_result)
+```

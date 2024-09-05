@@ -1,0 +1,79 @@
+---
+title: 'Observability'
+icon: 'magnifying-glass'
+---
+
+## Overview
+
+After running an experiment, Nomadic enables you to visualize and statistically interpret the impact of different parameter settings on model performance.
+
+
+## Key Features
+
+1. Visualize detailed heatmaps on the the impact of different parameter settings on model performance
+2. View top-scoring parameter combinations in tables
+3. Statistical summaries to ensure your models are robust and reliable
+
+## Nomadic Workspace
+
+<Note> Coming soon! The Nomadic Workspace provides a GUI with  a comprehensive set of visual summaries that enable you to confidently interpret experiment results.</Note>
+
+## Nomadic SDK
+
+The `experiment.visualize_results()` function provides a comprehensive visual analysis of the experiment results, focusing on the score distribution and its relationship with various hyperparameters.
+
+### 1. Usage
+
+To generate our visualizations and summaries on the SDK, simply call:
+
+```python
+experiment.visualize_results()
+```
+
+### 2. Visualizations
+
+
+#### Score Distribution
+
+- A histogram showing the distribution of scores across all experiment runs.
+- Provides an overview of the range and frequency of scores achieved.
+
+#### Categorical Parameters vs. Score
+
+For each categorical parameter (e.g., `prompt_tuning_approach`, `prompt_tuning_complexity`, `prompt_tuning_focus`):
+
+- A box plot displaying the score distribution for each category.
+- Helps identify which categories within a parameter tend to yield higher or lower scores.
+- Useful for understanding the impact of different categorical choices on performance.
+
+#### Numeric Parameters vs. Score
+
+For each numeric parameter (e.g., temperature, max_tokens):
+
+- A scatter plot showing the relationship between the parameter value and the score.
+- Helps visualize any trends or correlations between numeric parameters and performance.
+
+### 3. Statistical Summary
+
+#### Top 5 Performing Parameter Combinations
+
+Displays a table of the top 5 parameter combinations based on score, showing:
+- The specific values for each parameter
+- The corresponding score
+
+This helps identify the most successful configurations tested in the experiment.
+
+
+#### Summary Statistics
+
+Prints a summary of score statistics, including:
+- Count
+- Mean
+- Standard deviation
+- Minimum
+- 25th percentile
+- Median (50th percentile)
+- 75th percentile
+- Maximum
+
+This provides a quick numerical overview of the score distribution.

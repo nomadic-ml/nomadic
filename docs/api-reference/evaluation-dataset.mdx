@@ -1,0 +1,68 @@
+---
+title: 'Datasets'
+description: 'Using evaluation datasets'
+---
+
+The evaluation dataset is used to assess the performance of models by providing them with specific contexts, instructions, and questions, and comparing the model-generated outputs with expected answers.
+
+## Keys
+
+Nomadic can ingest evaluation datasets with the following format. Each entry in the evaluation dataset is a dictionary with the following keys:
+
+
+| Key           | Required                                                                                         | Description                                                                                         | Example                                                                                                      |
+|---------------|--------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| `Context`     | No                                                                                                | Enhances the prompt. Supplies additional background information to help the model generate accurate responses. | “You are a doctor writing a visit note from a transcript of the doctor-patient conversation.”                |
+| `Instruction` | No                                                                                                | Enhances the prompt. Provides specific guidance to the model on what action to perform.              | “Absolutely do not hallucinate. Capture only factual information.”                                           |
+| `Question`    | Yes                                                                                               | The user input or query that prompts the model to generate a response. This is the only required key.| “What were the main topics discussed?”                                                                       |
+| `Answer`      | No, required only if using a supervised evaluator such as cosine similarity                       | The expected output or response from the model, which serves as the benchmark for evaluation.        | “Investment strategies, retirement planning, and risk management.”                                           |
+
+## Example Entry
+
+
+Here is an example of an item in the sample evaluation dataset:
+
+
+```json
+dataset = {
+    "Context": "Financial meeting with client John Doe",
+    "Instruction": "Summarize the key points",
+    "Question": "What were the main topics discussed?",
+    "Answer": "Investment strategies, retirement planning, and risk management"
+}
+```
+
+## Basic Usage
+
+```python
+import json
+import requests
+import os
+
+from llama_index.core.evaluation import SemanticSimilarityEvaluator
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+from nomadic.experiment import Experiment
+from nomadic.model import OpenAIModel
+from nomadic.tuner import tune
+
+# Run a generic experiment
+experiment = Experiment(
+    model=OpenAIModel(api_keys={"OPENAI_API_KEY": "<Your OpenAI API Key>"}),
+    params={"temperature", "max_tokens"},
+    evaluation_dataset=dataset,
+    evaluator=SemanticSimilarityEvaluator(embed_model=OpenAIEmbedding()),
+)
+
+experiment_result = experiment.run(
+    param_dict={
+        "temperature": tune.choice([0.1, 0.5, 0.9]),
+        "max_tokens": tune.choice([50, 100, 200]),
+    })
+best_result = experiment_result.best_run_result
+
+print(f"Best run result - Score: {best_result.score} - Optimal params: {best_result.params} - Metadata: {best_result.metadata}")
+```
+
+## Custom Dataset Ingress
+Coming soon!

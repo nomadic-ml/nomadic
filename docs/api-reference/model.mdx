@@ -1,0 +1,164 @@
+---
+title: 'Model'
+description: 'Creating Nomadic Models'
+---
+
+## Overview
+
+This document provides an overview of three key model classes used in the SDK: `Model`, `OpenAIModel`, and `SagemakerModel`. These classes are designed to facilitate the integration and usage of various LLMs in your applications. Each class inherits from the base `Model` class, which provides a consistent interface for setting up and running models with specific API keys and hyperparameters.
+
+<Note>
+* The `Model` class is an abstract class and cannot be instantiated directly. Subclasses like `OpenAIModel` and `SagemakerModel` provide specific implementations for their respective platforms.
+* The `api_keys` parameter is essential and must be provided for the model to function correctly.
+* Each subclass is responsible for handling the specific setup and execution of its respective platform's model.
+</Note>
+
+## Fields (`Model` Class)
+
+| Parameter            | Type                       | Default                        | Description                                                                                  | Required |
+|----------------------|----------------------------|--------------------------------|----------------------------------------------------------------------------------------------|----------|
+| `api_keys`           | `Dict[str, str]`           | N/A                            | API keys needed to run the model.                                                            | Yes      |
+| `llm`                | `Optional[LLM]`            | `None`, Nomadic creates the LlamaIndex LLM for you. However, you can also define any LlamaIndex LLM here.                     | The language model (LLM) instance used to run the experiment                               | No       |
+| `required_api_keys`  | `ClassVar[Set[str]]`       | `set()`                        | A set of API keys that the model expects to receive.                                         | No       |
+| `hyperparameters`    | `ClassVar[Dict]`           | `DEFAULT_HYPERPARAMETER_SEARCH_SPACE` | A dictionary defining the hyperparameters that can be tuned for the model.                   | No       |
+| `name`               | `str`            | `"my model"`                 | The name of the model.                                                                       | No       |
+| `client_id`          | `Optional[str]`            | `None`                 | ID of `Model` on the Nomadic Workspace, if synched                                                                        | No       |
+
+### Methods
+
+- **`get_required_api_keys() -> Set[str]`**: Returns the set of expected API keys for the model.
+- **`get_hyperparameters() -> Dict`**: Returns the hyperparameters that can be tuned for the model.
+- **`run(**kwargs) -> RunResult`**: Abstract method that must be implemented by subclasses to execute the model with the provided parameters and return a `RunResult` object.
+
+## Supported Model Subclasses
+
+<Accordion title="OpenAIModel">
+
+### Overview
+
+The `OpenAIModel` class is a subclass of `Model` specifically designed to work with OpenAI's GPT models. It handles the setup and execution of OpenAI models, allowing you to easily integrate them into your applications.
+
+### Class Variables
+
+| Parameter            | Type                       | Default                        | Description                                                                                  | Required |
+|----------------------|----------------------------|--------------------------------|----------------------------------------------------------------------------------------------|----------|
+| `model`              | `Optional[str]`            | "gpt-4o-mini"                     | Name of the OpenAI model to use - from the [OpenAI model list](https://platform.openai.com/docs/models).                                                                       | No       |
+| `required_api_keys`  | `ClassVar[Set[str]]`       | `{"OPENAI_API_KEY"}`           | The set of expected API keys for OpenAI.                                                     | No       |
+| `hyperparameters`    | `ClassVar[Dict]`           | A default hyperparameter search space with `temperature`, `max_tokens`, `top_p`, and OpenAI-specific parameters `frequency_penalty`, `presence_penalty`  | A dictionary defining the hyperparameters that can be tuned for the OpenAI model.            | No       |
+
+
+### Example Usage
+
+```python
+from nomadic.model import OpenAIModel
+from nomadic.tuner import tune
+
+experiment = Experiment(
+    model=OpenAIModel(api_keys={"OPENAI_API_KEY": "<Your OpenAI API Key>"}),
+    params={"temperature", "max_tokens"},
+    evaluation_dataset=json.loads(
+        requests.get(
+            "https://example.com/evaluation_dataset.json"
+        ).content
+    ),
+    evaluator=SemanticSimilarityEvaluator(embed_model=OpenAIEmbedding()),
+)
+
+results = experiment.run(
+    param_dict={
+        "temperature": tune.choice([0.1, 0.5, 0.9]),
+        "max_tokens": tune.choice([50, 100, 200]),
+    })
+best_result = experiment.experiment_result.best_run_result
+```
+</Accordion>
+
+<Accordion title="SagemakerModel">
+
+### Overview
+The `SagemakerModel` class is a subclass of `Model` designed to work with AWS SageMaker endpoints. It configures the SageMaker model using the provided AWS credentials and runs experiments using specified parameters.
+
+### Class Variables
+
+| Parameter            | Type                       | Default                        | Description                                                                                  | Required |
+|----------------------|----------------------------|--------------------------------|----------------------------------------------------------------------------------------------|----------|
+| `required_api_keys`  | `ClassVar[Set[str]]`       | `{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION", "ENDPOINT_NAME"}` | A set of API keys expected for the SageMaker model.                                          | Yes      |
+| `hyperparameters`    | `ClassVar[Dict]`           | A default hyperparameter search space with `temperature`, `max_tokens`, and `top_p`. | A dictionary of hyperparameters specific to the SageMaker model.                              | No       |
+
+### Example Usage
+
+```python
+from nomadic.model import SagemakerModel
+from nomadic.tuner import tune
+
+experiment = Experiment(
+    name = "Sample_Nomadic_Experiment",
+    model = SagemakerModel(
+        api_keys={
+            "AWS_ACCESS_KEY_ID": "<...>",
+            "AWS_SECRET_ACCESS_KEY": "<...>",
+            "AWS_DEFAULT_REGION": "<...>",
+            "ENDPOINT_NAME": "<...>",
+        }),
+    evaluator = BatchEvalRunner(...),
+    hp_space = {
+        'temperature': tune.choice([0.1, 0.3, 0.5, 0.7, 0.9])
+        'top_k': tune.randint(3,5)
+    }
+    current_hp_values = {
+        'temperature'=0.5,
+        'top_k'=5,
+        'top_p'=8
+    },
+    evaluation_dataset = {
+        {
+            'Context': "You are a helpful assistant writing a transcript for ...",
+            'Instruction': "Absolutely do not hallucinate. Capture all relevant ...",
+            'Answer': "The generated summary is shown below: ..."
+        }
+    }
+)
+results = experiment.run()
+```
+</Accordion>
+
+<Accordion title="TogetherAIModel">
+
+### Overview
+
+The `TogetherAIModel` class is a subclass of `Model` that is implemented to work with models hosted on Together.AI. It handles the setup and execution of Together.AI models, allowing you to easily integrate them with your applications.
+
+### Class Variables
+
+| Parameter            | Type                       | Default                        | Description                                                                                  | Required |
+|----------------------|----------------------------|--------------------------------|----------------------------------------------------------------------------------------------|----------|
+| `model`              | `Optional[str]`            | N/A                            | Name of the model to use - from the Together.AI [Chat Models](https://docs.together.ai/docs/chat-models) list.                                                                       | No       |
+| `required_api_keys`  | `ClassVar[Set[str]]`       | `{"TOGETHER_API_KEY"}`           | The set of expected API keys for Together.AI.                                                     | No       |
+| `hyperparameters`    | `ClassVar[Dict]`           | A default hyperparameter search space with `temperature`, `max_tokens`, `top_p`. | A dictionary defining the hyperparameters that can be tuned for the Together.AI model.            | No       |
+
+
+### Example Usage
+
+```python
+from nomadic.model import TogetherAIModel
+from nomadic.tuner import tune
+
+experiment = Experiment(
+    model=TogetherAIModel(api_keys={"TOGETHER_API_KEY": "<Your Together.AI API Key>"}),
+    params={"temperature", "max_tokens"},
+    evaluation_dataset=json.loads(
+        requests.get(
+            "https://example.com/evaluation_dataset.json"
+        ).content
+    ),
+    evaluator=SemanticSimilarityEvaluator(embed_model=OpenAIEmbedding()),
+)
+
+results = experiment.run(
+    param_dict={
+        "temperature": tune.choice([0.1, 0.5, 0.9]),
+        "max_tokens": tune.choice([50, 100, 200]),
+    })
+best_result = experiment.experiment_result.best_run_result
+```
+</Accordion>

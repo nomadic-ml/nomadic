@@ -1,0 +1,34 @@
+---
+title: 'Custom Evaluation'
+icon: 'chart-simple'
+---
+
+## Overview
+
+Evaluators let you set objective definitions of success and systematically experiment with different configurations. It’s increasingly critical to score applications robustly, particularly without needing ground truth labels.
+
+## Defining an Evaluator
+
+You can specify your evaluator to assess the LLM system in two ways.
+
+### Option 1: Specify the model, evaluator, and evaluation dataset.
+Provide the `model`, `evaluator`, and `evaluation_dataset` parameters and inputs to the `nomadic.Experiment` class.
+
+This is recommended if you plan to use:
+
+* **Evaluator**:
+    * An evaluator supported through LlamaIndex's `BaseEvaluator`, or
+    * An evaluator for prompt tuning, by defining a `custom_evaluator` dict and your own weights of metrics, and an LLM-as-a-judge evaluates the produced scores as the weighted result.
+* **Model**: A model supported through LlamaIndex's `BaseLLM` classes.
+
+### Option 2: Define your own custom evaluation function.
+`param_fn` is an objective function that provides the most flexibility for you to specify custom params, success metrics, or your own model definitions.
+
+This is recommended if you plan to use models or evaluators that are not supported by LlamaIndex, or if you are doing prompt tuning.
+
+See the [Cookbooks](https://docs.nomadicml.com/get-started/cookbooks) for full examples. To define your own objective function, provide the following parameters to the `nomadic.Experiment` class.:
+* `param_fn`: Your defined function to score the LLM.
+* `params`: Your set of hyperparameters to tune during the experiment.
+    * Optionally, provide `fixed_param_dict` to fix certain hyperparameters during the experiment.
+    * Optionally, provide `current_param_dict` to compare your current parameter settings with the settings explored during the experiment.  Specified `current_param_dict` settings are included in experiment results.
+* `model`, `evaluator`, and `evaluation_dataset` are not required.

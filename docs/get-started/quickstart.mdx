@@ -1,0 +1,114 @@
+---
+title: 'Quickstart'
+description: 'Set up your first Nomadic experiment'
+icon: 'bolt'
+---
+
+Below we demonstrate steps for setting up Python notebook to optimize a basic LLM system.
+
+This sample application is a **summarization task on a financial advisor session using OpenAI's GPT-4o mini**, evaluated on semantic similarity. Ground truth is provided through the evaluation dataset. The sample uses grid search, a basic hyperparameter search method supported in Nomadic.
+
+For other templates, see [Cookbooks](https://docs.nomadicml.com/get-started/cookbooks) repository.
+
+## 1. Install Nomadic
+
+[Create a Nomadic account](app.nomadicml.com/login).
+
+For Nomadic SDK users, your associated API keys will be provided by the Nomadic team.
+
+<Note> As `nomadic` is currently being developed, it is not yet published into PyPI. The [current `nomadic` PyP package](https://pypi.org/project/nomadic/) is a temporary placeholder. </Note>
+
+Install `nomadic` with the `pip` wheel provided by the Nomadic team as below:
+
+```bash
+pip install nomadic-0.0.1-py3-none-any.whl
+```
+
+## 2. Import necessary libraries
+
+Import Experiment, and the relevant Model, Tuner, and evaluators you will use.
+
+```python
+import os
+
+from llama_index.core.evaluation import SemanticSimilarityEvaluator
+from llama_index.embeddings.openai import OpenAIEmbedding
+import nest_asyncio
+
+from nomadic.experiment import Experiment
+from nomadic.model import OpenAIModel
+from nomadic.tuner import tune
+
+nest_asyncio.apply()
+
+PROJECT_DIRECTORY = f"{os.path.abspath('')}/../.."
+```
+
+## 3. Upload evaluation dataset
+
+Below is a sample evaluation dataset that contains the dataset used in this sample summarization task.
+
+```python
+sample_evaluation_dataset = [
+    {
+        "Context": "Financial meeting with client John Doe",
+        "Instruction": "Summarize the key points",
+        "Question": "What were the main topics discussed?",
+        "Answer": "Investment strategies, retirement planning, and risk management"
+    }
+]
+```
+
+## 4. Create an Experiment
+
+Below is sample code to create a basic Experiment assessing the summarization task.
+
+```python
+experiment = Experiment(
+    name = "Sample_Nomadic_Experiment",
+    model = OpenAIModel(
+        model="gpt-4o-mini",
+        api_keys={
+            "OPENAI_API_KEY":os.environ["OPENAI_API_KEY"]
+        }
+    ),
+    search_method="grid",
+    params = {"temperature","max_tokens"},
+    current_hp_values = {
+        'temperature':0.5,
+        'top_p':5,
+    },
+    evaluator=SemanticSimilarityEvaluator(embed_model=OpenAIEmbedding()),
+    evaluation_dataset = sample_evaluation_dataset
+)
+```
+
+## 5. Run the Experiment
+```python
+results = experiment.run(
+    param_dict={
+        "temperature": tune.choice([0.1, 0.5, 0.9]),
+        "max_tokens": tune.choice([50, 100, 200]),
+    })
+```
+
+## 6. Interpret Results
+
+
+### Nomadic SDK
+
+With a completed `nomadic.Experiment` object, run:
+```python
+print(results.best_run_result)
+experiment.visualize_results()
+```
+This returns you the optimal hyperparameter setting on your success metrics, and visualizations about different parameter setting performances.
+
+### Nomadic Workspace
+
+<Note> Coming soon! </Note>
+
+
+## Schedule an Experiment job
+
+<Note> Coming soon! </Note>

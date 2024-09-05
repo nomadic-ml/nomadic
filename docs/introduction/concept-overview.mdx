@@ -1,0 +1,74 @@
+---
+title: "Concept Overview"
+---
+
+<Note>
+    This is an overview of the key objects in the Nomadic platform. For detailed class definitions and implementation examples, see the [SDK Reference](https://app.nomadicml.com/api-reference/experiment).
+</Note>
+
+## Experiments
+
+An Experiment measures the performance of an LLM system on different model, dataset, and prompt configurations, using specified scores and budget constraints. You can view the results of your experiments either from the interactive Nomadic dashboard, or from Python with programmatic access.
+
+Each experiment has specific parameters and results that are tracked and analyzed.
+
+There are two ways to create an Experiment:
+1. Through the Python SDK by invoking `nomadic.experiment(...)` as noted in the [Example Usage](#example-usage), and
+2. Through the [Nomadic Workspace](https://app.nomadicml.com/dashboard/experiments/create), under "Experiments --> `+` (on the top right section)".
+
+See the [Experiment](https://docs.nomadicml.com/api-reference/experiment) class for basic Experiment usage.
+
+## Models
+
+
+A Model is an abstraction of metadata common to all versions of a model you're working on. The Model object is designed to facilitate the integration and usage of various LLMs or custom models in your applications.  See the [Model](https://docs.nomadicml.com/api-reference/model) class for supported Model subclasses, parameters, and methods. A Model is responsible for handling the specific setup and execution of its respective platform’s model.
+
+Example off-the-shelf models include `GPT 4-o` (OpenAI), `gpt-4o-mini` (OpenAI), `open-mixtral-8x7b`(Mistral).
+
+There are two ways to register Models:
+
+1. **A script when creating an Experiment** - A few lines of code. See the [Model](https://docs.nomadicml.com/api-reference/model) reference or [Cookbooks](https://docs.nomadicml.com/get-started/cookbooks) for end-to-end examples.
+2. **From the Nomadic Workspace** - Add a Model to your [Model Registrations](https://app.nomadicml.com/dashboard/models/registrations).
+
+### Supported models
+<Note> Full list coming soon! </Note>
+
+## Datasets
+
+A dataset is a collection of labeled examples that we want to optimize the LLM system to answer correctly. Datasets include the inputs and expected outputs of the system. We support both user-uploaded datasets when ground truth is available and synthetic datasets, in absence of ground truth.
+
+### Uploaded Datasets
+
+There are two ways to upload datasets:
+
+1. **A script when creating an Experiment** - Nomadic can currently ingest evaluation datasets with the format specified in [SDK Reference](https://docs.nomadicml.com/api-reference/evaluation-dataset). Each entry in the evaluation dataset is a dictionary with expected keys. See the [Cookbooks](https://docs.nomadicml.com/get-started/cookbooks) for end-to-end examples.
+2. **From the Nomadic Workspace** - Upload a dataset when [creating](https://app.nomadicml.com/dashboard/experiments/create) a Nomadic Experiment.
+
+
+### Synthetic Datasets
+<Note> Coming soon! </Note>
+
+## Evaluation Metrics
+
+Metrics are used to evaluate the performance of a model compared with expected output. We support both out-of-the-box and custom metrics.
+
+### Standard Evaluators
+
+Nomadic currently supports any of LlamaIndex's `BaseEvaluator` evaluation metrics, such as. Specify the evaluator when creating an experiment. See the [Experiment](https://docs.nomadicml.com/api-reference/experiment) class for basic evaluator usage.
+
+### Custom Evaluators
+
+Custom metrics capture use-case specific evaluations. You can define custom metrics in the `param_fn` parameter when creating Experiments for. See the [Experiment](https://docs.nomadicml.com/api-reference/experiment) class for custom evaluator usage.
+
+Custom evaluators are recommended for:
+* An objective function, which provides you the most flexibility to specify custom params, success metrics, or your own model definitions.
+* Prompt tuning, by defining a `custom_evaluator` dict and your own weights of metrics, and an LLM-as-a-judge evaluates the produced scores as the weighted result.
+* A Python function, where the one success metric is defined in the evaluator Python function and is given as `RunResult(score=metric,...).`
+
+Example custom metrics may assess clarity and coherence, actionable advice, British English adherence, and jailbreaking attack success rates.
+
+## Logs
+
+Logs are collected during both experiment execution and runtime monitoring. Logs capture events including:
+- LLM call
+- Retrieval

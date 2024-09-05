@@ -1,0 +1,220 @@
+---
+title: 'Tuner'
+description: 'Creating Nomadic Tuners'
+---
+
+## `BaseParamTuner` Class
+
+### Overview
+The `BaseParamTuner` class provides a framework for creating custom parameter tuners that iterate over hyperparameters to find the best configuration based on a scoring function. It supports fixed parameters, current hyperparameter values, and saving results to a file.
+
+### Evaluator
+
+Your tuner's evaluator will by default run the evaluator specified in Experiment according to your use case. See [Evaluators](https://docs.nomadicml.com/api-reference/experiment#evaluators) for details.
+
+### Fields
+
+| Parameter            | Type                               | Default    | Description                                                                                   | Required |
+|----------------------|------------------------------------|------------|-----------------------------------------------------------------------------------------------|----------|
+| `param_fn`           | `Callable[[Dict[str, Any]], Any]`  | N/A        | The objective function that scores the LLM system being optimized on the specified parameters.                                                      | Yes      |
+| `param_dict`         | `Optional[Dict[str, Any]]`         | `None`     | A dictionary of parameters to iterate over.                                                   | No       |
+| `fixed_param_dict`   | `Optional[Dict[str, Any]]`         | `{}`       | A dictionary of fixed parameters passed to each job.                                          | No       |
+| `current_param_dict` | `Optional[Dict[str, Any]]`         | `{}`       | A dictionary of current hyperparameter values.                                                | No       |
+| `show_progress`      | `bool`                             | `False`    | Flag to show progress during tuning.                                                          | No       |
+| `num_prompts`        | `int`                              | `1`        | Number of prompt variations to generate for each data point.                                  | No       |
+| `results_filepath`   | `Optional[str]`                    | `None`     | Path for saving tuner run results.                                                            | No       |
+
+### Methods
+
+#### `fit() -> ExperimentResult`
+An abstract method that should be implemented by subclasses to perform parameter tuning.
+
+#### `save_results_table(results: pd.DataFrame, filepath: str) -> None`
+Saves the results to a CSV file.
+
+## Supported Tuner Subclasses
+
+<Accordion title="ParamTuner">
+
+### Overview
+The `ParamTuner` class is the most basic implementation of `BaseParamTuner` that supports grid search over the hyperparameter space.
+
+### Fields
+
+Inherits all parameters from `BaseParamTuner`.
+
+### Methods
+
+#### `fit() -> ExperimentResult`
+Generates all possible combinations of hyperparameters and runs the parameter function for each combination. Returns a `ExperimentResult` with the best configuration.
+
+### Example Usage
+
+```python
+from nomadic.tuner import tune, ParamTuner
+
+# Define a simple parameter function
+def example_param_fn(params):
+    score = params["param1"] + params["param2"]
+    return RunResult(score=score, params=params)
+
+# Define a simple tuner
+tuner = ParamTuner(
+    param_fn=example_param_fn,
+    param_dict={"param1": tune.choice([1, 2, 3]), "param2": tune.choice([4, 5, 6])},
+    show_progress=True,
+)
+
+# Run the tuning process
+tuner_result = tuner.fit()
+print(tuner_result.best_run_result)
+```
+
+</Accordion>
+
+<Accordion title="FLAMLParamTuner">
+
+### Overview
+The `FlamlParamTuner` class uses FLAML for efficient hyperparameter tuning. FLAML leverages the structure of the search space to optimize for both cost and model performance simultaneously. It contains two new methods developed by Microsoft Research:
+
+* Cost-Frugal Optimization (CFO)
+* BlendSearch
+
+### Fields
+
+| Parameter       | Type            | Default                                                                 | Description                                                                            | Required |
+|-----------------|-----------------|-------------------------------------------------------------------------|----------------------------------------------------------------------------------------|----------|
+| `search_alg`    | `Optional[Any]` | `BlendSearch(metric="score", mode="max")`                               | The FLAML search algorithm to use.                                                     | No       |
+| `num_samples`   | `Optional[int]` | `-1`                                                                    | The number of samples FLAML should evaluate.                                           | No       |
+| `time_budget_s` | `Optional[int]` | `None`                                                                  | The time budget (in seconds) for the tuning process.                                   | No       |
+| `scheduler`     | `Optional[str]` | `None`                                                                  | The scheduler to use for the tuning process.                                           | No       |
+| `use_ray`       | `Optional[bool]`| `False`                                                                 | Whether to use Ray for parameter tuning instead of Optuna.                             | No       |
+
+### Methods
+
+#### `fit() -> ExperimentResult`
+Executes the parameter tuning process using FLAML's optimization algorithms and returns the best result.
+
+#### Example Usage
+
+```python
+from nomadic.tuner import tune, FlamlParamTuner
+
+# Define a parameter function
+def example_param_fn(params):
+    score = params["param1"] * params["param2"]
+    return RunResult(score=score, params=params)
+
+# Define FLAML-based tuner
+tuner = FlamlParamTuner(
+    param_fn=example_param_fn,
+    param_dict={"param1": tune.choice([1, 2, 3]), "param2": tune.choice([4, 5, 6])},
+    time_budget_s=60,
+    show_progress=True,
+)
+
+# Run the tuning process
+tuner_result = tuner.fit()
+print(tuner_result.best_run_result)
+```
+</Accordion>
+
+<Accordion title="RayTuneParamTuner">
+
+### Overview
+The `RayTuneParamTuner` class leverages Ray Tune to perform hyperparameter tuning. It supports both grid search and Bayesian optimization for efficient exploration of the hyperparameter space.
+
+### Fields
+
+| Parameter         | Type             | Default   | Description                                                                     | Required |
+|-------------------|------------------|-----------|---------------------------------------------------------------------------------|----------|
+| `run_config_dict` | `Optional[dict]` | `None`    | The configuration dictionary for Ray Tune's `RunConfig`.                        | No       |
+| `search_method`   | `Optional[str]`  | `"grid"`  | The search method to use: can be either `"grid"` or `"bayesian"`.               | No       |
+
+### Methods
+
+#### `fit() -> ExperimentResult`
+Runs the tuning process using Ray Tune based on the specified search method and configuration. Returns a `ExperimentResult` containing the best hyperparameter configuration and its associated score.
+
+### Example Usage
+
+```python
+from nomadic.tuner import tune
+from nomadic.tuner.ray import RayTuneParamTuner
+
+# Define a parameter function
+def example_param_fn(params):
+    score = params["param1"] - params["param2"]
+    return RunResult(score=score, params=params)
+
+# Define Ray Tune-based tuner
+tuner = RayTuneParamTuner(
+    param_fn=example_param_fn,
+    param_dict={"param1": tune.choice([1, 2, 3]), "param2": tune.choice([4, 5, 6])},
+    search_method="bayesian",
+    show_progress=True,
+)
+
+# Run the tuning process
+tuner_result = tuner.fit()
+print(tuner_result.best_run_result)
+```
+</Accordion>
+
+<Accordion title="TAPParamTuner">
+
+### Overview
+The `TAPParamTuner` class is specifically designed for tuning parameters in the [Tree of Attack with Pruning (TAP)](https://arxiv.org/pdf/2312.02119) framework [(Github)](https://github.com/RICommunity/TAP).
+It provides an interface for integrating with evaluation, target, and attack LLMs, making it suitable for complex multi-objective optimization tasks. It supports grid search, Bayesian optimization, and FLAML, offering flexibility for different types of hyperparameter searches.
+
+### Fields
+
+| Parameter           | Type                                            | Default                                      | Description                                                                                       | Required |
+|---------------------|-------------------------------------------------|----------------------------------------------|---------------------------------------------------------------------------------------------------|----------|
+| `param_fn`          | `Callable[[Dict[str, Any]], Dict[str, Any]]`    | `None`                                       | The function to run with the parameters.                                                          | Yes      |
+| `param_dict`        | `Dict[str, Any]`                                | `DEFAULT_HYPERPARAMETER_SEARCH_SPACE`        | The hyperparameter space to explore.                                                              | No       |
+| `fixed_param_dict`  | `Optional[Dict[str, Any]]`                      | `{}`                                         | A dictionary of fixed parameters passed to each job.                                              | No       |
+| `search_method`     | `str`                                           | `"flaml"`                                    | The search method to use for hyperparameter tuning (`"grid"`, `"bayesian"`, `"flaml"`).            | No       |
+| `num_simulations`   | `int`                                           | `-1`                                         | Number of simulations to run for each hyperparameter combination.                                 | No       |
+| `time_budget_s`     | `Optional[int]`                                 | `None`                                       | The time budget (in seconds) for the experiment to run.                                           | No       |
+| `evaluator_llm`     | `Optional[Any]`                                 | `None`                                       | The evaluator instance to use for scoring.                                                        | Yes      |
+| `target_llm`        | `Optional[Any]`                                 | `None`                                       | The target instance to use for generating responses.                                              | Yes      |
+| `attack_llm`        | `Optional[Any]`                                 | `None`                                       | The attack LLM instance to use for generating attack messages.                                    | Yes      |
+
+### Methods
+
+#### `fit() -> ExperimentResult`
+Runs the parameter tuning process using the specified search method (`"grid"`, `"bayesian"`, or `"flaml"`) and returns the best result.
+
+### Example Usage
+
+```python
+from nomadic.tuner import tune
+from nomadic.tuner.tap import TAPParamTuner
+
+# Define a parameter function for TAP
+def example_tap_fn(params):
+    score = params["depth"] * params["width"]
+    return RunResult(score=score, params=params)
+
+# Define TAP-specific tuner
+tuner = TAPParamTuner(
+    param_fn=example_tap_fn,
+    param_dict={
+        "depth": tune.choice([3, 4, 5]),
+        "width": tune.choice([2, 3, 4]),
+        "branching_factor": tune.randint(2, 8)
+    },
+    search_method="grid",
+    show_progress=True,
+    evaluator_llm=evaluator_instance,
+    target_llm=target_instance,
+    attack_llm=attack_instance,
+)
+
+# Run the tuning process
+tuner_result = tuner.fit()
+print(tuner_result.best_run_result)
+```
+
+</Accordion>

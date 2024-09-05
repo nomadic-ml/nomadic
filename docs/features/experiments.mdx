@@ -1,0 +1,84 @@
+---
+title: 'Experimentation'
+icon: 'flask'
+---
+
+Running experiments is a systematic way to measure the performance of your system across prompt, model, or hyperparameter configurations.
+
+Nomadic's experimentation capabilities simpliefies your testing process with integrated project setup, API key handling, and experiment configuration tools.
+
+
+## Submit an Experiment
+
+There are two ways to create an Experiment:
+1. Through the Python SDK by invoking `nomadic.experiment(...)` as noted in the [Example Usage](#example-usage), and
+2. Through the [Nomadic Workspace](https://app.nomadicml.com/dashboard/experiments/create), our managed service GUI.
+
+### Nomadic SDK Example
+
+See the Experiment class [Experiment](https://docs.nomadicml.com/api-reference/experiment) for basic Experiment usage.
+
+```python experiment.py
+experiment = Experiment(
+    name="Financial_Advice_Summarization",
+    model=OpenAIModel(api_keys={"OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY")}),
+    search_method="grid",
+    params={"temperature", "max_tokens"},
+    current_hp_values={
+        'temperature': 0.5,
+        'max_tokens': 300,
+    },
+    evaluator=Evaluator(embed_model=custom_evaluate()),
+    evaluation_dataset=sample_evaluation_dataset,
+    user_prompt_request="Provide a comprehensive summary of the financial advice meeting",
+    prompt_variations=prompt_variations,
+    num_iterations_per_prompt=2,
+    prompting_approach="few-shot",
+    prompt_complexity="detailed",
+    prompt_focus="fact extraction and action points",
+)
+# Run the experiment
+experiment_results = experiment.run(
+    param_dict={
+        "temperature": tune.choice([0.1, 0.5, 0.9]),
+        "max_tokens": tune.choice([150, 300, 450])
+    })
+```
+
+## Repeatable Experimentation
+Re-configure and trigger Experiment runs either through the SDK or [Nomadic Workspace](https://app.nomadicml.com/dashboard/experiments/create).
+
+## Centralized Projects
+
+We give you an interactive, centralized dashboard regardless of whether you're using Nomadic from the workspace or your local machine.
+
+## Interpretable Results
+Fine-grained visualizations of experiment results on different model settings. Compare each training run. It's even easy to look-back on optimal settings as runtime data evolves.
+
+### Standard visualizations
+
+Our [Experiments dashboard](https://app.nomadicml.com/dashboard/experiments) includes key out-of-the-box visualizations such as:
+1. Detailed heatmaps on the the impact of different parameter settings on model performance
+2. Top-scoring parameter combinations in tables
+3. Statistical summaries to ensure your models are robust and reliable
+4. Live data lookback, that updates real-time with your most recent production data
+
+On the SDK, see [Observability](http://docs.nomadicml.com0/features/observability) for how you can leverage the `experiment.visualize_results()` function to get a comprehensive visual analysis of the experiment results, focusing on the score distribution and its relationship with various hyperparameters.
+
+### Custom visualizations
+You can also customize your visualizations. As an example,
+
+```python results.py
+# Create the heatmap
+plt.figure(figsize=(10, 6))
+sns.heatmap(heatmap_data, annot=True, cmap="YlGnBu", linewidths=.5)
+plt.title("Heatmap of Score by Temperature and Prompt Variations")
+plt.xlabel("Prompt Variations")
+plt.ylabel("Temperature")
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
+plt.show()
+```
+
+## Object Registry
+Nomadic captures not just metrics, but your models, datasets, and configurations so that your project is reproducible.

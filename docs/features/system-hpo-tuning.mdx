@@ -1,0 +1,200 @@
+---
+title: 'Optimizing Parameters'
+description: 'Optimize your parameters of your LLM System for your evaluation metrics'
+---
+
+Below, we demonstrate how to set up a Python notebook to optimize a basic Retrieval-Augmented Generation (RAG) pipeline using the Nomadic SDK. We provide the basic steps to set up a simple RAG optimization experiment with the Nomadic SDK to identify the best-performing hyperparameter configurations for your pipeline.
+
+This example uses the Llama 2 academic paper as a document source, performs a question-answering task, and optimizes hyperparameters for chunk size and top-k using a semantic similarity evaluation metric.
+
+For other templates, see the [Cookbooks](https://docs.nomadicml.com/get-started/cookbooks) repository.
+
+## 1. Install Nomadic
+
+[Create a Nomadic account](app.nomadicml.com/login).
+
+For Nomadic SDK users, your associated API keys will be provided by the Nomadic team.
+
+<Note> As `nomadic` is currently being developed, it is not yet published to PyPI. The [current `nomadic` PyPI package](https://pypi.org/project/nomadic/) is a temporary placeholder. </Note>
+
+Install `nomadic` with the `pip` wheel provided by the Nomadic team as shown below:
+
+```bash
+pip install nomadic-0.0.1-py3-none-any.whl
+```
+
+## 2. Import Necessary Libraries & Configure OpenAI API Key
+Import the required classes for Experiment setup, document processing, and evaluation.
+
+```python
+import nest_asyncio
+import os
+from pathlib import Path
+
+nest_asyncio.apply()
+
+os.environ["OPENAI_API_KEY"]="YOUR_OPENAI_API_KEY"
+```
+
+## 3. Prepare Data Ingestion Pipeline
+Download and process the necessary documents and evaluation dataset.
+
+```python
+import requests
+from pathlib import Path
+
+from llama_index.core import (
+    Document,
+    VectorStoreIndex,
+    StorageContext,
+    load_index_from_storage
+)
+from llama_index.core.evaluation import QueryResponseDataset
+from llama_index.core.node_parser import SimpleNodeParser
+from llama_index.readers.file import PDFReader
+
+# Helper function to download a file from a URL
+def download_file(url: str, output_path: str):
+    response = requests.get(url, headers={"User-Agent": "Chrome"})
+    response.raise_for_status()  # Raise an error on failed download
+    with open(output_path, "wb") as file:
+        file.write(response.content)
+
+# Build or load a vector store index based on document chunk size
+def _build_index(chunk_size, docs):
+    index_out_path = Path(f"./data/storage_{chunk_size}")
+    index_out_path.mkdir(parents=True, exist_ok=True)
+
+    if not any(index_out_path.iterdir()):  # Check if directory is empty
+        node_parser = SimpleNodeParser.from_defaults(chunk_size=chunk_size)
+        base_nodes = node_parser.get_nodes_from_documents(docs)
+
+        index = VectorStoreIndex(base_nodes)
+        index.storage_context.persist(index_out_path)
+    else:
+        storage_context = StorageContext.from_defaults(persist_dir=index_out_path)
+        index = load_index_from_storage(storage_context)
+
+    return index
+
+# Obtain documents, evaluation questions, and reference responses
+def obtain_rag_inputs():
+    data_dir = Path("./data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    llama2_pdf_path = data_dir / "llama2.pdf"
+    llama2_eval_qr_dataset_path = data_dir / "llama2_eval_qr_dataset.json"
+
+    if not llama2_pdf_path.exists():
+        download_file("https://arxiv.org/pdf/2307.09288.pdf", llama2_pdf_path)
+
+    loader = PDFReader()
+    docs = [Document(text="\n\n".join([d.get_content() for d in loader.load_data(file=llama2_pdf_path)]))]
+
+    if not llama2_eval_qr_dataset_path.exists():
+        download_file(
+            "https://www.dropbox.com/scl/fi/fh9vsmmm8vu0j50l3ss38/llama2_eval_qr_dataset.json?rlkey=kkoaez7aqeb4z25gzc06ak6kb&dl=1",
+            llama2_eval_qr_dataset_path
+        )
+
+    eval_dataset = QueryResponseDataset.from_json(llama2_eval_qr_dataset_path)
+    eval_qs = eval_dataset.questions
+    ref_response_strs = [r for (_, r) in eval_dataset.qr_pairs]
+
+    return docs, eval_qs, ref_response_strs
+```
+
+## 4. Define the Objective Function
+This function evaluates the model's performance given specific hyperparameters.
+
+Here, we take in both our tunable and fixed hyperparameter values. We then utilize LlamaIndex's semantic similary evaluator to compare the RAG system's produced answers to the given ground truths. Our reported evaluation metric that is representative of the selected hyperparameters' performance is the average of the evaluator's produced score, which we return.
+
+```python
+import numpy as np
+
+from llama_index.core.evaluation import SemanticSimilarityEvaluator
+from llama_index.core.evaluation.eval_utils import get_responses
+
+from nomadic.result import RunResult
+
+# Objective function
+def objective_function(param_dict):
+    chunk_size = param_dict["chunk_size"]
+    docs = param_dict["docs"]
+    top_k = param_dict["top_k"]
+    eval_qs = param_dict["eval_qs"]
+    ref_response_strs = param_dict["ref_response_strs"]
+
+    # build index
+    index = _build_index(chunk_size, docs)
+
+    # query engine
+    query_engine = index.as_query_engine(similarity_top_k=top_k)
+
+    # get predicted responses
+    pred_response_objs = get_responses(
+        eval_qs, query_engine, show_progress=True
+    )
+
+    # run evaluator
+    # NOTE: can uncomment other evaluators
+    evaluator = SemanticSimilarityEvaluator()
+    eval_results, pred_responses = [], []
+    for _, (eval_q, pred_response, ref_response) in enumerate(
+        zip(eval_qs, pred_response_objs, ref_response_strs)
+    ):
+        eval_results.append(
+            evaluator.evaluate_response(
+                eval_q, response=pred_response, reference=ref_response
+            )
+        )
+        pred_responses.append(pred_response)
+
+    # get semantic similarity metric
+    mean_score = np.array([r.score for r in eval_results]).mean()
+
+    return RunResult(score=mean_score, params=param_dict, metadata={"pred_responses": pred_responses})
+```
+
+## 5. Set Up and Run the Experiment
+Define and run the Nomadic experiment with the specified hyperparameters. We've chosen to explore the `chunk_size` values of `256, 512, 1024`, and `top_k` values of `1, 2, 5`.
+
+```python
+from nomadic.experiment.base import Experiment
+from nomadic.tuner import tune
+
+# Select tuner and configure hyperparameter search space
+docs, eval_qs, ref_response_strs = obtain_rag_inputs()
+experiment = Experiment(
+    param_fn=objective_function,
+    params={"chunk_size","top_k"},
+    fixed_param_dict={
+        "docs": docs,
+        "eval_qs": eval_qs[:10],
+        "ref_response_strs": ref_response_strs[:10],
+    },
+    enable_logging=True,
+)
+experiment_result = experiment.run(
+    param_dict={
+        "chunk_size": tune.choice([256, 512, 1024]),
+        "top_k": tune.choice([1, 2, 5]),
+    })
+```
+
+## 6. Interpret & Visualize Results
+After running the experiment, we view the best hyperparameters' produced results, in terms of their overall semantic similarity score, and the model's actual produced answers.
+
+```python
+best_result = experiment_result.best_run_result
+
+print(f"Best run result score: {best_result.score}, Top-k: {best_result.params['top_k']}, Chunk Size: {best_result.params['chunk_size']}\n")
+print(f"Produced answers of best run to questions:\n")
+for i in range(len(best_result.params["eval_qs"])):
+    print(f"\tQuestion {i+1}:\t{best_result.params['eval_qs'][i]}")
+    print(f"\tModel's Answer {i+1}:\t{best_result.metadata['pred_responses'][i]['response']}")
+    print(f"\tGround Truth {i+1}:\t{best_result.params['ref_response_strs'][i]}\n")
+
+# Visualize results
+experiment.visualize_results()
+```

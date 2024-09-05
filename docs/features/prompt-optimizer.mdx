@@ -1,0 +1,201 @@
+---
+title: 'Optimizing Prompts'
+description: 'Optimize your prompts and capture nuanced requirements'
+---
+
+Nomadic's prompt tuning capabilities enable you to discover and capture nuanced prompt requirements for optimal performance.
+
+When building LLM applications, it’s crucial to recognize that some prompts are more performant than others. MLEs often experiment with hundreds of prompts before discovering optimal prompts. Nomadic makes it easy for you to manage, experiment, and set the best prompting approaches within your system.
+
+Below is a basic example of how you can use Nomadic's SDK to systematically test different prompt approaches (technique, complexity, and task focus) to discover the best-performing prompt approach.
+
+<Note> Nomadic Workspace (GUI) prompt playground coming soon!</Note>
+
+## 1. Import Nomadic libraries
+
+
+```python prompt_optimizer.py
+import os
+from nomadic.experiment import Experiment
+from nomadic.model import OpenAIModel
+from nomadic.tuner import tune
+from llama_index.core.evaluation import SemanticSimilarityEvaluator
+from llama_index.embeddings.openai import OpenAIEmbedding
+```
+
+## 2. Set up your project directory and API keys
+
+Make sure you've specified the API key to access your model (e.g. OpenAI, Mistral) in `{PROJECT_DIRECTORY}/.env.dev`. Nomadic will then establish the connection to your model endpoints.
+
+```python prompt_optimizer.py
+PROJECT_DIRECTORY = f"{os.path.abspath('')}/../.."
+
+if not os.environ.get("OPENAI_API_KEY", None):
+    from dotenv import dotenv_values
+
+    dotenv_values = dotenv_values(f"{PROJECT_DIRECTORY}/.env.dev")
+    if "OPENAI_API_KEY" not in dotenv_values:
+        raise ValueError(
+            "OPENAI_API_KEY not found in either poetry environment nor in root .env.dev."
+        )
+    os.environ["OPENAI_API_KEY"] = dotenv_values["OPENAI_API_KEY"]
+
+```
+
+## 3. Add a prompt template
+
+```python prompt_optimizer.py
+prompt_template = """
+Figure out how badly I'm hallucinating in the following:
+The 2020 Olympics Ping Pong Mens Singles Gold Medal was not won by Ma Long.
+"""
+```
+
+## 4. Upload Evaluation Dataset
+
+
+Upload your own dataset for evaluating experiments.
+
+Each dataset row should have:
+- `Context`
+- `Instruction`
+- `Question`
+- `Answer`
+
+| Key           | Required                                                                                         | Description                                                                                         | Example                                                                                                      |
+|---------------|--------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| `Context`     | No                                                                                                | Enhances the prompt. Supplies additional background information to help the model generate accurate responses. | “You are a doctor writing a visit note from a transcript of the doctor-patient conversation.”                |
+| `Instruction` | No                                                                                                | Enhances the prompt. Provides specific guidance to the model on what action to perform.              | “Absolutely do not hallucinate. Capture only factual information.”                                           |
+| `Question`    | Yes                                                                                               | The user input or query that prompts the model to generate a response. This is the only required key.| “What were the main topics discussed?”                                                                       |
+| `Answer`      | No, required only if using a supervised evaluator such as cosine similarity                       | The expected output or response from the model, which serves as the benchmark for evaluation.        | “Investment strategies, retirement planning, and risk management.”                                           |
+
+
+```python
+sample_evaluation_dataset = [
+    {
+        "Context": "A Hallucination Problem",
+        "Instruction": "",
+        "Question": "",
+        "Answer": ""
+    }
+]
+```
+
+**Example Dataset**:
+
+```python prompt_optimizer.py
+  sample_evaluation_dataset = [
+    {
+        "Context": "A Hallucination Problem",
+        "Instruction": "",
+        "Question": "",
+        "Answer": ""
+    }
+]
+```
+
+
+## 5. Define Prompt Techniques
+
+Nomadic enables you to create a diverse set of prompts from a target prompt.
+
+You can experiment with the following prompt parameters:
+
+
+| Key   | Description     |  Required | Supported Parameters |
+|--------------|-------------|----------|---------|
+| **prompt_tuning_approach**| Choose from prompting techniques.| false | `zero-shot` - The model attempts to answer without specific examples, `few-shot` - Provides a few examples to guide the model's response, `chain-of-thought` -Encourages the model to show its reasoning process|
+| **prompt_tuning_complexity**    | Adjust the level of detail in the prompt. | false | `simple` - Creates straightforward, direct prompts, `complex` - Generates more detailed, nuanced prompts|
+| **prompt_tuning_focus**    | Focus on different tasks. | false | Common options (customizable): `fact extraction`, `action points`, `summary`, `simplify language`, `change tone`, `British English usage`, `template: [template_format]` |
+
+
+## 6. Define your evaluation function
+
+Choose one of our off-the shelf evaluation metrics, or define a custom evaluator.
+
+### Standard Evaluator
+
+See [Evaluations](docs.nomadicml.com/features/evaluations).
+
+### Custom Evaluator
+
+Define a custom metric using the Nomadic `custom_evaluate` method.
+
+**Sample Custom Evaluator**:
+
+```python prompt_optimizer.py
+evaluator={
+        # The "custom_evaluate" method allows for tailored evaluation metrics.
+        "method": "custom_evaluate",
+        # Evaluation metrics:
+        # These criteria will be used to score each model output.
+        # Each metric is typically scored on a scale (e.g., 0-20).
+        "evaluation_metrics": [
+            {"metric": "Accuracy", "weight": 0.75},
+            # 2. "Completeness of information": Does the summary cover all important points from the meeting?
+            {"metric": "Easiness to Understand", "weight": 0.1},
+            # 3. "Clarity and coherence": Is the summary well-structured and easy to understand?
+            {"metric": "Clarity and coherence", "weight": 0.1},
+            # 4. "Actionable advice": Does the summary provide clear, actionable financial recommendations?
+            {"metric": "Actionable advice", "weight": 0.025},
+            # 5. "Professional tone": Is the language appropriate for a professional financial context?
+            {"metric": "Professionalism", "weight": 0.025}
+        ]
+        # Consider adding or modifying these metrics based on your specific needs.
+        # The evaluation results will help identify which parameter combinations produce the best summaries.
+    }
+```
+## 7. Create your Experiment using the Nomadic library
+
+Experiment with your prompts by leveraging the same Nomadic experimentation library as generic experiments.
+
+```python
+experiment = Experiment(
+    params={
+        "temperature", "max_tokens",
+        # User Guidance: Prompt Tuning Parameters
+        "prompt_tuning_approach", "prompt_tuning_complexity", "prompt_tuning_focus"
+    },
+    evaluation_dataset=sample_evaluation_dataset,
+    user_prompt_request=prompt_template,
+    model= OpenAIModel(model="gpt-4o-mini", api_keys={"OPENAI_API_KEY": os.environ["OPENAI_API_KEY"]}),
+    # User Guidance: Evaluator Configuration
+    # This section defines how the model's outputs will be assessed.
+    evaluator=evaluator,
+    search_method="grid",
+    enable_logging=True,
+    use_flaml_library=False,
+)
+```
+
+## 8. Run your Experiment!
+
+```python prompt_optimizer.py
+experiment_result = experiment.run(
+    param_dict={
+        "temperature": tune.choice([0.1, 0.9]),
+        "max_tokens": tune.choice([250, 500]),
+        "prompt_tuning_approach": tune.choice(["zero-shot", "few-shot", "chain-of-thought"]),
+        "prompt_tuning_complexity": tune.choice(["simple", "complex"]),
+        "prompt_tuning_focus": tune.choice(["fact extraction", "action points"])
+    }
+)
+```
+
+## 9. Interpret Results
+
+To identify the best-performing prompt technique, run
+
+```python
+experiment_result.run_results[0].metadata
+```
+
+The `experiment.visualize_results()` function provides a comprehensive visual analysis & statistical summary of the experiment results, focusing on the score distribution and its relationship with various hyperparameters.
+```python
+experiment.visualize_results()
+```
+
+To test signifiance,  `test_significance` runs a Mann-Whitney U test to compare the top-performing parameter combinations against the rest of the results.
+```python
+experiment.test_significance(n=5)  # Compares top 5 results against the rest
+```
