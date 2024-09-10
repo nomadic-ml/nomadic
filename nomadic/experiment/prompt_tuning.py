@@ -10,8 +10,6 @@ import random
 # Mock implementation of DEFAULT_OPENAI_MODEL
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 
-# Load a pre-trained model for computing sentence embeddings
-model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 class PromptTuner(BaseModel):
@@ -423,6 +421,7 @@ def custom_evaluate_hallucination(
     Returns:
     - A dictionary with the normalized answer, analysis, correctness, and score.
     """
+    # Load a pre-trained model for computing sentence embeddings
 
     if not evaluation_dataset:
         return {
@@ -439,6 +438,7 @@ def custom_evaluate_hallucination(
             "is_correct": False,
             "score": 0.0,
         }
+    model = SentenceTransformer("all-MiniLM-L6-v2")
 
     evaluation_labels = list(
         set([entry["answer"].strip().lower() for entry in evaluation_dataset])
