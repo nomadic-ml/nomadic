@@ -6,6 +6,7 @@ from llama_index.core.llms import LLM, CompletionResponse
 from llama_index.llms.openai import OpenAI
 from llama_index.llms.sagemaker_endpoint import SageMakerLLM
 from llama_index.llms.together import TogetherLLM
+from llama_index.llms.vllm import VllmServer
 import openai
 
 from nomadic.client import get_client
@@ -118,7 +119,7 @@ class TogetherAIModel(Model):
     key_name: ClassVar[str] = "together.ai"
     pretty_key_name: ClassVar[str] = "Together.AI"
     required_api_keys: ClassVar[Set[str]] = ("TOGETHER_API_KEY",)
-    model: str = Field(..., description="Model to use to Together.AI")
+    model: str = Field(..., description="Model to use with Together.AI")
 
     def _set_model(
         self,
@@ -136,6 +137,38 @@ class TogetherAIModel(Model):
 
     def run(self, **kwargs) -> CompletionResponse:
         """Run Together.AI model"""
+        self._set_model(
+            temperature=kwargs["parameters"].get("temperature", None),
+            model_kwargs=kwargs["parameters"],
+        )
+        return self.llm.complete(
+            prompt=kwargs["prompt"],
+            formatted=True,
+        )
+
+class VLLMModel(Model):
+    key_name: ClassVar[str] = "vllm"
+    pretty_key_name: ClassVar[str] = "vLLM"
+    required_api_keys: ClassVar[Set[str]] = ()
+    model: Optional[str] = Field(default=None, description="Model to use with vLLM")
+    api_url: Optional[str] = Field(default="http://localhost:8000", description="Address of model hosted with vLLM")
+
+    def _set_model(
+        self,
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ):
+        """Set vLLM model"""
+        super()._set_model(**kwargs)
+        self.llm = VllmServer(
+            model=self.model,
+            api_url=self.api_url,
+            model_kwargs=model_kwargs,
+            kwargs=kwargs,
+        )
+
+    def run(self, **kwargs) -> CompletionResponse:
+        """Run vLLM model"""
         self._set_model(
             temperature=kwargs["parameters"].get("temperature", None),
             model_kwargs=kwargs["parameters"],
