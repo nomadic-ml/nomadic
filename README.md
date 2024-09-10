@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Nomadic is an enterprise-grade toolkit focused on parameter search for ML teams to continuously optimize compound AI systems, from pre to post-production. Rapidly experiment and keep hyperparameters, prompts, and all aspects of your system production-ready. Teams use Nomadic to deeply understand their AI system's best levers to boost performance as it scales.
+  Nomadic is an enterprise-grade toolkit by <a href="https://www.nomadicml.com/">NomadicML</a> focused on parameter search for ML teams to continuously optimize compound AI systems, from pre to post-production. Rapidly experiment and keep hyperparameters, prompts, and all aspects of your system production-ready. Teams use Nomadic to deeply understand their AI system's best levers to boost performance as it scales.
 </p>
 
 <p align="center">
@@ -38,12 +38,7 @@ Please check it out for the most up-to-date tutorials, cookbooks, SDK references
 
 For other Quickstarts based on your application: including LLM safety, advanced RAGs, transcription/summarization (across fintech, support, healthcare),  or especially compound AI systems (multiple components > monolithic models), check out our [🍴Cookbooks](https://docs.nomadicml.com/get-started/cookbooks).
 
-### 1. Install the Nomadic package
-``` python
-pip install nomadic
-```
-
-### 2. Import Nomadic Libraries and Upload OpenAI Key
+### 1. Import Nomadic Libraries and Upload OpenAI Key
 ``` python
 import os
 
@@ -71,7 +66,7 @@ import json
 os.environ["OPENAI_API_KEY"]= <YOUR_OPENAI_KEY>
 ```
 
-### 3. Define RAG Hyperparameters for the Experiments
+### 2. Define RAG Hyperparameters for the Experiments
 
 Say we want to explore (all of!) the following hyperparameters and search spaces to optimize a RAG performance:
 
@@ -103,7 +98,7 @@ embedding_model = tune.choice(["text-embedding-ada-002", "text-embedding-curie-0
 retrieval_strategy = tune.choice(["sentence-window", "auto-merging"])
 ```
 
-### 4. Upload Evaluation Dataset and External Data 
+### 3. Upload Evaluation Dataset and External Data 
 
 ```python
 eval_json = {
@@ -145,7 +140,7 @@ In this demo, we use specialized evaluation metrics that work specifically well 
 
 
 
-### 5. Run the Retrieval Experiment! 🚀
+### 4. Run the Retrieval Experiment! 🚀
 ```python
 # Obtain RAG inputs
 docs, eval_qs, ref_response_strs = obtain_rag_inputs(pdf_url=pdf_url, eval_json=eval_json)
@@ -164,7 +159,6 @@ experiment_retrieval = Experiment(
         "eval_qs": eval_qs[:10],
         "ref_response_strs": ref_response_strs[:10],
     },
-    enable_logging=False,
 )
 
 # After the retrieval is done
@@ -192,7 +186,6 @@ experiment_inference = Experiment(
         "best_retrieval_results": best_run_result['metadata'].get("best_retrieval_results", []),
         "ref_response_strs": ref_response_strs[:10],  # Make sure this matches the number of queries used in retrieval
     },
-    enable_logging=False,
 )
 
 inference_results = experiment_inference.run(param_dict={
