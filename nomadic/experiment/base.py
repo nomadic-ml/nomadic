@@ -15,7 +15,11 @@ from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner.base import BaseParamTuner
 from nomadic.util import is_ray_installed
 
-from nomadic.experiment.prompt_tuning import PromptTuner, custom_evaluate
+from nomadic.experiment.prompt_tuning import (
+    PromptTuner,
+    custom_evaluate,
+    custom_evaluate_hallucination,
+)
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -144,9 +148,10 @@ class Experiment(BaseModel):
     client_id: Optional[str] = Field(
         default=None, description="ID of Experiment in Workspace"
     )
-    # client: Optional[Client] = Field(
-    #     default=None, description="Client to use for synching experiments."
-    # )
+    num_simulations: int = Field(
+        default=1,
+        description="Number of simulations to run for each configuration.",
+    )
 
     @field_validator("tuner")
     def check_tuner_class(cls, value):
@@ -159,99 +164,98 @@ class Experiment(BaseModel):
             raise ValueError(
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
-        # TODO: Fix logic w.r.t. having either one experiment result per experiment, or having multiple experiment results
         if self.all_experiment_results and not self.experiment_result:
             self.experiment_result = self.all_experiment_results[0]
-        if not self.client_id:  # Check this flag before registering
+        if not self.client_id:
             nomadic_client: NomadicClient = get_client()
             if nomadic_client.auto_sync_enabled:
                 nomadic_client.experiments.register(self)
 
-    def run(self, param_dict: Dict[str, Any]) -> ExperimentResult:
-        def _get_responses(
-            type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]]
-        ) -> Tuple[List[str], List[str], List[str], List[str]]:
-            all_pred_responses, all_eval_qs, all_ref_responses, all_prompt_variants = (
-                [],
-                [],
-                [],
-                [],
-            )
+    def _get_responses(
+        self, type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]]
+    ) -> Tuple[List[str], List[str], List[str], List[str]]:
+        all_pred_responses, all_full_prompts, all_ref_responses, all_prompt_variants = (
+            [],
+            [],
+            [],
+            [],
+        )
 
-            openai_params, prompt_tuning_params = type_safe_param_values
+        openai_params, prompt_tuning_params = type_safe_param_values
 
-            # Initialize PromptTuner with the current parameters
-            prompt_tuner = PromptTuner(
-                prompting_approaches=[
-                    prompt_tuning_params.get("prompt_tuning_approach", "None")
-                ],
-                prompt_complexities=[
-                    prompt_tuning_params.get("prompt_tuning_complexity", "None")
-                ],
-                prompt_focuses=[
-                    prompt_tuning_params.get("prompt_tuning_focus", "None")
-                ],
-                enable_logging=self.enable_logging,
-            )
+        prompt_tuner = PromptTuner(
+            prompting_approaches=[
+                prompt_tuning_params.get("prompt_tuning_approach", "None")
+            ],
+            prompt_complexities=[
+                prompt_tuning_params.get("prompt_tuning_complexity", "None")
+            ],
+            prompt_focuses=[prompt_tuning_params.get("prompt_tuning_focus", "None")],
+            enable_logging=self.enable_logging,
+        )
 
-            # Generate prompt variants using PromptTuner
-            prompt_variants = prompt_tuner.generate_prompt_variants(
-                self.user_prompt_request,
-                (
-                    self.model.api_keys.get("OPENAI_API_KEY")
-                    if hasattr(self.model, "api_keys")
-                    else None
-                ),
-            )
+        prompt_variants = prompt_tuner.generate_prompt_variants(
+            self.user_prompt_request,
+            (
+                self.model.api_keys.get("OPENAI_API_KEY")
+                if hasattr(self.model, "api_keys")
+                else None
+            ),
+        )
 
-            for i, prompt_variant in enumerate(prompt_variants):
+        for i, prompt_variant in enumerate(prompt_variants):
+            if self.enable_logging:
+                print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
+                print(f"Prompt variant: {prompt_variant[:200]}...")
+
+            pred_responses, full_prompts, ref_responses = [], [], []
+            if not self.evaluation_dataset:
+                full_prompt = prompt_variant
+                completion_response: CompletionResponse = self.model.run(
+                    prompt=full_prompt,
+                    parameters=openai_params,
+                )
+                pred_response = self._extract_response(completion_response)
+                pred_responses.append(pred_response)
+                full_prompts.append(full_prompt)
+                ref_responses.append(None)
+                all_prompt_variants.append(prompt_variant)
                 if self.enable_logging:
-                    print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
-                    print(
-                        f"Prompt variant: {prompt_variant[:200]}..."
-                    )  # Print part of the variant
-
-                pred_responses, eval_qs, ref_responses = [], [], []
-                if not self.evaluation_dataset:
-                    full_prompt = prompt_variant
+                    print(f"Full Prompt: {full_prompt[:200]}...")
+                    print(f"Response: {pred_response[:100]}...")
+            else:
+                for j, example in enumerate(self.evaluation_dataset):
+                    if self.enable_logging:
+                        print(
+                            f"Processing example {j+1}/{len(self.evaluation_dataset)}"
+                        )
+                    full_prompt = self._construct_prompt(prompt_variant, example)
                     completion_response: CompletionResponse = self.model.run(
                         prompt=full_prompt,
                         parameters=openai_params,
                     )
                     pred_response = self._extract_response(completion_response)
                     pred_responses.append(pred_response)
-                    eval_qs.append(full_prompt)
-                    ref_responses.append(None)
+                    full_prompts.append(full_prompt)
+                    ref_responses.append(example.get("answer", None))
                     all_prompt_variants.append(prompt_variant)
                     if self.enable_logging:
+                        print(f"Full Prompt: {full_prompt[:200]}...")
                         print(f"Response: {pred_response[:100]}...")
-                else:
-                    for j, example in enumerate(self.evaluation_dataset):
-                        if self.enable_logging:
-                            print(
-                                f"Processing example {j+1}/{len(self.evaluation_dataset)}"
-                            )
-                        full_prompt = self._construct_prompt(prompt_variant, example)
-                        completion_response: CompletionResponse = self.model.run(
-                            prompt=full_prompt,
-                            parameters=openai_params,
-                        )
-                        pred_response = self._extract_response(completion_response)
-                        pred_responses.append(pred_response)
-                        eval_qs.append(full_prompt)
-                        ref_responses.append(example.get("Answer", None))
-                        all_prompt_variants.append(prompt_variant)
-                        if self.enable_logging:
-                            print(f"Response: {pred_response[:100]}...")
-                all_pred_responses.extend(pred_responses)
-                all_eval_qs.extend(eval_qs)
-                all_ref_responses.extend(ref_responses)
-            return (
-                all_pred_responses,
-                all_eval_qs,
-                all_ref_responses,
-                all_prompt_variants,
-            )
+
+            all_pred_responses.extend(pred_responses)
+            all_full_prompts.extend(full_prompts)
+            all_ref_responses.extend(ref_responses)
+
+        return (
+            all_pred_responses,
+            all_full_prompts,
+            all_ref_responses,
+            all_prompt_variants,
+        )
+
+    def run(self, param_dict: Dict[str, Any]) -> ExperimentResult:
+        self.params = set(param_dict.keys())  # Set the params attribute
 
         def _default_param_function(param_values: Dict[str, Any]) -> RunResult:
             if self.enable_logging:
@@ -259,21 +263,44 @@ class Experiment(BaseModel):
                 for param, value in param_values.items():
                     print(f"{param}: {value}")
 
-            type_safe_param_values = self._enforce_param_types(param_values)
-            pred_responses, eval_qs, ref_responses, prompt_variants = _get_responses(
-                type_safe_param_values
-            )
-            eval_results = self._evaluate_responses(pred_responses, ref_responses)
-            mean_score = self._calculate_mean_score(eval_results)
+            all_scores = []
+            all_metadata = []
 
-            if self.enable_logging:
-                print(f"\nExperiment run completed. Mean score: {mean_score}")
+            type_safe_param_values = self._enforce_param_types(param_values)
+            (
+                all_pred_responses,
+                all_full_prompts,
+                all_ref_responses,
+                prompt_variants,
+            ) = self._get_responses(type_safe_param_values)
+
+            if self.evaluation_dataset:
+                eval_results = self._evaluate_responses(
+                    all_pred_responses, all_ref_responses, self.evaluation_dataset
+                )
+            else:
+                eval_results = self._evaluate_responses(
+                    all_pred_responses, all_ref_responses
+                )
+
+            for result in eval_results:
+                result["params"] = param_values
+
+            mean_scores = self._calculate_mean_score(eval_results)
+
+            current_param_key = str(
+                tuple(sorted((k, param_values[k]) for k in self.params))
+            )
+
+            current_score = mean_scores.get(current_param_key, 0.0)
+
+            all_scores.append(current_score)
 
             metadata = {
-                "Answers": pred_responses,
-                "Ground Truth": ref_responses,
+                "Answers": all_pred_responses,
+                "Ground Truth": all_ref_responses,
                 "Custom Evaluator Results": eval_results,
-                "Full Prompts": eval_qs,
+                "Full Prompts": all_full_prompts,
                 "Prompt Variants": prompt_variants,
                 "Prompt Parameters": {
                     k: v
@@ -285,15 +312,34 @@ class Experiment(BaseModel):
                         "prompt_tuning_focus",
                     ]
                 },
+                "All Mean Scores": {str(k): v for k, v in mean_scores.items()},
             }
 
             if hasattr(self, "evaluation_metrics"):
                 metadata["Evaluation Metrics"] = self.evaluation_metrics
 
+            all_metadata.append(metadata)
+
+            final_score = sum(all_scores) / len(all_scores)
+
+            if self.enable_logging:
+                print(
+                    f"\nAll simulations completed. Final average score: {final_score}"
+                )
+
+            import numpy as np
+
             return RunResult(
-                score=mean_score,
+                score=final_score,
                 params=param_values,
-                metadata=metadata,
+                metadata={
+                    "Individual Simulation Results": all_metadata,
+                    "All Simulation Scores": all_scores,
+                    "Number of Simulations": self.num_simulations,
+                    "Median Score": np.median(all_scores),
+                    "Best Score": max(all_scores),
+                    "Score Standard Deviation": np.std(all_scores),
+                },
             )
 
         is_error = False
@@ -318,23 +364,34 @@ class Experiment(BaseModel):
         self.experiment_result = (
             experiment_result or self._create_default_experiment_result(param_dict)
         )
+
         if self.enable_logging:
             print(f"\nExperiment completed. Status: {self.experiment_status}")
+
         nomadic_client: NomadicClient = get_client()
         if nomadic_client.auto_sync_enabled:
             nomadic_client.experiments.register(self)
+
         return self.experiment_result
 
     def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:
-        # Use the prompt variant as the base, which should already include any tuning modifications
-        prompt = prompt_variant
+        replacements = {
+            "[CONTEXT]": example["context"],
+            "[QUERY]": example["query"],
+            "[INSTRUCTION]": example.get("instruction", ""),
+            "[RESPONSE]": example.get("response", ""),
+        }
 
-        # Add example-specific information
-        prompt += f"\n\nContext: {example['Context']}"
-        prompt += f"\nInstruction: {example['Instruction']}"
-        prompt += f"\nQuestion: {example['Question']}"
+        for placeholder, value in replacements.items():
+            prompt_variant = prompt_variant.replace(placeholder, value)
 
-        return prompt
+        unused_placeholders = [
+            key for key in replacements.keys() if key in prompt_variant
+        ]
+        for placeholder in unused_placeholders:
+            prompt_variant = prompt_variant.replace(placeholder, "")
+
+        return prompt_variant.strip()
 
     def _extract_response(self, completion_response: CompletionResponse) -> str:
         if isinstance(self.model, OpenAIModel) or isinstance(
@@ -361,13 +418,27 @@ class Experiment(BaseModel):
         return openai_params, prompt_tuning_params
 
     def _evaluate_responses(
-        self, pred_responses: List[str], ref_responses: List[str]
-    ) -> List[Any]:
+        self,
+        pred_responses: List[str],
+        ref_responses: List[str],
+        evaluation_dataset: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
         eval_results = []
-        if self.evaluator:
-            for pred, ref in zip(pred_responses, ref_responses):
+
+        for pred, ref in zip(pred_responses, ref_responses):
+            result = {"generated_answer": pred, "ground_truth": ref}
+            if self.evaluator:
                 if isinstance(self.evaluator, dict):
-                    if self.evaluator.get("method") == "custom_evaluate":
+                    if self.evaluator.get("method") == "custom_evaluate_hallucination":
+                        if evaluation_dataset:
+                            result.update(
+                                custom_evaluate_hallucination(
+                                    pred, ref, evaluation_dataset
+                                )
+                            )
+                        else:
+                            result.update(custom_evaluate_hallucination(pred, ref))
+                    elif self.evaluator.get("method") == "custom_evaluate":
                         evaluation_metrics = self.evaluator.get(
                             "evaluation_metrics", []
                         )
@@ -385,15 +456,15 @@ class Experiment(BaseModel):
                             if hasattr(self.model, "api_keys")
                             else None
                         )
-                        eval_results.append(
+                        result.update(
                             custom_evaluate(pred, evaluation_metrics, openai_api_key)
                         )
                     else:
                         raise ValueError("Invalid evaluator method")
                 elif callable(self.evaluator):
-                    eval_results.append(self.evaluator(pred, ref))
+                    result.update(self.evaluator(pred, ref))
                 elif isinstance(self.evaluator, BaseEvaluator):
-                    eval_results.append(
+                    result.update(
                         {
                             "score": self.evaluator.evaluate_response(
                                 response=Response(pred), reference=ref
@@ -402,21 +473,48 @@ class Experiment(BaseModel):
                     )
                 else:
                     raise ValueError("Invalid evaluator type")
+            eval_results.append(result)
+
         return eval_results
 
-    def _calculate_mean_score(self, eval_results: List[Any]) -> float:
-        scores = []
-        for result in eval_results:
-            if "scores" in result and "Overall score" in result["scores"]:
-                scores.append(result["scores"]["Overall score"])
-            elif "overall_score" in result and result["overall_score"] != 0:
-                scores.append(result["overall_score"])
-            elif "score" in result:
-                scores.append(result["score"])
-            elif hasattr(result, "score"):
-                scores.append(result.score)
+    def _calculate_mean_score(
+        self, eval_results: List[Dict[str, Any]]
+    ) -> Dict[str, float]:
+        if not eval_results:
+            print("Warning: No evaluation results provided.")
+            return {}
 
-        return sum(scores) / len(scores) if scores else 0
+        scores_by_params = {}
+
+        for result in eval_results:
+            if not isinstance(result, dict) or "score" not in result:
+                print(f"Warning: Unexpected result format: {result}")
+                continue
+
+            score = result["score"]
+            if not isinstance(score, (int, float)):
+                print(
+                    f"Warning: Invalid score type: {type(score)}. Expected int or float."
+                )
+                continue
+
+            params = result.get("params", {})
+            param_key = tuple(
+                sorted((k, v) for k, v in params.items() if k in self.params)
+            )
+
+            if param_key not in scores_by_params:
+                scores_by_params[param_key] = []
+            scores_by_params[param_key].append(score)
+
+        mean_scores = {
+            str(param_key): sum(scores) / len(scores)
+            for param_key, scores in scores_by_params.items()
+        }
+
+        print("Debug: Calculated mean_scores =", mean_scores)
+
+        return mean_scores
 
     def _setup_tuner(self, param_dict: Dict[str, Any], param_function: Callable):
         if not self.tuner:
@@ -439,7 +537,6 @@ class Experiment(BaseModel):
                 from nomadic.tuner.ray import RayTuneParamTuner
                 from ray import tune as ray_tune
 
-                # Convert param_dict to Ray Tune format
                 ray_param_dict = {}
                 for param, value in param_dict.items():
                     if isinstance(value, list):
@@ -449,14 +546,14 @@ class Experiment(BaseModel):
 
                 self.tuner = RayTuneParamTuner(
                     param_fn=param_function,
-                    param_dict=ray_param_dict,  # Use the converted ray_param_dict
+                    param_dict=ray_param_dict,
                     search_method=self.search_method,
                     fixed_param_dict=self.fixed_param_dict,
                     current_param_dict=self.current_param_dict,
                     show_progress=self.enable_logging,
                 )
             else:
-                raise NotImplemented(
+                raise NotImplementedError(
                     "Only FLAML and Ray Tune are supported as tuning backends."
                 )
 
@@ -804,23 +901,35 @@ class Experiment(BaseModel):
     ):
         data = []
         for run_result in experiment_result.run_results:
-            row = {
-                "Score": f"{run_result.score:.2f}",
-                "Full Prompt": self._wrap_text(
-                    run_result.metadata.get("Prompt Variants", [""])[0],
-                    max_prompt_length,
-                ),
-                "Answer": self._wrap_text(
-                    run_result.metadata.get("Answers", [""])[0], max_answer_length
-                ),
-            }
-            row.update(run_result.metadata.get("Prompt Parameters", {}))
-            data.append(row)
+            prompt_variants = run_result.metadata.get("Prompt Variants", [])
+            full_prompts = run_result.metadata.get("Full Prompts", [])
+            answers = run_result.metadata.get("Answers", [])
+
+            for prompt_variant, full_prompt, answer in zip(
+                prompt_variants, full_prompts, answers
+            ):
+                row = {
+                    "Run Score": f"{run_result.score:.2f}",
+                    "Prompt Variant": self._wrap_text(
+                        prompt_variant, max_prompt_length
+                    ),
+                    "Full Prompt": self._wrap_text(full_prompt, max_prompt_length),
+                    "Answer": self._wrap_text(answer, max_answer_length),
+                }
+                row.update(run_result.params)
+                data.append(row)
 
         df = pd.DataFrame(data)
 
         if max_rows is not None:
             df = df.head(max_rows)
+
+        print(f"Number of rows: {len(df)}")
+        print(f"Number of unique prompt variants: {df['Prompt Variant'].nunique()}")
+        print(f"Number of unique full prompts: {df['Full Prompt'].nunique()}")
+        print(f"Number of unique answers: {df['Answer'].nunique()}")
+        print("\nSample of unique prompt variants:")
+        print(df["Prompt Variant"].unique()[:5])
 
         return df
 
