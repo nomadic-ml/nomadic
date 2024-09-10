@@ -71,7 +71,7 @@ class PromptTuner(BaseModel):
                     print(system_message)
                     try:
                         response = client.chat.completions.create(
-                            model="gpt-4",
+                            model="gpt-4o",
                             messages=[
                                 {"role": "system", "content": system_message},
                                 {
