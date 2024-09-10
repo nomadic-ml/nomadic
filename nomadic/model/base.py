@@ -163,8 +163,7 @@ class VLLMModel(Model):
         self.llm = VllmServer(
             model=self.model,
             api_url=self.api_url,
-            model_kwargs=model_kwargs,
-            kwargs=kwargs,
+            **kwargs,
         )
 
     def run(self, **kwargs) -> CompletionResponse:
