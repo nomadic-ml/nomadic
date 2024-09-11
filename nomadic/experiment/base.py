@@ -206,6 +206,9 @@ class Experiment(BaseModel):
             client=self.model,  # Pass the client or the required object
             user_prompt_request=self.user_prompt_request
         )
+        print("prompt variants")
+        print(prompt_variants)
+        print("prompt variants found")
         for i, prompt_variant in enumerate(prompt_variants):
             if self.enable_logging:
                 print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
@@ -237,7 +240,7 @@ class Experiment(BaseModel):
                     pred_response = self._extract_response(completion_response)
                     pred_responses.append(pred_response)
                     eval_qs.append(full_prompt)
-                    ref_responses.append(example.get("answer", None))
+                    ref_responses.append(example.get("Answer", None))
                     all_prompt_variants.append(prompt_variant)
                     if self.enable_logging:
                         print(f"Response: {pred_response[:100]}...")
@@ -265,6 +268,9 @@ class Experiment(BaseModel):
             all_metadata = []
 
             type_safe_param_values = self._enforce_param_types(param_values)
+            print("type safe param values")
+            print(type_safe_param_values)
+            print("found")
 
             (
                 all_pred_responses,
@@ -272,11 +278,19 @@ class Experiment(BaseModel):
                 all_ref_responses,
                 prompt_variants,
             ) = self._get_responses(type_safe_param_values)
+            print("starting")
+            print(all_pred_responses,
+                all_full_prompts,
+                all_ref_responses,
+                prompt_variants)
+            print("finishing")
             if self.evaluation_dataset:
+                print("found")
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses, self.evaluation_dataset
                 )
             else:
+                print("not found")
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses
                 )
@@ -381,19 +395,18 @@ class Experiment(BaseModel):
         query: str = "",
         question: str = "",
         response: str = "",
-        answer: str = "",
+        answer: str = ""
     ) -> str:
         # Determine values for query/question (interchangeable) and response/answer (irreplaceable)
-        query_value = example.get("query", query) or example.get("question", question) or query or question
-        response_value = example.get("response", response) or response
-        answer_value = example.get("answer", answer) or answer
+        query_value = example.get("query", query) or query or question
+        response_value = example.get("response", response) or response or answer
 
         # Prepare replacements dictionary
         replacements = {
             "[CONTEXT]": example.get("context", context) or context,
             "[QUERY]": query_value,
             "[INSTRUCTION]": example.get("instruction", instruction) or instruction,
-            "[RESPONSE]": response_value or answer_value,  # Use response first, then fall back to answer
+            "[RESPONSE]": response_value,
         }
 
         # Replace placeholders in the prompt variant
@@ -506,48 +519,26 @@ class Experiment(BaseModel):
         scores_by_params = {}
 
         for result in eval_results:
-            # Check for the standard format with a single "score"
-            if isinstance(result, dict) and "score" in result:
-                score = result["score"]
-                if not isinstance(score, (int, float)):
-                    print(
-                        f"Warning: Invalid score type: {type(score)}. Expected int or float."
-                    )
-                    continue
-
-                params = result.get("params", {})
-                param_key = tuple(
-                    sorted((k, v) for k, v in params.items() if k in self.params)
-                )
-
-                if param_key not in scores_by_params:
-                    scores_by_params[param_key] = []
-                scores_by_params[param_key].append(score)
-
-            # Check for the new format with "overall_score"
-            elif isinstance(result, dict) and "overall_score" in result:
-                overall_score = result["overall_score"]
-                if not isinstance(overall_score, (int, float)):
-                    print(
-                        f"Warning: Invalid overall_score type: {type(overall_score)}. Expected int or float."
-                    )
-                    continue
-
-                params = result.get("params", {})
-                param_key = tuple(
-                    sorted((k, v) for k, v in params.items() if k in self.params)
-                )
-
-                if param_key not in scores_by_params:
-                    scores_by_params[param_key] = []
-                scores_by_params[param_key].append(overall_score)
-
-            # Handle unexpected formats
-            else:
+            if not isinstance(result, dict) or "score" not in result:
                 print(f"Warning: Unexpected result format: {result}")
                 continue
 
-        # Calculate mean scores for all parameter combinations
+            score = result["score"]
+            if not isinstance(score, (int, float)):
+                print(
+                    f"Warning: Invalid score type: {type(score)}. Expected int or float."
+                )
+                continue
+
+            params = result.get("params", {})
+            param_key = tuple(
+                sorted((k, v) for k, v in params.items() if k in self.params)
+            )
+
+            if param_key not in scores_by_params:
+                scores_by_params[param_key] = []
+            scores_by_params[param_key].append(score)
+
         mean_scores = {
             str(param_key): sum(scores) / len(scores)
             for param_key, scores in scores_by_params.items()
@@ -996,3 +987,4 @@ class Experiment(BaseModel):
             lines.append(" ".join(current_line))
 
         return "\n".join(lines)
+        
