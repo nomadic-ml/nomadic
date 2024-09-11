@@ -4,8 +4,13 @@ from pydantic import BaseModel, Field
 import re
 import time
 import json
-from sentence_transformers import SentenceTransformer, util
+from sklearn.feature_extraction.text import TfidfVectorizer
 import random
+import numpy as np
+from itertools import product
+from openai import OpenAI
+
+
 
 # Mock implementation of DEFAULT_OPENAI_MODEL
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
@@ -34,74 +39,75 @@ class PromptTuner(BaseModel):
         description="List of evaluation examples for hallucination detection.",
     )
 
-    def generate_prompt_variants(
-        self, user_prompt_request: str, api_key: Optional[str] = None
-    ) -> List[str]:
-        if not api_key:
-            raise ValueError("OpenAI API key is required for prompt tuning.")
+    def generate_prompt_variants(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+        # Create a list to store all generated prompt variants
+        full_prompt_variants = []
+        client = OpenAI()
 
-        if (
-            self.prompting_approaches == ["None"]
-            and self.prompt_complexities == ["None"]
-            and self.prompt_focuses == ["None"]
-        ):
+        # Generate all combinations of the specified areas
+        combinations = product(
+            self.prompting_approaches or [None],
+            self.prompt_complexities or [None],
+            self.prompt_focuses or [None],
+        )
+
+        # Iterate over all possible combinations
+        for approach, complexity, focus in combinations:
             if self.enable_logging:
                 print(
-                    "All prompt tuning parameters are set to ['None']. Returning the normal prompt."
+                    f"\nGenerating prompt for: Approach={approach}, Complexity={complexity}, Focus={focus}"
                 )
-            return [user_prompt_request]
 
-        client = OpenAI(api_key=api_key)
-        full_prompt_variants = []
-
-        for approach in self.prompting_approaches:
-            for complexity in self.prompt_complexities:
-                for focus in self.prompt_focuses:
-                    if self.enable_logging:
-                        print(
-                            f"\nGenerating prompt for: Approach={approach}, Complexity={complexity}, Focus={focus}"
-                        )
-
-                    system_message = self._create_system_message(
-                        user_prompt_request, approach, complexity, focus
+            # Create the system message based on the current combination
+            system_message = self._create_system_message(
+                user_prompt_request, approach, complexity, focus
+            )
+            print("system message")
+            print(system_message)
+            retry_count = 0
+            while retry_count < max_retries:
+                try:
+                    # Generate the prompt variant
+                    response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": system_message},
+                            {
+                                "role": "user",
+                                "content": "Generate the prompt variant.",
+                            },
+                        ],
+                        temperature=0.7,
                     )
-                    print("system message")
-                    print(system_message)
-                    try:
-                        response = client.chat.completions.create(
-                            model="gpt-4o",
-                            messages=[
-                                {"role": "system", "content": system_message},
-                                {
-                                    "role": "user",
-                                    "content": "Generate the prompt variant.",
-                                },
-                            ],
-                            temperature=0.7,
+
+                    generated_prompt = response.choices[0].message.content.strip()
+
+                    # If the approach is 'few-shot', generate and incorporate examples
+                    if approach == "few-shot":
+                        examples = self._generate_examples(
+                            client, user_prompt_request, complexity, focus
+                        )
+                        generated_prompt = self._incorporate_examples(
+                            generated_prompt, examples
                         )
 
-                        generated_prompt = response.choices[0].message.content.strip()
-                        print("generated prompt")
-                        print(generated_prompt)
+                    # Apply the generated prompt variant to the full prompt
+                    full_prompt = f"{generated_prompt}\n\n{user_prompt_request}"
+                    full_prompt_variants.append(full_prompt)
 
-                        if approach == "few-shot":
-                            examples = self._generate_examples(
-                                client, user_prompt_request, complexity, focus
-                            )
-                            generated_prompt = self._incorporate_examples(
-                                generated_prompt, examples
-                            )
+                    if self.enable_logging:
+                        print(f"Generated full prompt:\n{full_prompt[:500]}...")
 
-                        # Apply the generated prompt variant to the full prompt
-                        full_prompt = f"{generated_prompt}\n\n{user_prompt_request}"
-                        full_prompt_variants.append(full_prompt)
+                    break  # Exit retry loop on success
 
-                        if self.enable_logging:
-                            print(f"Generated full prompt:\n{full_prompt[:500]}...")
+                except Exception as e:
+                    print(f"Error generating prompt variant: {e}")
+                    print(f"Retrying... ({retry_count + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    retry_count += 1
 
-                    except Exception as e:
-                        if self.enable_logging:
-                            print(f"Error generating prompt variant: {str(e)}")
+            if retry_count == max_retries:
+                print(f"Failed to generate prompt variant after {max_retries} attempts.")
 
         return full_prompt_variants
 
@@ -278,7 +284,7 @@ def custom_evaluate(
     Crucial evaluation guidelines:
     1. Accuracy is paramount. Any factual errors or misleading information should result in a very low accuracy score.
     2. Be exceptionally critical. High scores (above 80) should be rare and only given for truly outstanding responses.
-    3. Consider the real-world implications of the advice. Would it be genuinely helpful and appropriate for a financial context?
+    3. Consider the real-world implications of the advice. Would it be genuinely helpful and appropriate for a context?
     4. Look for nuance and depth. Surface-level or overly generic advice should not score highly.
     5. Evaluate the coherence and logical flow of the response.
     6. Check for potential biases or unfounded assumptions in the advice.
@@ -304,11 +310,10 @@ def custom_evaluate(
     5. Consider potential negative consequences of following the advice, if any.
     6. If the response is clearly inappropriate or harmful, do not hesitate to give very low scores.
 
-    Remember: Your evaluation could influence real financial decisions. Be as critical and thorough as possible.
+    Remember: Your evaluation could influence real  decisions. Be as critical and thorough as possible.
     """
 
     client = OpenAI(api_key=openai_api_key)
-
     def get_evaluation_result(prompt):
         completion = client.chat.completions.create(
             model=DEFAULT_OPENAI_MODEL,
@@ -411,7 +416,7 @@ def custom_evaluate_hallucination(
 ) -> Dict[str, Any]:
     """
     Evaluate the generated answer by comparing it with the ground truth and
-    dynamically match the closest answer from the given evaluation dataset.
+    dynamically match the closest answer from the given evaluation dataset using TF-IDF based similarity.
 
     Args:
     - generated_answer: The generated answer to be evaluated.
@@ -421,8 +426,6 @@ def custom_evaluate_hallucination(
     Returns:
     - A dictionary with the normalized answer, analysis, correctness, and score.
     """
-    # Load a pre-trained model for computing sentence embeddings
-
     if not evaluation_dataset:
         return {
             "answer": "Not provided",
@@ -438,28 +441,30 @@ def custom_evaluate_hallucination(
             "is_correct": False,
             "score": 0.0,
         }
-    model = SentenceTransformer("all-MiniLM-L6-v2")
 
-    evaluation_labels = list(
-        set([entry["answer"].strip().lower() for entry in evaluation_dataset])
-    )
-    generated_answer_normalized = generated_answer.strip().lower()
+    # Prepare the data for TF-IDF vectorization
+    evaluation_labels = [entry["answer"].strip().lower() for entry in evaluation_dataset]
+    all_answers = [generated_answer.strip().lower()] + evaluation_labels
 
-    generated_embedding = model.encode(
-        generated_answer_normalized, convert_to_tensor=True
-    )
-    label_embeddings = model.encode(
-        [label.lower() for label in evaluation_labels], convert_to_tensor=True
+    # Use TF-IDF to create embeddings
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(all_answers)
+
+    # Calculate cosine similarity between generated answer and all evaluation labels
+    generated_vec = tfidf_matrix[0].toarray()
+    label_vecs = tfidf_matrix[1:].toarray()
+
+    cosine_similarities = np.dot(label_vecs, generated_vec.T).flatten() / (
+        np.linalg.norm(label_vecs, axis=1) * np.linalg.norm(generated_vec)
     )
 
-    similarities = util.pytorch_cos_sim(generated_embedding, label_embeddings)[0]
-    best_match_index = similarities.argmax().item()
-    highest_similarity = similarities[best_match_index].item()
+    best_match_index = np.argmax(cosine_similarities)
+    highest_similarity = cosine_similarities[best_match_index]
     best_match = evaluation_labels[best_match_index]
 
     normalized_answer = best_match if highest_similarity > 0.75 else "Not Faithful"
     is_correct = normalized_answer.lower() == ground_truth.lower()
-    score = 1.0 if is_correct and random.random() > 0.05 else 0.0
+    score = 1.0 if is_correct  else 0.0
 
     analysis = (
         f"The generated answer '{generated_answer}' is most similar to '{best_match}' "
