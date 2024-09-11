@@ -176,9 +176,10 @@ class Experiment(BaseModel):
                 nomadic_client.experiments.register(self)
 
     def _get_responses(
-        self, type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]]
+        self,  # Add 'self' here to make it an instance method
+        type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]]
     ) -> Tuple[List[str], List[str], List[str], List[str]]:
-        all_pred_responses, all_full_prompts, all_ref_responses, all_prompt_variants = (
+        all_pred_responses, all_eval_qs, all_ref_responses, all_prompt_variants = (
             [],
             [],
             [],
@@ -187,6 +188,7 @@ class Experiment(BaseModel):
 
         openai_params, prompt_tuning_params = type_safe_param_values
 
+        # Initialize PromptTuner with the current parameters
         prompt_tuner = PromptTuner(
             prompting_approaches=[
                 prompt_tuning_params.get("prompt_tuning_approach", "None")
@@ -194,25 +196,25 @@ class Experiment(BaseModel):
             prompt_complexities=[
                 prompt_tuning_params.get("prompt_tuning_complexity", "None")
             ],
-            prompt_focuses=[prompt_tuning_params.get("prompt_tuning_focus", "None")],
+            prompt_focuses=[
+                prompt_tuning_params.get("prompt_tuning_focus", "None")
+            ],
             enable_logging=self.enable_logging,
         )
-
+        # Generate prompt variants using PromptTuner
         prompt_variants = prompt_tuner.generate_prompt_variants(
-            self.user_prompt_request,
-            (
-                self.model.api_keys.get("OPENAI_API_KEY")
-                if hasattr(self.model, "api_keys")
-                else None
-            ),
+            client=self.model,  # Pass the client or the required object
+            user_prompt_request=self.user_prompt_request
         )
-
+        print("prompt variants")
+        print(prompt_variants)
+        print("prompt variants found")
         for i, prompt_variant in enumerate(prompt_variants):
             if self.enable_logging:
                 print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
-                print(f"Prompt variant: {prompt_variant[:200]}...")
+                print(f"Prompt variant: {prompt_variant[:200]}...")  # Print part of the variant
 
-            pred_responses, full_prompts, ref_responses = [], [], []
+            pred_responses, eval_qs, ref_responses = [], [], []
             if not self.evaluation_dataset:
                 full_prompt = prompt_variant
                 completion_response: CompletionResponse = self.model.run(
@@ -221,18 +223,15 @@ class Experiment(BaseModel):
                 )
                 pred_response = self._extract_response(completion_response)
                 pred_responses.append(pred_response)
-                full_prompts.append(full_prompt)
+                eval_qs.append(full_prompt)
                 ref_responses.append(None)
                 all_prompt_variants.append(prompt_variant)
                 if self.enable_logging:
-                    print(f"Full Prompt: {full_prompt[:200]}...")
                     print(f"Response: {pred_response[:100]}...")
             else:
                 for j, example in enumerate(self.evaluation_dataset):
                     if self.enable_logging:
-                        print(
-                            f"Processing example {j+1}/{len(self.evaluation_dataset)}"
-                        )
+                        print(f"Processing example {j+1}/{len(self.evaluation_dataset)}")
                     full_prompt = self._construct_prompt(prompt_variant, example)
                     completion_response: CompletionResponse = self.model.run(
                         prompt=full_prompt,
@@ -240,23 +239,21 @@ class Experiment(BaseModel):
                     )
                     pred_response = self._extract_response(completion_response)
                     pred_responses.append(pred_response)
-                    full_prompts.append(full_prompt)
-                    ref_responses.append(example.get("answer", None))
+                    eval_qs.append(full_prompt)
+                    ref_responses.append(example.get("Answer", None))
                     all_prompt_variants.append(prompt_variant)
                     if self.enable_logging:
-                        print(f"Full Prompt: {full_prompt[:200]}...")
                         print(f"Response: {pred_response[:100]}...")
-
             all_pred_responses.extend(pred_responses)
-            all_full_prompts.extend(full_prompts)
+            all_eval_qs.extend(eval_qs)
             all_ref_responses.extend(ref_responses)
-
         return (
             all_pred_responses,
-            all_full_prompts,
+            all_eval_qs,
             all_ref_responses,
             all_prompt_variants,
         )
+
 
     def run(self, param_dict: Dict[str, Any]) -> ExperimentResult:
         self.params = set(param_dict.keys())  # Set the params attribute
@@ -271,18 +268,29 @@ class Experiment(BaseModel):
             all_metadata = []
 
             type_safe_param_values = self._enforce_param_types(param_values)
+            print("type safe param values")
+            print(type_safe_param_values)
+            print("found")
+
             (
                 all_pred_responses,
                 all_full_prompts,
                 all_ref_responses,
                 prompt_variants,
             ) = self._get_responses(type_safe_param_values)
-
+            print("starting")
+            print(all_pred_responses,
+                all_full_prompts,
+                all_ref_responses,
+                prompt_variants)
+            print("finishing")
             if self.evaluation_dataset:
+                print("found")
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses, self.evaluation_dataset
                 )
             else:
+                print("not found")
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses
                 )
@@ -426,26 +434,30 @@ class Experiment(BaseModel):
         pred_responses: List[str],
         ref_responses: List[str],
         evaluation_dataset: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Any]:
         eval_results = []
+        print("pred responses")
+        print(pred_responses)
+        print("ref responses")
+        print(ref_responses)
 
         for pred, ref in zip(pred_responses, ref_responses):
-            result = {"generated_answer": pred, "ground_truth": ref}
             if self.evaluator:
                 if isinstance(self.evaluator, dict):
-                    if self.evaluator.get("method") == "custom_evaluate_hallucination":
+                    method = self.evaluator.get("method")
+                    if method == "custom_evaluate_hallucination":
                         if evaluation_dataset:
-                            result.update(
-                                custom_evaluate_hallucination(
-                                    pred, ref, evaluation_dataset
-                                )
+                            eval_result = custom_evaluate_hallucination(
+                                pred, ref, evaluation_dataset
                             )
                         else:
-                            result.update(custom_evaluate_hallucination(pred, ref))
-                    elif self.evaluator.get("method") == "custom_evaluate":
-                        evaluation_metrics = self.evaluator.get(
-                            "evaluation_metrics", []
-                        )
+                            eval_result = custom_evaluate_hallucination(pred, ref)
+                        eval_result.update({"generated_answer": pred, "ground_truth": ref})
+                        eval_results.append(eval_result)
+
+                    elif method == "custom_evaluate":
+                        print("Custom Evaluate Activated")
+                        evaluation_metrics = self.evaluator.get("evaluation_metrics", [])
                         if not evaluation_metrics:
                             raise ValueError(
                                 "evaluation_metrics must be provided when using custom_evaluate"
@@ -460,15 +472,15 @@ class Experiment(BaseModel):
                             if hasattr(self.model, "api_keys")
                             else None
                         )
-                        result.update(
-                            custom_evaluate(pred, evaluation_metrics, openai_api_key)
-                        )
+                        eval_result = custom_evaluate(pred, evaluation_metrics, openai_api_key)
+                        eval_results.append(eval_result)
+
                     else:
                         raise ValueError("Invalid evaluator method")
                 elif callable(self.evaluator):
-                    result.update(self.evaluator(pred, ref))
+                    eval_results.append(self.evaluator(pred, ref))
                 elif isinstance(self.evaluator, BaseEvaluator):
-                    result.update(
+                    eval_results.append(
                         {
                             "score": self.evaluator.evaluate_response(
                                 response=Response(pred), reference=ref
@@ -477,7 +489,6 @@ class Experiment(BaseModel):
                     )
                 else:
                     raise ValueError("Invalid evaluator type")
-            eval_results.append(result)
 
         return eval_results
 
