@@ -386,17 +386,34 @@ class Experiment(BaseModel):
 
         return self.experiment_result
 
-    def _construct_prompt(self, prompt_variant: str, example: Dict[str, str]) -> str:
+    def _construct_prompt(
+        self,
+        prompt_variant: str,
+        example: Dict[str, str] = None,
+        context: str = "",
+        instruction: str = "",
+        query: str = "",
+        question: str = "",
+        response: str = "",
+        answer: str = ""
+    ) -> str:
+        # Determine values for query/question (interchangeable) and response/answer (irreplaceable)
+        query_value = example.get("query", query) or query or question
+        response_value = example.get("response", response) or response or answer
+
+        # Prepare replacements dictionary
         replacements = {
-            "[CONTEXT]": example["context"],
-            "[QUERY]": example["query"],
-            "[INSTRUCTION]": example.get("instruction", ""),
-            "[RESPONSE]": example.get("response", ""),
+            "[CONTEXT]": example.get("context", context) or context,
+            "[QUERY]": query_value,
+            "[INSTRUCTION]": example.get("instruction", instruction) or instruction,
+            "[RESPONSE]": response_value,
         }
 
+        # Replace placeholders in the prompt variant
         for placeholder, value in replacements.items():
             prompt_variant = prompt_variant.replace(placeholder, value)
 
+        # Find and remove unused placeholders
         unused_placeholders = [
             key for key in replacements.keys() if key in prompt_variant
         ]
