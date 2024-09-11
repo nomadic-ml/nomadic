@@ -27,23 +27,6 @@ function install_python_version {
 
 # ----------------- Functions End ----------------------------
 
-# Ensure Node.js is installed
-./dev/install_nodejs.sh
-
-# Install Docker & Colima
-brew install docker
-brew install colima
-
-# Start Colima
-colima start
-
-# Check if Docker is running
-if is_docker_running; then
-    echo "Docker is already running."
-else
-    start_docker
-fi
-
 # Install Homebrew, if not exists.
 if which -s brew; then
     echo "Homebrew is already installed."
@@ -55,33 +38,8 @@ else
 fi
 brew update
 
-# Install git-lfs with Homebrew
-brew install git-lfs
-git lfs install
-
-# Install Supabase, if not exists.
-if supabase --version; then
-    which -s supabase
-else
-    # To-Do: Fix below, remove the || true that silenty catches supabase installation failure
-    brew install supabase/tap/supabase || true
-fi
-
-# Start supabase
-supabase stop --no-backup
-supabase start
-if [[ $? != 0 ]] ; then
-    # If installation fails for the first time, this is most likely
-    # due to a supabase bug. Relevant link: https://github.com/supabase/cli/issues/1938
-    # Apply below fix and re-attempt supabase installation.
-    echo -n "v2.142.0" > $ROOT_DIR/supabase/.temp/gotrue-version
-    echo -n "v12.0.1" > $ROOT_DIR/supabase/.temp/rest-version
-    supabase stop --no-backup
-    supabase start
-fi
-
-# Install pyenv, if not exists
-brew install pyenv pyenv-virtualenv
+# Install pyenv & pipx, if not exists
+brew install pyenv pyenv-virtualenv pipx
 # Install Python $PYTHON_VERSION
 install_python_version $PYTHON_VERSION
 # Use Python $PYTHON_VERSION
@@ -89,12 +47,9 @@ pyenv local $PYTHON_VERSION
 pyenv version
 source ~/.zshrc
 
-
 # Install pipx
-brew install pipx
 pipx ensurepath
 source ~/.zshrc
-# sudo pipx ensurepath -global # optional to allow pipx actions in global scope. See "Global installation" section below.
 
 # Make .venv from current PyEnv Python
 pyenv exec python -m venv .venv

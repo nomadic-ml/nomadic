@@ -25,12 +25,26 @@ You can install `nomadic` with pip (Python 3.8+ required):
 pip install nomadic
 ```
 
-
 # 📄  Documentation
 
 Full documentation can be found here: https://docs.nomadicml.com.
 
 Please check it out for the most up-to-date tutorials, cookbooks, SDK references, and other resources!
+
+# Local Development
+
+Follow the instructions below to get started on local development of the Nomadic SDK. Afterwards select the produced Python `.venv` environment in your IDE of choice.
+
+## MacOS
+
+```bash
+make setup_dev_environment
+source .venv/bin/activate
+```
+
+## Linux-Ubuntu
+
+Coming soon!
 
 # 💻 Example Usage
 
@@ -98,7 +112,7 @@ embedding_model = tune.choice(["text-embedding-ada-002", "text-embedding-curie-0
 retrieval_strategy = tune.choice(["sentence-window", "auto-merging"])
 ```
 
-### 3. Upload Evaluation Dataset and External Data 
+### 3. Upload Evaluation Dataset and External Data
 
 ```python
 eval_json = {

@@ -1,8 +1,8 @@
-.PHONY: build update install lint unit-test integration-test tests_lints run-streamlit clean
+.PHONY: build update install setup_dev_environment lint unit-test integration-test tests_lints run-mintlify clean
 
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
-export PYTHON_VERSION=3.8.12
+export PYTHON_VERSION=3.11.9
 
 build:
 	poetry build
@@ -12,6 +12,9 @@ update:
 
 install:
 	poetry install
+
+setup_dev_environment:
+	$(ROOT_DIR)/dev/build_dev_env.sh
 
 lint:
 	$(ROOT_DIR)/dev/run_all_lints.sh
