@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
     #----------------------------------------------
     #       check-out repo and set-up python
@@ -75,7 +75,7 @@ jobs:
     - name: Run unit tests & coverage
       run: |
         source .venv/bin/activate
-        make unit-test
+        make unit_test
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
@@ -85,7 +85,7 @@ jobs:
     - name: Run integration tests & coverage
       run: |
         source .venv/bin/activate
-        make integration-test
+        make integration_test
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 

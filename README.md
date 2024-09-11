@@ -46,6 +46,15 @@ source .venv/bin/activate
 
 Coming soon!
 
+## Build Nomadic wheel
+
+Run:
+
+```bash
+source .venv/bin/activate # If .venv isn't already activated
+make build
+```
+
 # 💻 Example Usage
 
 ## Optimizing a RAG to Boost Accuracy & Retrieval Speed by 40%

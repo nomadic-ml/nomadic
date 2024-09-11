@@ -1,4 +1,4 @@
-.PHONY: build update install setup_dev_environment lint unit-test integration-test tests_lints run-mintlify clean
+.PHONY: build update install setup_dev_environment lint unit_test integration_test tests_lints run_mintlify clean
 
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
@@ -19,18 +19,18 @@ setup_dev_environment:
 lint:
 	$(ROOT_DIR)/dev/run_all_lints.sh
 
-unit-test:
+unit_test:
 	$(ROOT_DIR)/dev/run_all_unit_tests.sh
 
-integration-test:
+integration_test:
 	poetry run pytest tests/integration/experiment
 
 tests_lints:
 	$(MAKE) lint
-	$(MAKE) unit-test
-	$(MAKE) integration-test
+	$(MAKE) unit_test
+	$(MAKE) integration_test
 
-run-mintlify:
+run_mintlify:
 	cd $(ROOT_DIR)/docs; mintlify dev
 
 clean:
