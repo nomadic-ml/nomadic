@@ -499,38 +499,16 @@ class Experiment(BaseModel):
 
         scores_by_params = {}
 
-        # Determine whether to use new logic based on evaluator method
-        use_new_logic = (
+        # Check if custom evaluation logic is required
+        use_custom_evaluate = (
             isinstance(self.evaluator, dict)
             and self.evaluator.get("method") == "custom_evaluate"
         )
 
         for result in eval_results:
-            if use_new_logic:
-                # New logic: Handle various score formats
-                if "score" in result and isinstance(result["score"], (int, float)):
-                    score = result["score"]
-                    params = result.get("params", {})
-                    param_key = tuple(
-                        sorted((k, v) for k, v in params.items() if k in self.params)
-                    )
-
-                    if param_key not in scores_by_params:
-                        scores_by_params[param_key] = []
-                    scores_by_params[param_key].append(score)
-
-                elif "overall_score" in result and isinstance(result["overall_score"], (int, float)):
-                    overall_score = result["overall_score"]
-                    params = result.get("params", {})
-                    param_key = tuple(
-                        sorted((k, v) for k, v in params.items() if k in self.params)
-                    )
-
-                    if param_key not in scores_by_params:
-                        scores_by_params[param_key] = []
-                    scores_by_params[param_key].append(overall_score)
-
-                elif "scores" in result and isinstance(result["scores"], dict):
+            if use_custom_evaluate:
+                # Handle custom evaluation logic
+                if "scores" in result and isinstance(result["scores"], dict):
                     overall_score = result.get("overall_score")
                     if overall_score is not None and isinstance(overall_score, (int, float)):
                         params = result.get("params", {})
@@ -543,46 +521,30 @@ class Experiment(BaseModel):
                         scores_by_params[param_key].append(overall_score)
                     else:
                         print(f"Warning: 'scores' present but 'overall_score' is missing or invalid: {result}")
-
                 else:
-                    print(f"Warning: Unexpected result format: {result}")
+                    print(f"Warning: Unexpected result format for custom evaluation: {result}")
                     continue
-
             else:
-                # Old logic: Check for the standard format with a single "score"
-                if isinstance(result, dict) and "score" in result:
-                    score = result["score"]
-                    if not isinstance(score, (int, float)):
-                        print(f"Warning: Invalid score type: {type(score)}. Expected int or float.")
-                        continue
-
-                    params = result.get("params", {})
-                    param_key = tuple(
-                        sorted((k, v) for k, v in params.items() if k in self.params)
-                    )
-
-                    if param_key not in scores_by_params:
-                        scores_by_params[param_key] = []
-                    scores_by_params[param_key].append(score)
-
-                elif isinstance(result, dict) and "overall_score" in result:
-                    overall_score = result["overall_score"]
-                    if not isinstance(overall_score, (int, float)):
-                        print(f"Warning: Invalid overall_score type: {type(overall_score)}. Expected int or float.")
-                        continue
-
-                    params = result.get("params", {})
-                    param_key = tuple(
-                        sorted((k, v) for k, v in params.items() if k in self.params)
-                    )
-
-                    if param_key not in scores_by_params:
-                        scores_by_params[param_key] = []
-                    scores_by_params[param_key].append(overall_score)
-
-                else:
+                # Standard evaluation logic
+                if not isinstance(result, dict) or "score" not in result:
                     print(f"Warning: Unexpected result format: {result}")
                     continue
+
+                score = result["score"]
+                if not isinstance(score, (int, float)):
+                    print(
+                        f"Warning: Invalid score type: {type(score)}. Expected int or float."
+                    )
+                    continue
+
+                params = result.get("params", {})
+                param_key = tuple(
+                    sorted((k, v) for k, v in params.items() if k in self.params)
+                )
+
+                if param_key not in scores_by_params:
+                    scores_by_params[param_key] = []
+                scores_by_params[param_key].append(score)
 
         # Calculate mean scores for all parameter combinations
         mean_scores = {
@@ -593,6 +555,7 @@ class Experiment(BaseModel):
         print("Debug: Calculated mean_scores =", mean_scores)
 
         return mean_scores
+
 
 
 
