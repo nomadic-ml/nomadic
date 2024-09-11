@@ -206,9 +206,6 @@ class Experiment(BaseModel):
             client=self.model,  # Pass the client or the required object
             user_prompt_request=self.user_prompt_request
         )
-        print("prompt variants")
-        print(prompt_variants)
-        print("prompt variants found")
         for i, prompt_variant in enumerate(prompt_variants):
             if self.enable_logging:
                 print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
@@ -268,9 +265,6 @@ class Experiment(BaseModel):
             all_metadata = []
 
             type_safe_param_values = self._enforce_param_types(param_values)
-            print("type safe param values")
-            print(type_safe_param_values)
-            print("found")
 
             (
                 all_pred_responses,
@@ -278,19 +272,15 @@ class Experiment(BaseModel):
                 all_ref_responses,
                 prompt_variants,
             ) = self._get_responses(type_safe_param_values)
-            print("starting")
             print(all_pred_responses,
                 all_full_prompts,
                 all_ref_responses,
                 prompt_variants)
-            print("finishing")
             if self.evaluation_dataset:
-                print("found")
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses, self.evaluation_dataset
                 )
             else:
-                print("not found")
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses
                 )
@@ -453,10 +443,6 @@ class Experiment(BaseModel):
         evaluation_dataset: Optional[List[Dict[str, Any]]] = None,
     ) -> List[Any]:
         eval_results = []
-        print("pred responses")
-        print(pred_responses)
-        print("ref responses")
-        print(ref_responses)
 
         for pred, ref in zip(pred_responses, ref_responses):
             if self.evaluator:
@@ -473,7 +459,6 @@ class Experiment(BaseModel):
                         eval_results.append(eval_result)
 
                     elif method == "custom_evaluate":
-                        print("Custom Evaluate Activated")
                         evaluation_metrics = self.evaluator.get("evaluation_metrics", [])
                         if not evaluation_metrics:
                             raise ValueError(
@@ -1014,4 +999,3 @@ class Experiment(BaseModel):
             lines.append(" ".join(current_line))
 
         return "\n".join(lines)
-        
