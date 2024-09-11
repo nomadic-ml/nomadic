@@ -496,76 +496,57 @@ class Experiment(BaseModel):
         if not eval_results:
             print("Warning: No evaluation results provided.")
             return {}
-
+    
         scores_by_params = {}
-
+    
         for result in eval_results:
-            # Ensure result is a dictionary
-            if not isinstance(result, dict):
-                print(f"Warning: Result is not a dictionary: {result}")
-                continue
-
             # Check for the standard format with a single "score"
-            if "score" in result:
+            if isinstance(result, dict) and "score" in result:
                 score = result["score"]
                 if not isinstance(score, (int, float)):
                     print(f"Warning: Invalid score type: {type(score)}. Expected int or float.")
                     continue
-
+    
                 params = result.get("params", {})
                 param_key = tuple(
                     sorted((k, v) for k, v in params.items() if k in self.params)
                 )
-
+    
                 if param_key not in scores_by_params:
                     scores_by_params[param_key] = []
                 scores_by_params[param_key].append(score)
-
+    
             # Check for the new format with "overall_score"
-            elif "overall_score" in result:
+            elif isinstance(result, dict) and "overall_score" in result:
                 overall_score = result["overall_score"]
                 if not isinstance(overall_score, (int, float)):
                     print(f"Warning: Invalid overall_score type: {type(overall_score)}. Expected int or float.")
                     continue
-
+    
                 params = result.get("params", {})
                 param_key = tuple(
                     sorted((k, v) for k, v in params.items() if k in self.params)
                 )
-
+    
                 if param_key not in scores_by_params:
                     scores_by_params[param_key] = []
                 scores_by_params[param_key].append(overall_score)
-
-            # Handle format with 'scores' dictionary
-            elif "scores" in result and isinstance(result["scores"], dict):
-                overall_score = result.get("overall_score")
-                if overall_score is not None and isinstance(overall_score, (int, float)):
-                    params = result.get("params", {})
-                    param_key = tuple(
-                        sorted((k, v) for k, v in params.items() if k in self.params)
-                    )
-
-                    if param_key not in scores_by_params:
-                        scores_by_params[param_key] = []
-                    scores_by_params[param_key].append(overall_score)
-                else:
-                    print(f"Warning: 'scores' present but 'overall_score' is missing or invalid: {result}")
-
+    
             # Handle unexpected formats
             else:
                 print(f"Warning: Unexpected result format: {result}")
                 continue
-
+    
         # Calculate mean scores for all parameter combinations
         mean_scores = {
             str(param_key): sum(scores) / len(scores)
             for param_key, scores in scores_by_params.items()
         }
-
+    
         print("Debug: Calculated mean_scores =", mean_scores)
-
+    
         return mean_scores
+
 
     def _setup_tuner(self, param_dict: Dict[str, Any], param_function: Callable):
         if not self.tuner:
