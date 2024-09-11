@@ -206,9 +206,6 @@ class Experiment(BaseModel):
             client=self.model,  # Pass the client or the required object
             user_prompt_request=self.user_prompt_request
         )
-        print("prompt variants")
-        print(prompt_variants)
-        print("prompt variants found")
         for i, prompt_variant in enumerate(prompt_variants):
             if self.enable_logging:
                 print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
@@ -240,7 +237,7 @@ class Experiment(BaseModel):
                     pred_response = self._extract_response(completion_response)
                     pred_responses.append(pred_response)
                     eval_qs.append(full_prompt)
-                    ref_responses.append(example.get("Answer", None))
+                    ref_responses.append(example.get("answer", None))
                     all_prompt_variants.append(prompt_variant)
                     if self.enable_logging:
                         print(f"Response: {pred_response[:100]}...")
@@ -268,29 +265,17 @@ class Experiment(BaseModel):
             all_metadata = []
 
             type_safe_param_values = self._enforce_param_types(param_values)
-            print("type safe param values")
-            print(type_safe_param_values)
-            print("found")
-
             (
                 all_pred_responses,
                 all_full_prompts,
                 all_ref_responses,
                 prompt_variants,
             ) = self._get_responses(type_safe_param_values)
-            print("starting")
-            print(all_pred_responses,
-                all_full_prompts,
-                all_ref_responses,
-                prompt_variants)
-            print("finishing")
             if self.evaluation_dataset:
-                print("found")
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses, self.evaluation_dataset
                 )
             else:
-                print("not found")
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses
                 )
@@ -453,10 +438,6 @@ class Experiment(BaseModel):
         evaluation_dataset: Optional[List[Dict[str, Any]]] = None,
     ) -> List[Any]:
         eval_results = []
-        print("pred responses")
-        print(pred_responses)
-        print("ref responses")
-        print(ref_responses)
 
         for pred, ref in zip(pred_responses, ref_responses):
             if self.evaluator:
@@ -519,26 +500,64 @@ class Experiment(BaseModel):
         scores_by_params = {}
 
         for result in eval_results:
-            if not isinstance(result, dict) or "score" not in result:
+            # Ensure result is a dictionary
+            if not isinstance(result, dict):
+                print(f"Warning: Result is not a dictionary: {result}")
+                continue
+
+            # Check for the standard format with a single "score"
+            if "score" in result:
+                score = result["score"]
+                if not isinstance(score, (int, float)):
+                    print(f"Warning: Invalid score type: {type(score)}. Expected int or float.")
+                    continue
+
+                params = result.get("params", {})
+                param_key = tuple(
+                    sorted((k, v) for k, v in params.items() if k in self.params)
+                )
+
+                if param_key not in scores_by_params:
+                    scores_by_params[param_key] = []
+                scores_by_params[param_key].append(score)
+
+            # Check for the new format with "overall_score"
+            elif "overall_score" in result:
+                overall_score = result["overall_score"]
+                if not isinstance(overall_score, (int, float)):
+                    print(f"Warning: Invalid overall_score type: {type(overall_score)}. Expected int or float.")
+                    continue
+
+                params = result.get("params", {})
+                param_key = tuple(
+                    sorted((k, v) for k, v in params.items() if k in self.params)
+                )
+
+                if param_key not in scores_by_params:
+                    scores_by_params[param_key] = []
+                scores_by_params[param_key].append(overall_score)
+
+            # Handle format with 'scores' dictionary
+            elif "scores" in result and isinstance(result["scores"], dict):
+                overall_score = result.get("overall_score")
+                if overall_score is not None and isinstance(overall_score, (int, float)):
+                    params = result.get("params", {})
+                    param_key = tuple(
+                        sorted((k, v) for k, v in params.items() if k in self.params)
+                    )
+
+                    if param_key not in scores_by_params:
+                        scores_by_params[param_key] = []
+                    scores_by_params[param_key].append(overall_score)
+                else:
+                    print(f"Warning: 'scores' present but 'overall_score' is missing or invalid: {result}")
+
+            # Handle unexpected formats
+            else:
                 print(f"Warning: Unexpected result format: {result}")
                 continue
 
-            score = result["score"]
-            if not isinstance(score, (int, float)):
-                print(
-                    f"Warning: Invalid score type: {type(score)}. Expected int or float."
-                )
-                continue
-
-            params = result.get("params", {})
-            param_key = tuple(
-                sorted((k, v) for k, v in params.items() if k in self.params)
-            )
-
-            if param_key not in scores_by_params:
-                scores_by_params[param_key] = []
-            scores_by_params[param_key].append(score)
-
+        # Calculate mean scores for all parameter combinations
         mean_scores = {
             str(param_key): sum(scores) / len(scores)
             for param_key, scores in scores_by_params.items()
