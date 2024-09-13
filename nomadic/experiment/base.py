@@ -33,6 +33,9 @@ import time
 import random
 from functools import wraps
 
+import pandas as pd
+import ipywidgets as widgets
+from IPython.display import display, HTML
 
 def retry_with_exponential_backoff(
     max_retries=5, base_delay=1, max_delay=300, exceptions=(Exception,)
@@ -125,7 +128,7 @@ class Experiment(BaseModel):
         default=True,
         description="Flag to enable or disable print logging.",
     )
-    user_prompt_request: Optional[str] = Field(
+    user_prompt_request: Optional[List[str]] = Field(
         default="",
         description="User request for GPT prompt.",
     )
@@ -200,7 +203,7 @@ class Experiment(BaseModel):
                 prompt_tuning_params.get("prompt_tuning_complexity", "None")
             ],
             prompt_tuning_tasks=[
-                prompt_tuning_params.get("prompt_tuning_task", "coherence")
+                prompt_tuning_params.get("prompt_tuning_task", "None")
             ],
             enable_logging=self.enable_logging,
         )
@@ -210,6 +213,8 @@ class Experiment(BaseModel):
             client=self.model,  # Pass the client or the required object
             user_prompt_request=self.user_prompt_request
         )
+
+        print("Prompt Variants are " + str(prompt_variants))
         for i, prompt_variant in enumerate(prompt_variants):
             if self.enable_logging:
                 print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
@@ -301,12 +306,14 @@ class Experiment(BaseModel):
             current_score = mean_scores.get(current_param_key, 0.0)
 
             all_scores.append(current_score)
+            queries = [item.get('query', '') for item in self.evaluation_dataset] if self.evaluation_dataset else []
 
             metadata = {
                 "Answers": all_pred_responses,
                 "Ground Truth": all_ref_responses,
                 "Custom Evaluator Results": eval_results,
                 "Full Prompts": all_full_prompts,
+                "Queries": queries,
                 "Prompt Variants": prompt_variants,
                 "Prompt Parameters": {
                     k: v
@@ -392,6 +399,8 @@ class Experiment(BaseModel):
         response: str = "",
         answer: str = ""
     ) -> str:
+        print("prompt variant is")
+        print(prompt_variant)
         # Determine values for query/question (interchangeable) and response/answer (irreplaceable)
         query_value = example.get("query", query) or query or question
         response_value = example.get("response", response) or response or answer
@@ -935,52 +944,6 @@ class Experiment(BaseModel):
             "rest_scores": rest_scores,
         }
 
-    def wrap_text(self, text, width):
-        # Wrap text to fit within the given width
-        from textwrap import wrap
-
-        return wrap(text, width)
-
-    def create_run_results_table(
-        self,
-        experiment_result,
-        max_rows=None,
-        max_prompt_length=100,
-        max_answer_length=500,
-    ):
-        data = []
-        for run_result in experiment_result.run_results:
-            prompt_variants = run_result.metadata.get("Prompt Variants", [])
-            full_prompts = run_result.metadata.get("Full Prompts", [])
-            answers = run_result.metadata.get("Answers", [])
-
-            for prompt_variant, full_prompt, answer in zip(
-                prompt_variants, full_prompts, answers
-            ):
-                row = {
-                    "Run Score": f"{run_result.score:.2f}",
-                    "Prompt Variant": self._wrap_text(
-                        prompt_variant, max_prompt_length
-                    ),
-                    "Full Prompt": self._wrap_text(full_prompt, max_prompt_length),
-                    "Answer": self._wrap_text(answer, max_answer_length),
-                }
-                row.update(run_result.params)
-                data.append(row)
-
-        df = pd.DataFrame(data)
-
-        if max_rows is not None:
-            df = df.head(max_rows)
-
-        print(f"Number of rows: {len(df)}")
-        print(f"Number of unique prompt variants: {df['Prompt Variant'].nunique()}")
-        print(f"Number of unique full prompts: {df['Full Prompt'].nunique()}")
-        print(f"Number of unique answers: {df['Answer'].nunique()}")
-        print("\nSample of unique prompt variants:")
-        print(df["Prompt Variant"].unique()[:5])
-
-        return df
 
     def _wrap_text(self, text, max_length):
         if len(text) <= max_length:
@@ -1004,3 +967,103 @@ class Experiment(BaseModel):
             lines.append(" ".join(current_line))
 
         return "\n".join(lines)
+
+    def create_run_results_table(
+    self,
+    experiment_result,
+    max_rows=None,
+    max_prompt_length=100,
+    max_answer_length=500,
+    ):
+        data = []
+        for run_result in experiment_result.run_results:
+            individual_results = run_result.metadata.get('Individual Simulation Results', [])
+            for result in individual_results:
+                # Debugging: Print keys in the result
+                print("Keys in result:", result.keys())
+
+                # Extract data from the result
+                answers = result.get('Answers', [])
+                ground_truths = result.get('Ground Truth', [])
+                full_prompts = result.get('Full Prompts', [])
+                prompt_variants = result.get('Prompt Variants', [])
+                queries = result.get('Queries', [])
+
+                if not all([answers, ground_truths, full_prompts, prompt_variants, queries]):
+                    print(f"Missing or empty data in result: {result}")
+                    continue
+
+                for answer, ground_truth, full_prompt, prompt_variant, query in zip(
+                    answers, ground_truths, full_prompts, prompt_variants, queries
+                ):
+                    row = {
+                        "Run Score": f"{run_result.score:.2f}",
+                        "Prompt Variant": self._wrap_text(prompt_variant, max_prompt_length),
+                        "Full Prompt": self._wrap_text(full_prompt, max_prompt_length),
+                        "Generated Answer": self._wrap_text(answer, max_answer_length),
+                        "Ground Truth": self._wrap_text(ground_truth, max_answer_length),
+                        "Query": self._wrap_text(query, max_prompt_length),
+                    }
+                    row.update(run_result.params)
+                    data.append(row)
+
+        df = pd.DataFrame(data)
+
+        # Inspect DataFrame
+        print("DataFrame columns:", df.columns)
+        print(f"Number of rows: {len(df)}")
+
+        if 'Prompt Variant' in df.columns:
+            print(f"Number of unique prompt variants: {df['Prompt Variant'].nunique()}")
+            print("\nSample of unique prompt variants:")
+            print(df["Prompt Variant"].unique()[:5])
+        else:
+            print("'Prompt Variant' column not found in DataFrame")
+
+        if max_rows is not None:
+            df = df.head(max_rows)
+
+        # Create interactive elements
+        param_columns = [col for col in df.columns if col not in ["Run Score", "Prompt Variant", "Full Prompt", "Generated Answer", "Ground Truth", "Query"]]
+
+        dropdowns = {}
+        for param in param_columns:
+            options = ['All'] + list(df[param].unique())
+            dropdowns[param] = widgets.Dropdown(options=options, description=param, style={'description_width': 'initial'})
+
+        # Add Query dropdown
+        query_options = ['All'] + list(df['Query'].unique())
+        query_dropdown = widgets.Dropdown(options=query_options, description='Query', style={'description_width': 'initial'})
+
+        def update_table(*args):
+            filtered_df = df.copy()
+            for param, dropdown in dropdowns.items():
+                if dropdown.value != 'All':
+                    filtered_df = filtered_df[filtered_df[param] == dropdown.value]
+
+            if query_dropdown.value != 'All':
+                filtered_df = filtered_df[filtered_df['Query'] == query_dropdown.value]
+
+            display(HTML(filtered_df.to_html(index=False)))
+
+        for dropdown in dropdowns.values():
+            dropdown.observe(update_table, names='value')
+        query_dropdown.observe(update_table, names='value')
+
+        controls = widgets.VBox([widgets.Label("Select parameter combinations:")]
+                                + list(dropdowns.values())
+                                + [widgets.Label("Select Query:"), query_dropdown]
+                                + [widgets.Button(description="Update Table")])
+
+        output = widgets.Output()
+
+        def on_button_click(b):
+            with output:
+                output.clear_output()
+                update_table()
+
+        controls.children[-1].on_click(on_button_click)
+
+        display(controls, output)
+
+        return df

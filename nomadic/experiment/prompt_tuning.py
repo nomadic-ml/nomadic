@@ -43,8 +43,16 @@ class PromptTuner(BaseModel):
         description="List of evaluation examples.",
     )
 
-    def generate_prompt_variants(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+    def generate_prompt_variants(self, client, user_prompt_request,max_retries: int = 3, retry_delay: int = 5):
+        prompt_variants = []
+        for template in user_prompt_request:  # Assume prompt_templates is now a list
+            # Generate variants for each template
+            variant = self.generate_prompt_variant(client, template, max_retries, retry_delay)
+            prompt_variants.extend(variant)
+        return prompt_variants
 
+
+    def generate_prompt_variant(self, client, user_prompt_request, max_retries, retry_delay):
         # Create a list to store all generated prompt variants
         full_prompt_variants = []
         client = OpenAI()
@@ -75,7 +83,7 @@ class PromptTuner(BaseModel):
                 try:
                     # Generate the prompt variant
                     response = client.chat.completions.create(
-                        model="gpt-4o",
+                        model="gpt-4",  # Changed from "gpt-4o" to "gpt-4"
                         messages=[
                             {"role": "system", "content": system_message},
                             {
@@ -97,8 +105,8 @@ class PromptTuner(BaseModel):
                             generated_prompt, examples
                         )
 
-                    # Apply the generated prompt variant to the full prompt
-                    full_prompt = f"{generated_prompt}\n\n{user_prompt_request}"
+                    # Use only the generated prompt, don't append the original user_prompt_request
+                    full_prompt = generated_prompt
                     full_prompt_variants.append(full_prompt)
 
                     if self.enable_logging:
@@ -116,7 +124,6 @@ class PromptTuner(BaseModel):
                 print(f"Failed to generate prompt variant after {max_retries} attempts.")
 
         return full_prompt_variants
-
     def _create_system_message(
         self, user_prompt_request: str, approach: str, complexity: str, task: str, topic: str = "hallucination-detection"
     ) -> str:
