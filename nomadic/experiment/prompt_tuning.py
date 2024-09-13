@@ -18,17 +18,21 @@ DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 
 
 class PromptTuner(BaseModel):
-    prompting_approaches: List[str] = Field(
+    prompt_tuning_approaches: List[str] = Field(
         default=["None"],
         description="List of prompting approaches to use. If ['None'], no tuning is applied.",
     )
-    prompt_complexities: List[str] = Field(
+    prompt_tuning_topics: List[str] = Field(
+        default=["hallucination-detection"],
+        description="List of prompt topics to focus on. Default is hallucination detection.",
+    )
+    prompt_tuning_complexities: List[str] = Field(
         default=["None"],
         description="List of prompt complexities to use. If ['None'], no tuning is applied.",
     )
-    prompt_focuses: List[str] = Field(
+    prompt_tuning_focuses: List[str] = Field(
         default=["None"],
-        description="List of prompt focuses to use. If ['None'], no tuning is applied.",
+        description="List of prompt focuses to use. Default is coherence.",
     )
     enable_logging: bool = Field(
         default=True,
@@ -36,31 +40,48 @@ class PromptTuner(BaseModel):
     )
     evaluation_dataset: List[Dict[str, str]] = Field(
         default=[],
-        description="List of evaluation examples for hallucination detection.",
+        description="List of evaluation examples.",
     )
 
-    def generate_prompt_variants(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+    def generate_prompt_variants(self, client, user_prompt_request,max_retries: int = 3, retry_delay: int = 5):
+        prompt_variants = []
+        for template in user_prompt_request:  # Assume prompt_templates is now a list
+            # Generate variants for each template
+            variant = self.generate_prompt_variant(client, template, max_retries, retry_delay)
+            prompt_variants.extend(variant)
+        return prompt_variants
+
+
+    def generate_prompt_variant(self, client, user_prompt_request, max_retries, retry_delay):
         # Create a list to store all generated prompt variants
         full_prompt_variants = []
         client = OpenAI()
 
+        if (
+            self.prompt_tuning_approaches == ["None"]
+            and self.prompt_tuning_complexities == ["None"]
+            and self.prompt_tuning_focuses == ["None"]
+        ):
+            return [user_prompt_request]
+
         # Generate all combinations of the specified areas
         combinations = product(
-            self.prompting_approaches or [None],
-            self.prompt_complexities or [None],
-            self.prompt_focuses or [None],
+            self.prompt_tuning_approaches,
+            self.prompt_tuning_topics,
+            self.prompt_tuning_complexities,
+            self.prompt_tuning_focuses,
         )
 
         # Iterate over all possible combinations
-        for approach, complexity, focus in combinations:
+        for approach, topic, complexity, focus in combinations:
             if self.enable_logging:
                 print(
-                    f"\nGenerating prompt for: Approach={approach}, Complexity={complexity}, Focus={focus}"
+                    f"\nGenerating prompt for: Approach={approach}, Topic={topic}, Complexity={complexity}, Focus={focus}"
                 )
 
             # Create the system message based on the current combination
             system_message = self._create_system_message(
-                user_prompt_request, approach, complexity, focus
+                user_prompt_request, approach, complexity, focus, topic
             )
             print("system message")
             print(system_message)
@@ -69,7 +90,7 @@ class PromptTuner(BaseModel):
                 try:
                     # Generate the prompt variant
                     response = client.chat.completions.create(
-                        model="gpt-4o",
+                        model="gpt-4",  # Changed from "gpt-4o" to "gpt-4"
                         messages=[
                             {"role": "system", "content": system_message},
                             {
@@ -85,14 +106,14 @@ class PromptTuner(BaseModel):
                     # If the approach is 'few-shot', generate and incorporate examples
                     if approach == "few-shot":
                         examples = self._generate_examples(
-                            client, user_prompt_request, complexity, focus
+                            client, user_prompt_request, topic, complexity, focus
                         )
                         generated_prompt = self._incorporate_examples(
                             generated_prompt, examples
                         )
 
-                    # Apply the generated prompt variant to the full prompt
-                    full_prompt = f"{generated_prompt}\n\n{user_prompt_request}"
+                    # Use only the generated prompt, don't append the original user_prompt_request
+                    full_prompt = generated_prompt
                     full_prompt_variants.append(full_prompt)
 
                     if self.enable_logging:
@@ -110,44 +131,52 @@ class PromptTuner(BaseModel):
                 print(f"Failed to generate prompt variant after {max_retries} attempts.")
 
         return full_prompt_variants
-
     def _create_system_message(
-        self, user_prompt_request: str, approach: str, complexity: str, focus: str
+        self, user_prompt_request: str, approach: str, complexity: str, focus: str, topic: str = "hallucination-detection"
     ) -> str:
-        # Define the initial part of the message that describes the AI's specialization
-        base_message = f"""
-        You are an AI assistant specialized in generating prompts specifically for hallucination detection.
-        The goal is to create a prompt that integrates the following parameters effectively:
 
-        - Approach: {approach}
-        - Complexity: {complexity}
-        - Focus: {focus}
+        # Mapping topic to specific instructions
+        topic_instructions= {
+            "hallucination-detection": "hallucination detection"
+        }
 
-        Based on these settings, adjust the base user prompt provided below:
-        """
-
+        selected_topic = topic_instructions.get(topic, "Focus broadly on hallucination detection strategies")
         # Mapping approach to specific instructions
         approach_instructions = {
-            "zero-shot": "Directly respond to the query with no prior examples, ensuring clarity and focus on hallucination detection.",
-            "few-shot": "Incorporate a structured setup with examples that outline similar cases of hallucination detection.",
-            "chain-of-thought": "Develop a step-by-step reasoning process within the prompt to elucidate how one might identify hallucinations.",
+            "zero-shot": f"Directly respond to the query with no prior examples, ensuring clarity and focus on {selected_topic}.",
+            "few-shot": f"Incorporate a structured setup with examples that outline similar cases of {selected_topic}.",
+            "chain-of-thought": f"Develop a step-by-step reasoning process within the prompt to elucidate how one might do {selected_topic}.",
         }
 
         # Mapping complexity to specific instructions
         complexity_instructions = {
             "simple": "Craft the prompt using straightforward, unambiguous language to ensure it is easy to follow.",
-            "complex": "Construct a detailed and nuanced prompt, incorporating technical jargon and multiple aspects of hallucination detection.",
+            "complex": f"Construct a detailed and nuanced prompt, incorporating technical jargon and multiple aspects of {topic}.",
         }
 
         # Mapping focus to specific instructions
         focus_instructions = {
-            "fact extraction": "Ensure the prompt directs the model to extract and verify facts potentially prone to hallucinations.",
-            "action points": "Focus the prompt on delineating clear, actionable steps that the user can take to detect or prevent hallucinations.",
-            "summary": "Summarize the key points necessary for effective hallucination detection.",
-            "simplify language": "Simplify the complexity of the language used in the prompt to make it more accessible.",
-            "change tone": "Adapt the tone to be more formal or informal, depending on the context or target audience.",
-            "British English usage": "Utilize British spelling and stylistic conventions throughout the prompt.",
+            "fact-extraction": f"Direct the model to extract and verify facts potentially prone to {selected_topic}.",
+            "action-points": f"Delinate clear, actionable steps that the user can take to do {selected_topic}.",
+            "summarization": f"Summarize the key points necessary for effective {selected_topic}.",
+            "language-simplification": "Simplify the complexity of the language used in the prompt to make it more accessible.",
+            "tone-changes": "Adapt the tone to be more formal or informal, depending on the context or target audience.",
+            "british-english-usage": "Utilize British spelling and stylistic conventions throughout the prompt.",
+            "coherence": "Ensure that the prompt is coherent."
         }
+        selected_focus = focus_instructions.get(focus, "is coherent.")
+        # Define the initial part of the message that describes the AI's specialization
+        base_message = f"""
+        You are an AI assistant specialized in generating prompts for a system where the goal is {topic}.
+        As the assistant, your goal is to create a prompt that integrates the following parameters effectively:
+
+        - Approach: Use {approach} when generating the prompt.
+        - Complexity: {complexity}
+        - Focus: {selected_focus}
+
+
+        Based on these settings, adjust the base user prompt provided below:
+        """
 
         # Construct the final system message
         system_message = base_message + f"Base prompt:\n\n{user_prompt_request}\n\n"
@@ -162,9 +191,13 @@ class PromptTuner(BaseModel):
                     "Use a moderate level of complexity suitable for general audiences.",
                 ),
                 focus_instructions.get(
-                    focus, "Focus broadly on hallucination detection strategies."
+                    focus, ""
                 ),
-                "\nEnsure the final prompt integrates all elements to maintain a coherent and focused approach to hallucination detection.",
+                ("The goal is " +
+                topic_instructions.get(
+                    topic, "to focus broadly on hallucination detection strategies."
+                ) + "."),
+                f"\nEnsure the final prompt integrates all elements to maintain a coherent and focused approach to {topic}.",
             ]
         )
 
@@ -174,11 +207,12 @@ class PromptTuner(BaseModel):
         self,
         client,
         user_prompt_request: str,
+        topic: Optional[str],
         complexity: Optional[str],
         focus: Optional[str],
     ) -> List[Dict[str, str]]:
         system_message = f"""
-        Generate 3 concise input-output pairs for few-shot learning in hallucination detection.
+        Generate 3 concise input-output pairs for few-shot learning on {topic}.
         Tailor examples to these parameters:
         - Complexity: {complexity}
         - Focus: {focus}
@@ -193,7 +227,7 @@ class PromptTuner(BaseModel):
 
         Output: [Faithful/Not faithful/Refusal]
 
-        Ensure examples reflect various hallucination scenarios.
+        Ensure examples reflect various {topic} scenarios.
         """
         if complexity is None or focus is None:
             return []
@@ -244,18 +278,20 @@ class PromptTuner(BaseModel):
 
     def update_params(self, params: Dict[str, Any]):
         if "prompt_tuning_approach" in params:
-            self.prompting_approaches = [params["prompt_tuning_approach"]]
+            self.prompt_tuning_approaches = [params["prompt_tuning_approach"]]
         if "prompt_tuning_complexity" in params:
-            self.prompt_complexities = [params["prompt_tuning_complexity"]]
+            self.prompt_tuning_complexities = [params["prompt_tuning_complexity"]]
         if "prompt_tuning_focus" in params:
-            self.prompt_focuses = [params["prompt_tuning_focus"]]
+            self.prompt_tuning_focuses = [params["prompt_tuning_focus"]]
+        if "prompt_tuning_topic" in params:
+            self.prompt_tuning_topics = [params["prompt_tuning_topic"]]
         if "enable_logging" in params:
             self.enable_logging = params["enable_logging"]
         if "evaluation_dataset" in params:
             self.evaluation_dataset = params["evaluation_dataset"]
 
     def __str__(self):
-        return f"PromptTuner(approaches={self.prompting_approaches}, complexities={self.prompt_complexities}, focuses={self.prompt_focuses})"
+        return f"PromptTuner(approaches={self.prompt_tuning_approaches}, topics={self.prompt_tuning_topics}, complexities={self.prompt_tuning_complexities}, focuses={self.prompt_tuning_focuses})"
 
     def __repr__(self):
         return self.__str__()

@@ -84,6 +84,9 @@ def test_advanced_prompt_tuning_experiment():
         search_method="grid",
         enable_logging=False,
         use_flaml_library=False,
+        fixed_param_dict={
+        "prompt_tuning_topic": "hallucination-detection"
+    }
     )
 
     experiment_result = experiment.run(

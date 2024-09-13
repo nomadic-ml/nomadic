@@ -33,6 +33,9 @@ import time
 import random
 from functools import wraps
 
+import pandas as pd
+import ipywidgets as widgets
+from IPython.display import display, HTML
 
 def retry_with_exponential_backoff(
     max_retries=5, base_delay=1, max_delay=300, exceptions=(Exception,)
@@ -125,9 +128,9 @@ class Experiment(BaseModel):
         default=True,
         description="Flag to enable or disable print logging.",
     )
-    user_prompt_request: Optional[str] = Field(
-        default="",
-        description="User request for GPT prompt.",
+    user_prompt_request: Optional[Union[str, List[str]]] = Field(
+        default=[],
+        description="User request for GPT prompt. Can be a string or a list of strings.",
     )
     num_samples: Optional[int] = Field(
         default=-1,
@@ -156,6 +159,15 @@ class Experiment(BaseModel):
         default=1,
         description="Number of simulations to run for each configuration.",
     )
+    @field_validator('user_prompt_request')
+    def validate_user_prompt_request(cls, v):
+        if isinstance(v, str):
+            return [v]
+        elif isinstance(v, list):
+            return v
+        else:
+            raise ValueError("user_prompt_request must be a string or a list of strings")
+
 
     @field_validator("tuner")
     def check_tuner_class(cls, value):
@@ -190,22 +202,30 @@ class Experiment(BaseModel):
 
         # Initialize PromptTuner with the current parameters
         prompt_tuner = PromptTuner(
-            prompting_approaches=[
+            prompt_tuning_approaches=[
                 prompt_tuning_params.get("prompt_tuning_approach", "None")
             ],
-            prompt_complexities=[
+            prompt_tuning_topics=[
+                prompt_tuning_params.get("prompt_tuning_topic", "hallucination-detection")
+            ],
+            prompt_tuning_complexities=[
                 prompt_tuning_params.get("prompt_tuning_complexity", "None")
             ],
-            prompt_focuses=[
+            prompt_tuning_focuses=[
                 prompt_tuning_params.get("prompt_tuning_focus", "None")
             ],
             enable_logging=self.enable_logging,
         )
+        print("GENERATING-----------", prompt_tuner.prompt_tuning_approaches, prompt_tuner.prompt_tuning_topics,prompt_tuner.prompt_tuning_complexities,prompt_tuner.prompt_tuning_focuses)
+        self.user_prompt_request = self.user_prompt_request * self.num_simulations
+
         # Generate prompt variants using PromptTuner
         prompt_variants = prompt_tuner.generate_prompt_variants(
             client=self.model,  # Pass the client or the required object
             user_prompt_request=self.user_prompt_request
         )
+
+        print("Prompt Variants are " + str(prompt_variants))
         for i, prompt_variant in enumerate(prompt_variants):
             if self.enable_logging:
                 print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
@@ -297,12 +317,14 @@ class Experiment(BaseModel):
             current_score = mean_scores.get(current_param_key, 0.0)
 
             all_scores.append(current_score)
+            queries = [item.get('query', '') for item in self.evaluation_dataset] if self.evaluation_dataset else []
 
             metadata = {
                 "Answers": all_pred_responses,
                 "Ground Truth": all_ref_responses,
                 "Custom Evaluator Results": eval_results,
                 "Full Prompts": all_full_prompts,
+                "Queries": queries,
                 "Prompt Variants": prompt_variants,
                 "Prompt Parameters": {
                     k: v
@@ -310,8 +332,9 @@ class Experiment(BaseModel):
                     if k
                     in [
                         "prompt_tuning_approach",
+                        "prompt_tuning_topic",
                         "prompt_tuning_complexity",
-                        "prompt_tuning_focus",
+                        "prompt_tuning_topic",
                     ]
                 },
                 "All Mean Scores": {str(k): v for k, v in mean_scores.items()},
@@ -387,6 +410,8 @@ class Experiment(BaseModel):
         response: str = "",
         answer: str = ""
     ) -> str:
+        print("prompt variant is")
+        print(prompt_variant)
         # Determine values for query/question (interchangeable) and response/answer (irreplaceable)
         query_value = example.get("query", query) or query or question
         response_value = example.get("response", response) or response or answer
@@ -761,6 +786,14 @@ class Experiment(BaseModel):
         plt.show()
 
     def _create_parameter_combination_heatmap(self, experiment_result):
+        import ipywidgets as widgets
+        from IPython.display import display, clear_output
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        import pandas as pd
+        import numpy as np
+        from itertools import combinations
+
         run_results = experiment_result.run_results
 
         data = []
@@ -770,10 +803,7 @@ class Experiment(BaseModel):
             param_names.update(row.keys())
             row["overall_score"] = run.score
 
-            if (
-                "Custom Evaluator Results" in run.metadata
-                and run.metadata["Custom Evaluator Results"]
-            ):
+            if "Custom Evaluator Results" in run.metadata and run.metadata["Custom Evaluator Results"]:
                 scores = run.metadata["Custom Evaluator Results"][0].get("scores", {})
                 if isinstance(scores, dict):
                     row.update(scores)
@@ -790,80 +820,74 @@ class Experiment(BaseModel):
 
         # Separate hyperparameters and score columns
         hyperparameter_cols = list(param_names)
-        score_cols = [
-            col
-            for col in df.columns
-            if col not in hyperparameter_cols and col != "overall_score"
-        ]
+        score_cols = [col for col in df.columns if col not in hyperparameter_cols and col != "overall_score"]
         score_cols = ["overall_score"] + score_cols  # Ensure overall_score is first
 
-        # Create param_combination string
-        def format_param_combination(row):
-            parts = []
-            for k in hyperparameter_cols:
-                parts.append(f"{k}: {row[k]}")
-            return " | ".join(parts)
+        # Create widgets for user interaction
+        color_metric = widgets.Dropdown(options=score_cols, description='Color Metric:')
+        heatmap_type = widgets.Dropdown(options=['Standard', 'Diverging', 'Categorical'], description='Heatmap Type:')
+        num_heatmaps = widgets.IntSlider(min=1, max=min(6, len(list(combinations(hyperparameter_cols, 2)))),
+                                        value=min(4, len(list(combinations(hyperparameter_cols, 2)))),
+                                        description='Number of Heatmaps:')
 
-        df["param_combination"] = df.apply(format_param_combination, axis=1)
+        def create_heatmaps(color, hmap_type, num_maps):
+            clear_output(wait=True)
 
-        # Group by parameter combination
-        grouped_df = df.groupby("param_combination")[score_cols].mean()
-        grouped_df["num_simulations"] = df.groupby("param_combination").size()
+            param_combos = list(combinations(hyperparameter_cols, 2))[:num_maps]
+            num_rows = (num_maps + 1) // 2  # Calculate number of rows needed
 
-        # Sort by the overall score column
-        grouped_df = grouped_df.sort_values("overall_score", ascending=False)
+            fig, axes = plt.subplots(num_rows, 2, figsize=(20, 10*num_rows))
+            axes = axes.flatten()  # Flatten the axes array for easy indexing
 
-        # Calculate overall averages
-        metric_averages = grouped_df[score_cols].mean()
+            for i, (x, y) in enumerate(param_combos):
+                if i < num_maps:
+                    ax = axes[i]
+                    pivot_df = df.pivot_table(values=color, index=y, columns=x, aggfunc='mean')
 
-        # Print average scores for each metric
-        print("Average Scores Across All Parameter Sets:")
-        for metric, score in metric_averages.items():
-            print(f"{metric}: {score:.2f}")
+                    if hmap_type == 'Standard':
+                        sns.heatmap(pivot_df, annot=True, fmt=".2f", cmap="YlGnBu", ax=ax)
+                    elif hmap_type == 'Diverging':
+                        sns.heatmap(pivot_df, annot=True, fmt=".2f", cmap="RdYlBu_r", center=0, ax=ax)
+                    else:  # Categorical
+                        sns.heatmap(pivot_df, annot=True, fmt=".2f", cmap="Set3", ax=ax)
 
-        # Add overall average scores as a separate row
-        avg_row = pd.DataFrame([metric_averages], index=["AVERAGE"])
-        grouped_df = pd.concat([grouped_df, avg_row])
+                    ax.set_title(f"{color} for {x} vs {y}")
 
-        # Transpose the DataFrame to swap rows and columns
-        grouped_df_t = grouped_df.transpose()
-        # Create heatmap
-        fig, ax = plt.subplots(
-            figsize=(len(grouped_df) * 1.2, 10)
-        )  # Adjust figure size
+            # Remove any unused subplots
+            for j in range(i+1, len(axes)):
+                fig.delaxes(axes[j])
 
-        sns.heatmap(
-            grouped_df_t,
-            annot=True,
-            fmt=".2f",
-            cmap="YlGnBu",
-            cbar_kws={"label": "Score"},
-            ax=ax,
-            linewidths=0.5,
-            square=True,
-        )
-        plt.title("Heatmap of Scores for Each Parameter Combination", pad=20)
-        plt.ylabel("Metric", labelpad=20)
-        plt.xlabel("Parameter Combination", labelpad=20)
+            plt.tight_layout()
+            plt.show()
 
-        # Rotate x-axis labels for better readability
-        plt.xticks(rotation=45, ha="right")
-        plt.yticks(rotation=0)
+            # Display summary statistics
+            print(f"\nSummary Statistics for {color}:")
+            print(df[color].describe())
 
-        # Adjust layout
-        plt.tight_layout()
+            # Display top 5 parameter combinations
+            print("\nTop 5 Parameter Combinations:")
+            top_5 = df.nlargest(5, color)
+            print(top_5[hyperparameter_cols + [color]].to_string(index=False))
 
-        # Increase font size for better readability
-        plt.setp(ax.get_xticklabels(), fontsize=10)
-        plt.setp(ax.get_yticklabels(), fontsize=10)
+        # Create interactive controls
+        controls = widgets.VBox([color_metric, heatmap_type, num_heatmaps])
+        output = widgets.Output()
 
-        # Add gridlines
-        ax.set_xticks(np.arange(grouped_df.shape[0]) + 0.5, minor=False)
-        ax.xaxis.grid(True, which="major", linestyle="-", linewidth=0.5, color="white")
+        def on_change(change):
+            with output:
+                create_heatmaps(color_metric.value, heatmap_type.value, num_heatmaps.value)
 
-        plt.show()
+        color_metric.observe(on_change, names='value')
+        heatmap_type.observe(on_change, names='value')
+        num_heatmaps.observe(on_change, names='value')
 
-        return grouped_df
+        # Display the interactive widget
+        display(controls, output)
+
+        # Initial heatmaps display
+        create_heatmaps(color_metric.value, heatmap_type.value, num_heatmaps.value)
+
+        return df
 
     def test_significance(self, experiment_result: ExperimentResult, n: int = 5):
         if not experiment_result or not experiment_result.run_results:
@@ -930,52 +954,6 @@ class Experiment(BaseModel):
             "rest_scores": rest_scores,
         }
 
-    def wrap_text(self, text, width):
-        # Wrap text to fit within the given width
-        from textwrap import wrap
-
-        return wrap(text, width)
-
-    def create_run_results_table(
-        self,
-        experiment_result,
-        max_rows=None,
-        max_prompt_length=100,
-        max_answer_length=500,
-    ):
-        data = []
-        for run_result in experiment_result.run_results:
-            prompt_variants = run_result.metadata.get("Prompt Variants", [])
-            full_prompts = run_result.metadata.get("Full Prompts", [])
-            answers = run_result.metadata.get("Answers", [])
-
-            for prompt_variant, full_prompt, answer in zip(
-                prompt_variants, full_prompts, answers
-            ):
-                row = {
-                    "Run Score": f"{run_result.score:.2f}",
-                    "Prompt Variant": self._wrap_text(
-                        prompt_variant, max_prompt_length
-                    ),
-                    "Full Prompt": self._wrap_text(full_prompt, max_prompt_length),
-                    "Answer": self._wrap_text(answer, max_answer_length),
-                }
-                row.update(run_result.params)
-                data.append(row)
-
-        df = pd.DataFrame(data)
-
-        if max_rows is not None:
-            df = df.head(max_rows)
-
-        print(f"Number of rows: {len(df)}")
-        print(f"Number of unique prompt variants: {df['Prompt Variant'].nunique()}")
-        print(f"Number of unique full prompts: {df['Full Prompt'].nunique()}")
-        print(f"Number of unique answers: {df['Answer'].nunique()}")
-        print("\nSample of unique prompt variants:")
-        print(df["Prompt Variant"].unique()[:5])
-
-        return df
 
     def _wrap_text(self, text, max_length):
         if len(text) <= max_length:
@@ -999,3 +977,112 @@ class Experiment(BaseModel):
             lines.append(" ".join(current_line))
 
         return "\n".join(lines)
+
+    def create_run_results_table(
+        self,
+        experiment_result,
+        max_rows=None,
+        max_prompt_length=100,
+        max_answer_length=500,
+    ):
+        data = []
+        for run_result in experiment_result.run_results:
+            individual_results = run_result.metadata.get('Individual Simulation Results', [])
+            for result in individual_results:
+                # Extract data from the result
+                answers = result.get('Answers', [])
+                ground_truths = result.get('Ground Truth', [])
+                full_prompts = result.get('Full Prompts', [])
+                prompt_variants = result.get('Prompt Variants', [])
+                queries = result.get('Queries', [])
+
+                if not all([answers, ground_truths, full_prompts, prompt_variants, queries]):
+                    print(f"Missing or empty data in result: {result}")
+                    continue
+
+                # Ensure all lists have the same length
+                min_length = min(len(answers), len(ground_truths), len(full_prompts), len(queries))
+
+                # Create a row for each prompt variant and corresponding data
+                for i in range(min_length):
+                    for variant in set(prompt_variants):  # Use set to get unique variants
+                        row = {
+                            "Run Score": f"{run_result.score:.2f}",
+                            "Prompt Variant": self._wrap_text(variant, max_prompt_length),
+                            "Full Prompt": self._wrap_text(full_prompts[i], max_prompt_length),
+                            "Generated Answer": self._wrap_text(answers[i], max_answer_length),
+                            "Ground Truth": self._wrap_text(ground_truths[i], max_answer_length),
+                            "Query": self._wrap_text(queries[i], max_prompt_length),
+                        }
+                        row.update(run_result.params)
+                        data.append(row)
+
+        df = pd.DataFrame(data)
+
+        # Inspect DataFrame
+        print("DataFrame columns:", df.columns)
+        print(f"Number of rows: {len(df)}")
+
+        if 'Prompt Variant' in df.columns:
+            print(f"Number of unique prompt variants: {df['Prompt Variant'].nunique()}")
+            print("\nSample of unique prompt variants:")
+            print(df["Prompt Variant"].unique()[:5])
+        else:
+            print("'Prompt Variant' column not found in DataFrame")
+
+        if max_rows is not None:
+            df = df.head(max_rows)
+
+        # Create interactive elements
+        param_columns = [col for col in df.columns if col not in ["Run Score", "Prompt Variant", "Full Prompt", "Generated Answer", "Ground Truth", "Query"]]
+
+        dropdowns = {}
+        for param in param_columns:
+            options = ['All'] + list(df[param].unique())
+            dropdowns[param] = widgets.Dropdown(options=options, description=param, style={'description_width': 'initial'})
+
+        # Add Query dropdown
+        query_options = ['All'] + list(df['Query'].unique())
+        query_dropdown = widgets.Dropdown(options=query_options, description='Query', style={'description_width': 'initial'})
+
+        # Add Prompt Variant dropdown
+        prompt_variant_options = ['All'] + list(df['Prompt Variant'].unique())
+        prompt_variant_dropdown = widgets.Dropdown(options=prompt_variant_options, description='Prompt Variant', style={'description_width': 'initial'})
+
+        def update_table(*args):
+            filtered_df = df.copy()
+            for param, dropdown in dropdowns.items():
+                if dropdown.value != 'All':
+                    filtered_df = filtered_df[filtered_df[param] == dropdown.value]
+
+            if query_dropdown.value != 'All':
+                filtered_df = filtered_df[filtered_df['Query'] == query_dropdown.value]
+
+            if prompt_variant_dropdown.value != 'All':
+                filtered_df = filtered_df[filtered_df['Prompt Variant'] == prompt_variant_dropdown.value]
+
+            display(HTML(filtered_df.to_html(index=False)))
+
+        for dropdown in dropdowns.values():
+            dropdown.observe(update_table, names='value')
+        query_dropdown.observe(update_table, names='value')
+        prompt_variant_dropdown.observe(update_table, names='value')
+
+        controls = widgets.VBox([widgets.Label("Select parameter combinations:")]
+                                + list(dropdowns.values())
+                                + [widgets.Label("Select Query:"), query_dropdown]
+                                + [widgets.Label("Select Prompt Variant:"), prompt_variant_dropdown]
+                                + [widgets.Button(description="Update Table")])
+
+        output = widgets.Output()
+
+        def on_button_click(b):
+            with output:
+                output.clear_output()
+                update_table()
+
+        controls.children[-1].on_click(on_button_click)
+
+        display(controls, output)
+
+        return df
