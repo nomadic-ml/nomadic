@@ -1,9 +1,18 @@
+import random
+import time
+import traceback
 from datetime import datetime
 from enum import Enum
+from functools import wraps
 from pathlib import Path
-import traceback
 from typing import Any, Dict, List, Optional, Callable, Set, Union, Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from scipy import stats
 
 from llama_index.core.evaluation import BaseEvaluator
 from llama_index.core.llms import CompletionResponse
@@ -14,31 +23,11 @@ from nomadic.model import OpenAIModel, TogetherAIModel, SagemakerModel
 from nomadic.result import RunResult, ExperimentResult
 from nomadic.tuner.base import BaseParamTuner
 from nomadic.util import is_ray_installed
-
 from nomadic.experiment.prompt_tuning import (
     PromptTuner,
     custom_evaluate,
     custom_evaluate_hallucination,
 )
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-import numpy as np
-from scipy import stats
-from scipy.cluster import hierarchy
-from scipy.spatial.distance import pdist
-
-import time
-import random
-from functools import wraps
-
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-import numpy as np
-from itertools import combinations
 
 def retry_with_exponential_backoff(
     max_retries=5, base_delay=1, max_delay=300, exceptions=(Exception,)
