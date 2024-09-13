@@ -202,12 +202,12 @@ class Experiment(BaseModel):
             prompt_tuning_complexities=[
                 prompt_tuning_params.get("prompt_tuning_complexity", "None")
             ],
-            prompt_tuning_tasks=[
-                prompt_tuning_params.get("prompt_tuning_task", "None")
+            prompt_tuning_focuses=[
+                prompt_tuning_params.get("prompt_tuning_focus", "None")
             ],
             enable_logging=self.enable_logging,
         )
-        print("GENERATING-----------", prompt_tuner.prompt_tuning_approaches, prompt_tuner.prompt_tuning_topics,prompt_tuner.prompt_tuning_complexities,prompt_tuner.prompt_tuning_tasks)
+        print("GENERATING-----------", prompt_tuner.prompt_tuning_approaches, prompt_tuner.prompt_tuning_topics,prompt_tuner.prompt_tuning_complexities,prompt_tuner.prompt_tuning_focuses)
         # Generate prompt variants using PromptTuner
         prompt_variants = prompt_tuner.generate_prompt_variants(
             client=self.model,  # Pass the client or the required object

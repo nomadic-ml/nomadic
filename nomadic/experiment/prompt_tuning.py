@@ -24,15 +24,15 @@ class PromptTuner(BaseModel):
     )
     prompt_tuning_topics: List[str] = Field(
         default=["hallucination-detection"],
-        description="List of prompt topics to focus on. Default is hallucination detection.",
+        description="List of prompt topics which are the goals of the experiment. If ['None'], no tuning is applied.",
     )
     prompt_tuning_complexities: List[str] = Field(
         default=["None"],
         description="List of prompt complexities to use. If ['None'], no tuning is applied.",
     )
-    prompt_tuning_tasks: List[str] = Field(
-        default=["coherence"],
-        description="List of prompt tasks to use. Default is coherence.",
+    prompt_tuning_focuses: List[str] = Field(
+        default=["None"],
+        description="List of prompt tasks to focus on. If ['None'], no tuning is applied.",
     )
     enable_logging: bool = Field(
         default=True,
@@ -62,19 +62,19 @@ class PromptTuner(BaseModel):
             self.prompt_tuning_approaches,
             self.prompt_tuning_topics,
             self.prompt_tuning_complexities,
-            self.prompt_tuning_tasks,
+            self.prompt_tuning_focuses,
         )
 
         # Iterate over all possible combinations
-        for approach, topic, complexity, task in combinations:
+        for approach, topic, complexity, focus in combinations:
             if self.enable_logging:
                 print(
-                    f"\nGenerating prompt for: Approach={approach}, Topic={topic}, Complexity={complexity}, Focus={task}"
+                    f"\nGenerating prompt for: Approach={approach}, Topic={topic}, Complexity={complexity}, Focus={focus}"
                 )
 
             # Create the system message based on the current combination
             system_message = self._create_system_message(
-                user_prompt_request, approach, complexity, task, topic
+                user_prompt_request, approach, complexity, focus, topic
             )
             print("system message")
             print(system_message)
@@ -99,7 +99,7 @@ class PromptTuner(BaseModel):
                     # If the approach is 'few-shot', generate and incorporate examples
                     if approach == "few-shot":
                         examples = self._generate_examples(
-                            client, user_prompt_request, topic, complexity, task
+                            client, user_prompt_request, topic, complexity, focus
                         )
                         generated_prompt = self._incorporate_examples(
                             generated_prompt, examples
@@ -125,7 +125,7 @@ class PromptTuner(BaseModel):
 
         return full_prompt_variants
     def _create_system_message(
-        self, user_prompt_request: str, approach: str, complexity: str, task: str, topic: str = "hallucination-detection"
+        self, user_prompt_request: str, approach: str, complexity: str, focus: str, topic: str = "hallucination-detection"
     ) -> str:
 
         # Mapping topic to specific instructions
@@ -133,7 +133,7 @@ class PromptTuner(BaseModel):
             "hallucination-detection": "hallucination detection"
         }
 
-        selected_topic = topic_instructions.get(topic, "Focus broadly on hallucination detection strategies")
+        selected_topic = topic_instructions.get(topic, "generation of a high-quality prompt according to the instruction provided")
         # Mapping approach to specific instructions
         approach_instructions = {
             "zero-shot": f"Directly respond to the query with no prior examples, ensuring clarity and focus on {selected_topic}.",
@@ -148,7 +148,7 @@ class PromptTuner(BaseModel):
         }
 
         # Mapping task to specific instructions
-        task_instructions = {
+        focus_instructions = {
             "fact-extraction": f"Direct the model to extract and verify facts potentially prone to {selected_topic}.",
             "action-points": f"Delinate clear, actionable steps that the user can take to do {selected_topic}.",
             "summarization": f"Summarize the key points necessary for effective {selected_topic}.",
@@ -157,15 +157,15 @@ class PromptTuner(BaseModel):
             "british-english-usage": "Utilize British spelling and stylistic conventions throughout the prompt.",
             "coherence": "Ensure that the prompt is coherent."
         }
-        selected_task = task_instructions.get(task, "is coherent.")
+        selected_focus = focus_instructions.get(focus, "Ensure that the prompt is coherent.")
         # Define the initial part of the message that describes the AI's specialization
         base_message = f"""
-        You are an AI assistant specialized in generating prompts for a system where the goal is {topic}.
+        You are an AI assistant specialized in generating prompts for a system where the goal is {selected_topic}.
         As the assistant, your goal is to create a prompt that integrates the following parameters effectively:
 
         - Approach: Use {approach} when generating the prompt.
         - Complexity: {complexity}
-        - Focus: {selected_task}
+        - Focus: {selected_focus}
 
 
         Based on these settings, adjust the base user prompt provided below:
@@ -183,13 +183,13 @@ class PromptTuner(BaseModel):
                     complexity,
                     "Use a moderate level of complexity suitable for general audiences.",
                 ),
-                task_instructions.get(
-                    task, ""
+                focus_instructions.get(
+                    focus, "Ensure that the prompt is coherent."
                 ),
                 ("The goal is " +
                 topic_instructions.get(
-                    topic, "to focus broadly on hallucination detection strategies."
-                ) + "."),
+                    topic, "to generate a high-quality prompt according to the instruction provided."
+                )),
                 f"\nEnsure the final prompt integrates all elements to maintain a coherent and focused approach to {topic}.",
             ]
         )
@@ -202,13 +202,13 @@ class PromptTuner(BaseModel):
         user_prompt_request: str,
         topic: Optional[str],
         complexity: Optional[str],
-        task: Optional[str],
+        focus: Optional[str],
     ) -> List[Dict[str, str]]:
         system_message = f"""
         Generate 3 concise input-output pairs for few-shot learning on {topic}.
         Tailor examples to these parameters:
         - Complexity: {complexity}
-        - Focus: {task}
+        - Focus: {focus}
 
         Base prompt: {user_prompt_request}
 
@@ -222,7 +222,7 @@ class PromptTuner(BaseModel):
 
         Ensure examples reflect various {topic} scenarios.
         """
-        if complexity is None or task is None:
+        if complexity is None or focus is None:
             return []
 
         response = client.chat.completions.create(
@@ -274,8 +274,8 @@ class PromptTuner(BaseModel):
             self.prompt_tuning_approaches = [params["prompt_tuning_approach"]]
         if "prompt_tuning_complexity" in params:
             self.prompt_tuning_complexities = [params["prompt_tuning_complexity"]]
-        if "prompt_tuning_task" in params:
-            self.prompt_tuning_tasks = [params["prompt_tuning_task"]]
+        if "prompt_tuning_focus" in params:
+            self.prompt_tuning_focuses = [params["prompt_tuning_focus"]]
         if "prompt_tuning_topic" in params:
             self.prompt_tuning_topics = [params["prompt_tuning_topic"]]
         if "enable_logging" in params:
@@ -284,7 +284,7 @@ class PromptTuner(BaseModel):
             self.evaluation_dataset = params["evaluation_dataset"]
 
     def __str__(self):
-        return f"PromptTuner(approaches={self.prompt_tuning_approaches}, topics={self.prompt_tuning_topics}, complexities={self.prompt_tuning_complexities}, tasks={self.prompt_tuning_tasks})"
+        return f"PromptTuner(approaches={self.prompt_tuning_approaches}, topics={self.prompt_tuning_topics}, complexities={self.prompt_tuning_complexities}, focuses={self.prompt_tuning_focuses})"
 
     def __repr__(self):
         return self.__str__()
