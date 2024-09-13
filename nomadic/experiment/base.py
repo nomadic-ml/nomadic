@@ -775,6 +775,13 @@ class Experiment(BaseModel):
         plt.show()
 
     def _create_parameter_combination_heatmap(self, experiment_result):
+        import ipywidgets as widgets
+        from IPython.display import display, clear_output
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        import pandas as pd
+        import numpy as np
+
         run_results = experiment_result.run_results
 
         data = []
@@ -784,10 +791,7 @@ class Experiment(BaseModel):
             param_names.update(row.keys())
             row["overall_score"] = run.score
 
-            if (
-                "Custom Evaluator Results" in run.metadata
-                and run.metadata["Custom Evaluator Results"]
-            ):
+            if "Custom Evaluator Results" in run.metadata and run.metadata["Custom Evaluator Results"]:
                 scores = run.metadata["Custom Evaluator Results"][0].get("scores", {})
                 if isinstance(scores, dict):
                     row.update(scores)
@@ -804,80 +808,60 @@ class Experiment(BaseModel):
 
         # Separate hyperparameters and score columns
         hyperparameter_cols = list(param_names)
-        score_cols = [
-            col
-            for col in df.columns
-            if col not in hyperparameter_cols and col != "overall_score"
-        ]
+        score_cols = [col for col in df.columns if col not in hyperparameter_cols and col != "overall_score"]
         score_cols = ["overall_score"] + score_cols  # Ensure overall_score is first
 
-        # Create param_combination string
-        def format_param_combination(row):
-            parts = []
-            for k in hyperparameter_cols:
-                parts.append(f"{k}: {row[k]}")
-            return " | ".join(parts)
+        # Create widgets for user interaction
+        x_axis = widgets.Dropdown(options=hyperparameter_cols, description='X-axis:')
+        y_axis = widgets.Dropdown(options=hyperparameter_cols, description='Y-axis:')
+        color_metric = widgets.Dropdown(options=score_cols, description='Color Metric:')
+        heatmap_type = widgets.Dropdown(options=['Standard', 'Diverging', 'Categorical'], description='Heatmap Type:')
 
-        df["param_combination"] = df.apply(format_param_combination, axis=1)
+        def create_heatmap(x, y, color, hmap_type):
+            clear_output(wait=True)
 
-        # Group by parameter combination
-        grouped_df = df.groupby("param_combination")[score_cols].mean()
-        grouped_df["num_simulations"] = df.groupby("param_combination").size()
+            pivot_df = df.pivot_table(values=color, index=y, columns=x, aggfunc='mean')
 
-        # Sort by the overall score column
-        grouped_df = grouped_df.sort_values("overall_score", ascending=False)
+            fig, ax = plt.subplots(figsize=(12, 8))
 
-        # Calculate overall averages
-        metric_averages = grouped_df[score_cols].mean()
+            if hmap_type == 'Standard':
+                sns.heatmap(pivot_df, annot=True, fmt=".2f", cmap="YlGnBu", ax=ax)
+            elif hmap_type == 'Diverging':
+                sns.heatmap(pivot_df, annot=True, fmt=".2f", cmap="RdYlBu_r", center=0, ax=ax)
+            else:  # Categorical
+                sns.heatmap(pivot_df, annot=True, fmt=".2f", cmap="Set3", ax=ax)
 
-        # Print average scores for each metric
-        print("Average Scores Across All Parameter Sets:")
-        for metric, score in metric_averages.items():
-            print(f"{metric}: {score:.2f}")
+            plt.title(f"{color} for {x} vs {y}")
+            plt.tight_layout()
+            plt.show()
 
-        # Add overall average scores as a separate row
-        avg_row = pd.DataFrame([metric_averages], index=["AVERAGE"])
-        grouped_df = pd.concat([grouped_df, avg_row])
+            # Display summary statistics
 
-        # Transpose the DataFrame to swap rows and columns
-        grouped_df_t = grouped_df.transpose()
-        # Create heatmap
-        fig, ax = plt.subplots(
-            figsize=(len(grouped_df) * 1.2, 10)
-        )  # Adjust figure size
+            # Display top 5 parameter combinations
+            print("\nTop 5 Parameter Combinations:")
+            top_5 = df.nlargest(5, color)
+            print(top_5[[x, y, color]].to_string(index=False))
 
-        sns.heatmap(
-            grouped_df_t,
-            annot=True,
-            fmt=".2f",
-            cmap="YlGnBu",
-            cbar_kws={"label": "Score"},
-            ax=ax,
-            linewidths=0.5,
-            square=True,
-        )
-        plt.title("Heatmap of Scores for Each Parameter Combination", pad=20)
-        plt.ylabel("Metric", labelpad=20)
-        plt.xlabel("Parameter Combination", labelpad=20)
+        # Create interactive controls
+        controls = widgets.VBox([x_axis, y_axis, color_metric, heatmap_type])
+        output = widgets.Output()
 
-        # Rotate x-axis labels for better readability
-        plt.xticks(rotation=45, ha="right")
-        plt.yticks(rotation=0)
+        def on_change(change):
+            with output:
+                create_heatmap(x_axis.value, y_axis.value, color_metric.value, heatmap_type.value)
 
-        # Adjust layout
-        plt.tight_layout()
+        x_axis.observe(on_change, names='value')
+        y_axis.observe(on_change, names='value')
+        color_metric.observe(on_change, names='value')
+        heatmap_type.observe(on_change, names='value')
 
-        # Increase font size for better readability
-        plt.setp(ax.get_xticklabels(), fontsize=10)
-        plt.setp(ax.get_yticklabels(), fontsize=10)
+        # Display the interactive widget
+        display(controls, output)
 
-        # Add gridlines
-        ax.set_xticks(np.arange(grouped_df.shape[0]) + 0.5, minor=False)
-        ax.xaxis.grid(True, which="major", linestyle="-", linewidth=0.5, color="white")
+        # Initial heatmap display
+        create_heatmap(x_axis.value, y_axis.value, color_metric.value, heatmap_type.value)
 
-        plt.show()
-
-        return grouped_df
+        return df
 
     def test_significance(self, experiment_result: ExperimentResult, n: int = 5):
         if not experiment_result or not experiment_result.run_results:
@@ -980,7 +964,6 @@ class Experiment(BaseModel):
             individual_results = run_result.metadata.get('Individual Simulation Results', [])
             for result in individual_results:
                 # Debugging: Print keys in the result
-                print("Keys in result:", result.keys())
 
                 # Extract data from the result
                 answers = result.get('Answers', [])
@@ -990,7 +973,6 @@ class Experiment(BaseModel):
                 queries = result.get('Queries', [])
 
                 if not all([answers, ground_truths, full_prompts, prompt_variants, queries]):
-                    print(f"Missing or empty data in result: {result}")
                     continue
 
                 for answer, ground_truth, full_prompt, prompt_variant, query in zip(
@@ -1008,17 +990,6 @@ class Experiment(BaseModel):
                     data.append(row)
 
         df = pd.DataFrame(data)
-
-        # Inspect DataFrame
-        print("DataFrame columns:", df.columns)
-        print(f"Number of rows: {len(df)}")
-
-        if 'Prompt Variant' in df.columns:
-            print(f"Number of unique prompt variants: {df['Prompt Variant'].nunique()}")
-            print("\nSample of unique prompt variants:")
-            print(df["Prompt Variant"].unique()[:5])
-        else:
-            print("'Prompt Variant' column not found in DataFrame")
 
         if max_rows is not None:
             df = df.head(max_rows)

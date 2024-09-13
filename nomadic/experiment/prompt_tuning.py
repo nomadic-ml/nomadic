@@ -22,10 +22,6 @@ class PromptTuner(BaseModel):
         default=["None"],
         description="List of prompting approaches to use. If ['None'], no tuning is applied.",
     )
-    prompt_tuning_topics: List[str] = Field(
-        default=["hallucination-detection"],
-        description="List of prompt topics which are the goals of the experiment. If ['None'], no tuning is applied.",
-    )
     prompt_tuning_complexities: List[str] = Field(
         default=["None"],
         description="List of prompt complexities to use. If ['None'], no tuning is applied.",
@@ -60,21 +56,21 @@ class PromptTuner(BaseModel):
         # Generate all combinations of the specified areas
         combinations = product(
             self.prompt_tuning_approaches,
-            self.prompt_tuning_topics,
+            self.prompt_tuning_focuses,
             self.prompt_tuning_complexities,
             self.prompt_tuning_focuses,
         )
 
         # Iterate over all possible combinations
-        for approach, topic, complexity, focus in combinations:
+        for approach, focus, complexity, focus in combinations:
             if self.enable_logging:
                 print(
-                    f"\nGenerating prompt for: Approach={approach}, Topic={topic}, Complexity={complexity}, Focus={focus}"
+                    f"\nGenerating prompt for: Approach={approach}, focus={focus}, Complexity={complexity}, Focus={focus}"
                 )
 
             # Create the system message based on the current combination
             system_message = self._create_system_message(
-                user_prompt_request, approach, complexity, focus, topic
+                user_prompt_request, approach, complexity, focus, focus
             )
             print("system message")
             print(system_message)
@@ -99,7 +95,7 @@ class PromptTuner(BaseModel):
                     # If the approach is 'few-shot', generate and incorporate examples
                     if approach == "few-shot":
                         examples = self._generate_examples(
-                            client, user_prompt_request, topic, complexity, focus
+                            client, user_prompt_request, focus, complexity, focus
                         )
                         generated_prompt = self._incorporate_examples(
                             generated_prompt, examples
@@ -125,33 +121,33 @@ class PromptTuner(BaseModel):
 
         return full_prompt_variants
     def _create_system_message(
-        self, user_prompt_request: str, approach: str, complexity: str, focus: str, topic: str = "hallucination-detection"
+        self, user_prompt_request: str, approach: str, complexity: str, focus: str, focus: str = "hallucination-detection"
     ) -> str:
 
-        # Mapping topic to specific instructions
-        topic_instructions= {
+        # Mapping focus to specific instructions
+        focus_instructions= {
             "hallucination-detection": "hallucination detection"
         }
 
-        selected_topic = topic_instructions.get(topic, "generation of a high-quality prompt according to the instruction provided")
+        selected_focus = focus_instructions.get(focus, "generation of a high-quality prompt according to the instruction provided")
         # Mapping approach to specific instructions
         approach_instructions = {
-            "zero-shot": f"Directly respond to the query with no prior examples, ensuring clarity and focus on {selected_topic}.",
-            "few-shot": f"Incorporate a structured setup with examples that outline similar cases of {selected_topic}.",
-            "chain-of-thought": f"Develop a step-by-step reasoning process within the prompt to elucidate how one might do {selected_topic}.",
+            "zero-shot": f"Directly respond to the query with no prior examples, ensuring clarity and focus on {selected_focus}.",
+            "few-shot": f"Incorporate a structured setup with examples that outline similar cases of {selected_focus}.",
+            "chain-of-thought": f"Develop a step-by-step reasoning process within the prompt to elucidate how one might do {selected_focus}.",
         }
 
         # Mapping complexity to specific instructions
         complexity_instructions = {
             "simple": "Craft the prompt using straightforward, unambiguous language to ensure it is easy to follow.",
-            "complex": f"Construct a detailed and nuanced prompt, incorporating technical jargon and multiple aspects of {topic}.",
+            "complex": f"Construct a detailed and nuanced prompt, incorporating technical jargon and multiple aspects of {focus}.",
         }
 
         # Mapping task to specific instructions
         focus_instructions = {
-            "fact-extraction": f"Direct the model to extract and verify facts potentially prone to {selected_topic}.",
-            "action-points": f"Delinate clear, actionable steps that the user can take to do {selected_topic}.",
-            "summarization": f"Summarize the key points necessary for effective {selected_topic}.",
+            "fact-extraction": f"Direct the model to extract and verify facts potentially prone to {selected_focus}.",
+            "action-points": f"Delinate clear, actionable steps that the user can take to do {selected_focus}.",
+            "summarization": f"Summarize the key points necessary for effective {selected_focus}.",
             "language-simplification": "Simplify the complexity of the language used in the prompt to make it more accessible.",
             "tone-changes": "Adapt the tone to be more formal or informal, depending on the context or target audience.",
             "british-english-usage": "Utilize British spelling and stylistic conventions throughout the prompt.",
@@ -160,7 +156,7 @@ class PromptTuner(BaseModel):
         selected_focus = focus_instructions.get(focus, "Ensure that the prompt is coherent.")
         # Define the initial part of the message that describes the AI's specialization
         base_message = f"""
-        You are an AI assistant specialized in generating prompts for a system where the goal is {selected_topic}.
+        You are an AI assistant specialized in generating prompts for a system where the goal is {selected_focus}.
         As the assistant, your goal is to create a prompt that integrates the following parameters effectively:
 
         - Approach: Use {approach} when generating the prompt.
@@ -187,10 +183,10 @@ class PromptTuner(BaseModel):
                     focus, "Ensure that the prompt is coherent."
                 ),
                 ("The goal is " +
-                topic_instructions.get(
-                    topic, "to generate a high-quality prompt according to the instruction provided."
+                focus_instructions.get(
+                    focus, "to generate a high-quality prompt according to the instruction provided."
                 )),
-                f"\nEnsure the final prompt integrates all elements to maintain a coherent and focused approach to {topic}.",
+                f"\nEnsure the final prompt integrates all elements to maintain a coherent and focused approach to {focus}.",
             ]
         )
 
@@ -200,12 +196,12 @@ class PromptTuner(BaseModel):
         self,
         client,
         user_prompt_request: str,
-        topic: Optional[str],
+        focus: Optional[str],
         complexity: Optional[str],
         focus: Optional[str],
     ) -> List[Dict[str, str]]:
         system_message = f"""
-        Generate 3 concise input-output pairs for few-shot learning on {topic}.
+        Generate 3 concise input-output pairs for few-shot learning on {focus}.
         Tailor examples to these parameters:
         - Complexity: {complexity}
         - Focus: {focus}
@@ -220,7 +216,7 @@ class PromptTuner(BaseModel):
 
         Output: [Faithful/Not faithful/Refusal]
 
-        Ensure examples reflect various {topic} scenarios.
+        Ensure examples reflect various {focus} scenarios.
         """
         if complexity is None or focus is None:
             return []
@@ -276,15 +272,13 @@ class PromptTuner(BaseModel):
             self.prompt_tuning_complexities = [params["prompt_tuning_complexity"]]
         if "prompt_tuning_focus" in params:
             self.prompt_tuning_focuses = [params["prompt_tuning_focus"]]
-        if "prompt_tuning_topic" in params:
-            self.prompt_tuning_topics = [params["prompt_tuning_topic"]]
         if "enable_logging" in params:
             self.enable_logging = params["enable_logging"]
         if "evaluation_dataset" in params:
             self.evaluation_dataset = params["evaluation_dataset"]
 
     def __str__(self):
-        return f"PromptTuner(approaches={self.prompt_tuning_approaches}, topics={self.prompt_tuning_topics}, complexities={self.prompt_tuning_complexities}, focuses={self.prompt_tuning_focuses})"
+        return f"PromptTuner(approaches={self.prompt_tuning_approaches}, focuses={self.prompt_tuning_focuses}, complexities={self.prompt_tuning_complexities}, focuses={self.prompt_tuning_focuses})"
 
     def __repr__(self):
         return self.__str__()
