@@ -35,7 +35,7 @@ def experiment():
 def test_experiment_initialization(experiment):
     assert experiment.params == {"param1", "param2"}
     assert len(experiment.evaluation_dataset) == 1
-    assert experiment.user_prompt_request == "Test request"
+    assert experiment.user_prompt_request == ["Test request"]
     assert experiment.model is not None
     assert experiment.evaluator is not None
 
