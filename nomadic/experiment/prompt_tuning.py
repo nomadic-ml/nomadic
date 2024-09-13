@@ -24,7 +24,7 @@ class PromptTuner(BaseModel):
     )
     prompt_tuning_topics: List[str] = Field(
         default=["hallucination-detection"],
-        description="List of prompt topics to focus on. Default is hallucination detection.",
+        description="List of prompt topics which are the goals of the experiment. If ['None'], no tuning is applied.",
     )
     prompt_tuning_complexities: List[str] = Field(
         default=["None"],
@@ -32,7 +32,7 @@ class PromptTuner(BaseModel):
     )
     prompt_tuning_focuses: List[str] = Field(
         default=["None"],
-        description="List of prompt focuses to use. Default is coherence.",
+        description="List of prompt tasks to focus on. If ['None'], no tuning is applied.",
     )
     enable_logging: bool = Field(
         default=True,
@@ -43,7 +43,7 @@ class PromptTuner(BaseModel):
         description="List of evaluation examples.",
     )
 
-    def generate_prompt_variants(self, client, user_prompt_request,max_retries: int = 3, retry_delay: int = 5):
+    def generate_prompt_variants(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
         prompt_variants = []
         for template in user_prompt_request:  # Assume prompt_templates is now a list
             # Generate variants for each template
@@ -90,7 +90,7 @@ class PromptTuner(BaseModel):
                 try:
                     # Generate the prompt variant
                     response = client.chat.completions.create(
-                        model="gpt-4",  # Changed from "gpt-4o" to "gpt-4"
+                        model="gpt-4o",
                         messages=[
                             {"role": "system", "content": system_message},
                             {
@@ -140,7 +140,7 @@ class PromptTuner(BaseModel):
             "hallucination-detection": "hallucination detection"
         }
 
-        selected_topic = topic_instructions.get(topic, "Focus broadly on hallucination detection strategies")
+        selected_topic = topic_instructions.get(topic, "generation of a high-quality prompt according to the instruction provided")
         # Mapping approach to specific instructions
         approach_instructions = {
             "zero-shot": f"Directly respond to the query with no prior examples, ensuring clarity and focus on {selected_topic}.",
@@ -154,7 +154,7 @@ class PromptTuner(BaseModel):
             "complex": f"Construct a detailed and nuanced prompt, incorporating technical jargon and multiple aspects of {topic}.",
         }
 
-        # Mapping focus to specific instructions
+        # Mapping task to specific instructions
         focus_instructions = {
             "fact-extraction": f"Direct the model to extract and verify facts potentially prone to {selected_topic}.",
             "action-points": f"Delinate clear, actionable steps that the user can take to do {selected_topic}.",
@@ -164,10 +164,10 @@ class PromptTuner(BaseModel):
             "british-english-usage": "Utilize British spelling and stylistic conventions throughout the prompt.",
             "coherence": "Ensure that the prompt is coherent."
         }
-        selected_focus = focus_instructions.get(focus, "is coherent.")
+        selected_focus = focus_instructions.get(focus, "Ensure that the prompt is coherent.")
         # Define the initial part of the message that describes the AI's specialization
         base_message = f"""
-        You are an AI assistant specialized in generating prompts for a system where the goal is {topic}.
+        You are an AI assistant specialized in generating prompts for a system where the goal is {selected_topic}.
         As the assistant, your goal is to create a prompt that integrates the following parameters effectively:
 
         - Approach: Use {approach} when generating the prompt.
@@ -191,12 +191,12 @@ class PromptTuner(BaseModel):
                     "Use a moderate level of complexity suitable for general audiences.",
                 ),
                 focus_instructions.get(
-                    focus, ""
+                    focus, "Ensure that the prompt is coherent."
                 ),
                 ("The goal is " +
                 topic_instructions.get(
-                    topic, "to focus broadly on hallucination detection strategies."
-                ) + "."),
+                    topic, "to generate a high-quality prompt according to the instruction provided."
+                )),
                 f"\nEnsure the final prompt integrates all elements to maintain a coherent and focused approach to {topic}.",
             ]
         )

@@ -216,7 +216,6 @@ class Experiment(BaseModel):
             ],
             enable_logging=self.enable_logging,
         )
-        print("GENERATING-----------", prompt_tuner.prompt_tuning_approaches, prompt_tuner.prompt_tuning_topics,prompt_tuner.prompt_tuning_complexities,prompt_tuner.prompt_tuning_focuses)
         self.user_prompt_request = self.user_prompt_request * self.num_simulations
 
         # Generate prompt variants using PromptTuner
@@ -224,8 +223,6 @@ class Experiment(BaseModel):
             client=self.model,  # Pass the client or the required object
             user_prompt_request=self.user_prompt_request
         )
-
-        print("Prompt Variants are " + str(prompt_variants))
         for i, prompt_variant in enumerate(prompt_variants):
             if self.enable_logging:
                 print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
@@ -334,7 +331,7 @@ class Experiment(BaseModel):
                         "prompt_tuning_approach",
                         "prompt_tuning_topic",
                         "prompt_tuning_complexity",
-                        "prompt_tuning_topic",
+                        "prompt_tuning_focus",
                     ]
                 },
                 "All Mean Scores": {str(k): v for k, v in mean_scores.items()},
@@ -410,8 +407,6 @@ class Experiment(BaseModel):
         response: str = "",
         answer: str = ""
     ) -> str:
-        print("prompt variant is")
-        print(prompt_variant)
         # Determine values for query/question (interchangeable) and response/answer (irreplaceable)
         query_value = example.get("query", query) or query or question
         response_value = example.get("response", response) or response or answer
@@ -803,7 +798,10 @@ class Experiment(BaseModel):
             param_names.update(row.keys())
             row["overall_score"] = run.score
 
-            if "Custom Evaluator Results" in run.metadata and run.metadata["Custom Evaluator Results"]:
+            if (
+                "Custom Evaluator Results" in run.metadata
+                and run.metadata["Custom Evaluator Results"]
+            ):
                 scores = run.metadata["Custom Evaluator Results"][0].get("scores", {})
                 if isinstance(scores, dict):
                     row.update(scores)
