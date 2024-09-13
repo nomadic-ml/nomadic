@@ -128,9 +128,9 @@ class Experiment(BaseModel):
         default=True,
         description="Flag to enable or disable print logging.",
     )
-    user_prompt_request: Optional[List[str]] = Field(
-        default="",
-        description="User request for GPT prompt.",
+    user_prompt_request: Optional[Union[str, List[str]]] = Field(
+        default=[],
+        description="User request for GPT prompt. Can be a string or a list of strings.",
     )
     num_samples: Optional[int] = Field(
         default=-1,
@@ -159,6 +159,15 @@ class Experiment(BaseModel):
         default=1,
         description="Number of simulations to run for each configuration.",
     )
+    @field_validator('user_prompt_request')
+    def validate_user_prompt_request(cls, v):
+        if isinstance(v, str):
+            return [v]
+        elif isinstance(v, list):
+            return v
+        else:
+            raise ValueError("user_prompt_request must be a string or a list of strings")
+
 
     @field_validator("tuner")
     def check_tuner_class(cls, value):
@@ -992,19 +1001,21 @@ class Experiment(BaseModel):
                     continue
 
                 # Ensure all lists have the same length
-                min_length = min(len(answers), len(ground_truths), len(full_prompts), len(prompt_variants), len(queries))
+                min_length = min(len(answers), len(ground_truths), len(full_prompts), len(queries))
 
+                # Create a row for each prompt variant and corresponding data
                 for i in range(min_length):
-                    row = {
-                        "Run Score": f"{run_result.score:.2f}",
-                        "Prompt Variant": self._wrap_text(prompt_variants[i], max_prompt_length),
-                        "Full Prompt": self._wrap_text(full_prompts[i], max_prompt_length),
-                        "Generated Answer": self._wrap_text(answers[i], max_answer_length),
-                        "Ground Truth": self._wrap_text(ground_truths[i], max_answer_length),
-                        "Query": self._wrap_text(queries[i], max_prompt_length),
-                    }
-                    row.update(run_result.params)
-                    data.append(row)
+                    for variant in set(prompt_variants):  # Use set to get unique variants
+                        row = {
+                            "Run Score": f"{run_result.score:.2f}",
+                            "Prompt Variant": self._wrap_text(variant, max_prompt_length),
+                            "Full Prompt": self._wrap_text(full_prompts[i], max_prompt_length),
+                            "Generated Answer": self._wrap_text(answers[i], max_answer_length),
+                            "Ground Truth": self._wrap_text(ground_truths[i], max_answer_length),
+                            "Query": self._wrap_text(queries[i], max_prompt_length),
+                        }
+                        row.update(run_result.params)
+                        data.append(row)
 
         df = pd.DataFrame(data)
 
