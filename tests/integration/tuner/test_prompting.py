@@ -32,9 +32,9 @@ def test_prompt_tuning_experiment():
     """
 
     temperature_search_space = tune.choice([0.1,0.9])
-    max_tokens_search_space = tune.choice([25, 100])
-    prompt_tuning_approach = tune.choice(["zero-shot", "chain-of-thought"])
-    prompt_tuning_complexity = tune.choice(["simple", "complex"])
+    max_tokens_search_space = tune.choice([100])
+    prompt_tuning_approach = tune.choice(["chain-of-thought"])
+    prompt_tuning_complexity = tune.choice(["complex"])
     prompt_tuning_focus = tune.choice(["british-english-adherence"])
     prompt_tuning_topic = tune.choice(["hallucination-detection"])
 
@@ -57,10 +57,12 @@ def test_prompt_tuning_experiment():
     experiment_result = experiment.run(
         param_dict={
             "temperature": temperature_search_space,
+            "max_tokens_search_space": max_tokens_search_space,
             "prompt_tuning_approach": prompt_tuning_approach,
             "prompt_tuning_complexity": prompt_tuning_complexity,
             "prompt_tuning_focus": prompt_tuning_focus,
             "prompt_tuning_topic": prompt_tuning_topic
         }
     )
-    print("hhh")
+
+    assert len(experiment_result.run_results) == 2

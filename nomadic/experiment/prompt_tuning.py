@@ -196,7 +196,7 @@ class PromptTuner(BaseModel):
                 ("The goal is " +
                 topic_instructions.get(
                     topic, "to generate a high-quality prompt according to the instruction provided."
-                )),
+                ) + "."),
                 f"\nEnsure the final prompt integrates all elements to maintain a coherent and focused approach to {topic}.",
             ]
         )
