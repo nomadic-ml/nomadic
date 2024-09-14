@@ -1,149 +1,68 @@
 
 import os
+import json
+import requests
 
 # Import relevant Nomadic libraries
 from nomadic.experiment import Experiment
 from nomadic.model import OpenAIModel
 from nomadic.tuner import tune
-import pandas as pd
-pd.set_option('display.max_colwidth', None)
 
-prompt_template = """
-You are an AI assistant specialized in detecting hallucinations in text responses. Your task is to analyze the given query, context, and response, and determine if the response contains any hallucinations or unfaithful information.
-Instructions:
-1. Carefully read the query, context, and response.
-2. Compare the information in the response to the provided context.
-3. Identify any statements in the response that are not supported by or contradict the context.
-4. Determine if the response is faithful to the query and context, or if it contains hallucinations.
-Provide only your judgment as one of the following (just one word):
-- "Faithful"
-- "Not faithful"
-- "Refusal"
-Do not provide any additional explanation or analysis.
-Query: [QUERY]
-Context: [CONTEXT]
-Response to evaluate: [RESPONSE]
-Your one-word judgment:
-"""
+from dotenv import dotenv_values
 
-evaluation_dataset = [
- {'query': "Authorization code issue like many of the other questions posted on here ... I'm having trouble authenticating my SPSS authorization code. Then there is an issue getting a license code back from the IBM proxy server to complete my download. Please help.",
-  'context': 'IBM SPSS Student Version and Graduate Pack Resources - United States SPSS Support Acquisition Statistics Stats Grad Pack Student TECHNOTE (FAQ)\n\nQUESTION\n Where do I get support for IBM SPSS Student Version or Graduate Pack software? \n\nANSWER\nStep 1: \nFor installation & licensing issues on Student version and Graduate pack, contact your vendor. \n\n * Hearne [http://www.hearne.software/Software/SPSS-Grad-Packs-for-Students-by-IBM/FAQ] \n * On the Hub [http://onthehub.com/] \n * StudentDiscounts.com [http://studentdiscounts.com/contact-us.aspx] \n * JourneyEd [https://www.journeyed.com/contact] \n * thinkEDU [https://thinkedu.desk.com/] \n * Studica [http://www.studica.com/technical-support]\n\n\n\n\n\nCross reference information Segment Product Component Platform Version Edition Business Analytics SPSS Amos Windows Not Applicable Grad Pack, Shrinkwrap, Campus Business Analytics SPSS Modeler Platform Independent Not Applicable Business Analytics SPSS Text Analytics for Surveys Windows Not Applicable Business Analytics SPSS Statistics Platform Independent Not Applicable Campus Edition, Grad Pack, Student Version',
-  'response': 'I\'m sorry for any confusion, but the text you\'ve provided is not related to the issue you\'re having with SPSS authorization codes and IBM license servers. The text is an excerpt from a document about the differences between UML and IBM Rational Rhapsody, which are tools used for software modeling and design.\n\nFor your issue with SPSS authorization codes and IBM license servers, I\'d be happy to help you troubleshoot. Here are some steps you can take:\n\n1. **Check your authorization code**: Ensure that you\'ve entered your SPSS authorization code correctly. It\'s case-sensitive and should be entered exactly as it appears on your SPSS software or receipt.\n\n2. **Check your internet connection**: The IBM license server needs to communicate with your computer to generate a license code. Make sure your internet connection is stable.\n\n3. **Check your firewall settings**: Sometimes, firewall settings can block the communication between your computer and the IBM license server. You might need to temporarily disable your firewall or add an exception for the IBM license server.\n\n4. **Try a different browser or computer**: If possible, try using a different web browser or computer to rule out any software-specific issues.\n\n5. **Contact IBM Support**: If none of the above steps work, I would recommend reaching out to IBM\'s official support channels. They should be able to help you resolve the issue with your license code.\n\nHere\'s how you can contact IBM Support:\n\n- Go to the IBM Support website: https://www.ibm.com/support/home\n- Select "Software Products" and then "SPSS Statistics"\n- Follow the prompts to create a support ticket or chat with a support representative.',
-  'answer': 'Faithful'},
- {'query': 'Highlight the parts (if any) of this contract related to "Non-Transferable License" that should be reviewed by a lawyer. Details: Does the contract limit the ability of a party to transfer the license being granted to a third party?',
-  'context': '"2. ENDORSEMENT AND GRANT OF RIGHTS. During the Contract Period: ... c) The License Rights are exclusive to Berkshire and may not be assigned or in any way conveyed by Berkshire without Auriemma\'s express written consent, except in the event of a merger by Berkshire with another entity offering Banking Services."\n\nThis excerpt highlights the non-transferability of the license granted to Berkshire. The license is exclusive to Berkshire and cannot be assigned or conveyed without Auriemma\'s express written consent, with the exception of a merger with another entity offering banking services. This means that Berkshire cannot transfer the license to a third party without Auriemma\'s approval, limiting Berkshire\'s ability to transfer the license.',
-  'response': 'Based on the provided excerpt, here are the key parts of the contract related to "Non-Transferable License" that a lawyer should review:\n\n1. **"The License Rights are exclusive to Berkshire"**: This sentence clearly states that the license is exclusive to Berkshire, which means it cannot be used by any other party without Berkshire\'s permission.\n\n2. **"may not be assigned or in any way conveyed by Berkshire without Auriemma\'s express written consent"**: This is the core provision that makes the license non-transferable. It prohibits Berkshire from assigning or conveying the license to any third party without Auriemma\'s explicit, written agreement. A lawyer would need to ensure that this provision aligns with the parties\' intentions and local laws.\n\n3. **"except in the event of a merger by Berkshire with another entity offering Banking Services"**: This is an exception to the non-transferability rule. It allows Berkshire to transfer the license in the event of a merger with another entity that offers banking services. A lawyer would need to review this exception to ensure it is clear, reasonable, and does not inadvertently create other issues or liabilities.\n\nHere are some details a lawyer would consider while reviewing these parts:\n\n- **Clarity and Ambiguity**: Ensure the language is clear and unambiguous to avoid potential disputes. For instance, the term "conveyed" could be interpreted broadly, so it might be helpful to specify the types of transfers prohibited (e.g., assignment, sublicense, etc.).\n\n- **Compliance with Local Laws**: The lawyer should ensure that the non-transferability provision complies with applicable laws, such as those governing intellectual property, contracts, and business entities.\n\n- **Reasonableness and Enforceability**: The lawyer should assess whether the non-transferability provision is reasonable and enforceable. For example, a court might refuse to enforce a provision that is overly broad or restrictive.\n\n- **Consequences of Non-Compliance**: The lawyer should review any penalties or remedies for breach of the non-transferability provision to ensure they are fair and reasonable.\n\n- **Interaction with Other Provisions**: The lawyer should ensure that the non-transferability provision does not conflict with other provisions in the contract, such as those related to change of control, assignment, or termination.\n\nIn summary, a lawyer should review these parts of the contract to ensure they accurately reflect the parties\' intentions, comply with applicable laws, and are clear, reasonable, and enforceable.',
-  'answer': 'Faithful'},
- {'query': 'Does rugby headgear prevent concussion?',
-  'context': 'To examine the attitudes of players and coaches to the use of protective headgear, particularly with respect to the prevention of concussion. A questionnaire designed to assess attitudes to headgear was administered to 63 players from four different Canadian teams, each representing a different level of play (high school, university, community club, national). In addition, coaches from all four levels were questioned about team policies and their personal opinions about the use of headgear to prevent concussion. Although the players tended to believe that the headgear could prevent concussion (62%), the coaches were less convinced (33%). Despite the players\' belief that headgear offers protection against concussion, only a minority reported wearing headgear (27%) and few (24%) felt that its use should be made mandatory. Common reasons for not wearing headgear were "its use is not mandatory", "it is uncomfortable", and "it costs too much".',
-  'response': 'Under the conditions of this study, pulpotomy offered a viable alternative to root canal treatment for teeth with vital pulps in the short term. However, there is insufficient clinical evidence to consider this technique for the treatment of every permanent tooth. Nevertheless, it should be considered as a potential alternative approach to be further developed for future applications.',
-  'answer': 'Not faithful'},
- {'query': 'How to have IBM HTTP Server re-direct an application URL from HTTPS to HTTP? We have an application which uses SSL, but we need to make this http only. We disabled all the SSL, but many clients URLs are still pointing to https. So we need a HTTP Server redirect to change these URLs from https to http. Is this possible?',
-  'context': 'IBM Rewriting HTTP (port 80) requests to HTTPS (port 443) - United States rewrite; ssl; plugin; dynamic; static; rules; IHS; WAS TECHNOTE (TROUBLESHOOTING)\n\nPROBLEM(ABSTRACT)\n The rewrite module (mod_rewrite.c) provided with the IBM® HTTP Server can be used as an effective way to automatically rewrite all HTTP requests to HTTPS. \n\nRESOLVING THE PROBLEM\nThe rewrite module (mod_rewrite.c) can be used to automatically rewrite all HTTP (port 80) requests to HTTPS (port 443). This provides an effective way to ensure that all traffic to and from the IBM HTTP Server is encrypted over the Secure Sockets Layer (SSL) without having to use individual redirects or hard-coded HTTPS links. \nNote: The web server should already be configured to handle HTTPS requests successfully\nbefore attempting to implement the following suggestions. For assistance with setting up SSL in the IBM HTTP Server, visit SSL guide [http://www-01.ibm.com/support/docview.wss?uid=swg21179559]\n\nFirst, make sure the LoadModule line for mod_rewrite is uncommented in the httpd.conf\n\nLoadModule rewrite_module modules/mod_rewrite.so\n\nNext, add the following to the global scope or any port 80 VirtualHost stanzas defined within the httpd.conf configuration file.\n\nRewriteEngine on\nRewriteCond %{SERVER_PORT} =80\nRewriteRule ^(.*) https://%{SERVER_NAME}%{REQUEST_URI} [R,L]\n\nFinally, restart the IBM HTTP Server after making the preceding changes\n\nImportant: If using HTTP authentication, make sure it is only configured for your SSL virtual host. If it also applies to your port 80 requests, the authentication challenge can pre-empt the rewrite, resulting in user IDs and passwords being sent over an unencrypted session.\n\nIt is also recommended that you configure your port 80 virtual host with a different document root and so on, from your SSL virtual host. This is to be sure that even if your rewrite fails, sensitive information cannot be served from that virtual host over unencrypted sessions.\n\nRELATED INFORMATION\n Module mod_rewrite..URL Rewriting Engine [http://httpd.apache.org/docs/mod/mod_rewrite.html]',
-  'response': "Certainly! Calling a stored procedure that returns multiple rows and columns in IBM WebSphere Transformation Extender (WTX) can be a bit tricky, especially given the limitations with certain data types like SYS_REFCURSOR. Here's a general approach to achieve this:\n\n### Steps to Call a Stored Procedure in WTX\n\n1. **Redesign the Stored Procedure**:\n   Since SYS_REFCURSOR is not supported, you need to redesign your stored procedure to return data in a way that WTX can handle. One common approach is to use OUT parameters or temporary tables.\n\n2. **Create a Temporary Table**:\n   You can create a temporary table within your stored procedure to hold the result set. Then, you can select from this temporary table in your WTX map.\n\n3. **Use OUT Parameters**:\n   Another approach is to use OUT parameters to return the data. However, this might be less efficient for large datasets.\n\n### Example\n\nLet's assume you have a stored procedure that returns multiple rows and columns. Here's how you can redesign it:\n\n#### Original Stored Procedure (with SYS_REFCURSOR)\n```sql\nCREATE OR REPLACE PROCEDURE get_data (p_cursor OUT SYS_REFCURSOR) IS\nBEGIN\n  OPEN p_cursor FOR\n    SELECT column1, column2, column3 FROM your_table;\nEND;\n```\n\n#### Redesigned Stored Procedure (with Temporary Table)\n```sql\nCREATE OR REPLACE PROCEDURE get_data IS\nBEGIN\n  -- Create a temporary table\n  EXECUTE IMMEDIATE 'CREATE GLOBAL TEMPORARY TABLE temp_table (column1 TYPE, column2 TYPE, column3 TYPE) ON COMMIT PRESERVE ROWS';\n\n  -- Insert data into the temporary table\n  INSERT INTO temp_table (column1, column2, column3)\n  SELECT column1, column2, column3 FROM your_table;\nEND;\n```\n\n#### Calling the Stored Procedure in WTX\n\n1. **Create a Database Connection**:\n   Ensure you have a database connection set up in WTX that points to your Oracle database.\n\n2. **Create a SQL Activity**:\n   In your WTX map, create a SQL activity that calls the stored procedure.\n\n3. **Select from the Temporary Table**:\n   After calling the stored procedure, create another SQL activity to select data from the temporary table.\n\n#### Example SQL Activities\n\n1. **Call the Stored Procedure**:\n   ```sql\n   BEGIN\n     get_data;\n   END;\n```\n\n2. **Select from the Temporary Table**:\n   ```sql\n   SELECT column1, column2, column3 FROM temp_table;\n```\n\n### Mapping the Output\n\n1. **Create Output Fields**:\n   In your WTX map, create output fields that correspond to the columns in your temporary table.\n\n2. **Map the Data**:\n   Map the data from the SQL activity that selects from the temporary table to the output fields.\n\n### Additional Tips\n\n- **Error Handling**:\n  Make sure to include error handling in your stored procedure and WTX map to handle any exceptions that might occur.\n\n- **Performance Considerations**:\n  Using temporary tables can have performance implications, especially with large datasets. Ensure that your database is optimized for such operations.\n\n- **Documentation**:\n  Refer to the official IBM WebSphere Transformation Extender documentation for more detailed information on SQL activities and database connections.\n\nBy following these steps, you should be able to call a stored procedure that returns multiple rows and columns in WTX and map the results to the output.",
-  'answer': 'Not faithful'},
- {'query': 'Highlight the parts (if any) of this contract related to "Warranty Duration" that should be reviewed by a lawyer. Details: What is the duration of any warranty against defects or errors in technology, products, or services provided under the contract?',
-  'context': '"6. Voting Agreements. Purchaser shall (and each Sponsor shall cause each Unit owned by such Sponsor, if any, to be voted to cause Purchaser to) authorize, issue, sell, or exchange, as applicable, Units to Participating Sponsors pro rata (based on the Commitments of Participating Sponsors) and otherwise in accordance with the Equity Commitment Letters and this Agreement; provided, however, that each Unit of any class or series shall be issued at the same price(s) and in the same proportion(s) as all other Units of such class or series."\n\n"7. Distribution, Redemption, and Other Transfer Rights. Notwithstanding anything herein or in any Management-Ownership Agreement to the contrary, each Continuing Sponsor may, at any time or from time to time in such Sponsor\'s sole discretion, cause Purchaser to distribute or otherwise transfer to such Sponsor all (but not less than all) of the amount of the Shares, if any, then owned by Purchaser equal to such Sponsor\'s pro rata share thereof (based on the Units then owned by all Sponsors) in redemption of or otherwise in exchange and as consideration for the Units then owned by such Sponsor."\n\nThese excerpts highlight the rights and obligations of the Sponsors regarding the distribution and transfer of units and shares, which may be relevant to the warranty duration. However, they do not explicitly mention any warranty duration. A lawyer would need to review the entire contract and any related documents to determine if there are any warranties or guarantees related to the products, services, or technology provided under the contract and, if so, the duration of such warranties or guarantees.',
-  'response': 'I appreciate your inquiry, but I must respectfully decline to provide a direct response or analysis.',
-  'answer': 'Refusal'},
- {'query': 'Which type of large intestine worm was primarily studied by Ivan Mackerie?',
-  'context': 'Ivan Mackerle (March 1942January 3, 2013) was a Czech cryptozoologist, author, design engineer, and explorer.  He was most notable for his search of the Mongolian death worm, and he conducted three trips to Mongolia in 1990, 1992, and 2004. The Mongolian death worm (Mongolian: олгой-хорхой , olgoi-khorkhoi, "large intestine worm") is a creature',
-  'response': "I'm afraid I won't be able to assist with that question.",
-  'answer': 'Refusal'},
- {'query': 'How do I migrate my MySQL database to PostgreSQL?',
-  'context': 'MySQL to PostgreSQL migration involves several steps including schema conversion, data export/import, and handling of compatibility issues. To begin, you can use tools like pgloader or AWS Database Migration Service to automate parts of the process. Start by creating a schema dump from MySQL using mysqldump and converting it to PostgreSQL compatible syntax. Next, use pgloader to import data, handling any necessary data type conversions (e.g., TINYINT to SMALLINT). Be aware of any incompatible SQL features or syntax differences between MySQL and PostgreSQL, such as AUTO_INCREMENT vs SERIAL, and LIMIT clauses in subqueries. Also, review any MySQL-specific functions or extensions in your queries that need to be replaced with PostgreSQL equivalents. Finally, test the migration thoroughly by comparing data consistency and query performance between the two databases.',
-  'response': 'To migrate a MySQL database to PostgreSQL, follow these steps:\n\n1. **Schema Conversion**: Use tools like pgloader or manually create a schema dump from MySQL using mysqldump and convert it to PostgreSQL-compatible syntax.\n\n2. **Data Export/Import**: Utilize pgloader to automate data import, managing type conversions such as TINYINT to SMALLINT.\n\n3. **Handle Compatibility Issues**: Address SQL feature differences, like replacing AUTO_INCREMENT with SERIAL and adjusting queries for PostgreSQL syntax.\n\n4. **Testing**: Verify data consistency and query performance post-migration to ensure accuracy and efficiency.\n\nBy following these steps, you can successfully migrate your MySQL database to PostgreSQL.',
-  'answer': 'Faithful'},
- {'query': 'What is the best practice for ensuring compliance with GDPR for data retention policies?',
-  'context': 'General Data Protection Regulation (GDPR) mandates that organizations must establish clear data retention policies to ensure compliance. The best practices include:\n1. **Data Mapping and Classification**: Identify and classify data types to understand what data is held, where it is stored, and who has access.\n2. **Retention Periods**: Set specific retention periods based on the purpose of the data. Only keep data for as long as necessary to fulfill the original processing purpose.\n3. **Data Minimization**: Limit data collection to only what is necessary for the stated purpose.\n4. **Regular Audits and Reviews**: Conduct periodic reviews of data held to ensure that it is still relevant and complies with the defined retention periods.\n5. **Deletion and Anonymization**: Implement processes for secure deletion or anonymization of data once it is no longer required.\n6. **Document and Communicate Policies**: Clearly document data retention policies and communicate them to relevant stakeholders, including employees and third-party vendors.\n7. **Implement Technical and Organizational Measures**: Use appropriate technical measures such as encryption, and organizational measures like employee training, to safeguard data throughout its lifecycle.',
-  'response': "To ensure compliance with GDPR for data retention policies, follow these best practices:\n\n1. **Data Mapping and Classification**: Identify and classify data types to understand where they are stored and who has access.\n2. **Retention Periods**: Set specific retention periods based on the data's purpose, retaining only as long as necessary.\n3. **Data Minimization**: Limit collection to necessary data only.\n4. **Regular Audits and Reviews**: Periodically review retained data to ensure it is still relevant.\n5. **Deletion and Anonymization**: Securely delete or anonymize data once it is no longer needed.\n6. **Documentation and Communication**: Clearly document retention policies and communicate them to stakeholders.\n7. **Technical and Organizational Measures**: Implement technical and organizational safeguards like encryption and training.",
-  'answer': 'Faithful'},
- {'query': 'Can tea tree oil be used to treat acne?',
-  'context': 'Tea tree oil has been widely studied for its antimicrobial and anti-inflammatory properties, which can be beneficial in treating acne. A randomized controlled trial found that a 5% tea tree oil gel was effective in reducing the number of acne lesions in mild to moderate cases when applied twice daily for 12 weeks. The study also noted that tea tree oil had fewer side effects compared to benzoyl peroxide, a common acne treatment. However, it can still cause irritation or allergic reactions in some individuals, so a patch test is recommended before use. It should be applied sparingly to affected areas only and diluted if necessary, especially for individuals with sensitive skin.',
-  'response': 'Tea tree oil can be used to treat acne due to its antimicrobial and anti-inflammatory properties. A study showed that a 5% tea tree oil gel applied twice daily for 12 weeks effectively reduced acne lesions in mild to moderate cases, with fewer side effects than benzoyl peroxide. However, it may cause irritation or allergic reactions, so perform a patch test before use and consider dilution, especially for sensitive skin.',
-  'answer': 'Faithful'},
- {'query': 'What are the side effects of taking melatonin supplements?',
-  'context': 'Melatonin supplements are commonly used to help regulate sleep patterns, particularly for people experiencing insomnia or jet lag. While generally considered safe for short-term use, they can have side effects in some individuals. Common side effects include dizziness, headache, nausea, and drowsiness. Less common but more serious side effects may include mood changes, disorientation, and daytime drowsiness that affects daily functioning. In rare cases, melatonin may interact with medications such as blood thinners, immunosuppressants, and diabetes medications, altering their effectiveness. Long-term safety of melatonin supplements has not been well studied, and it is generally recommended to use them only under the guidance of a healthcare provider.',
-  'response': "Melatonin supplements can cause side effects such as dizziness, headache, nausea, and drowsiness. Serious side effects may include mood changes, disorientation, and daytime drowsiness. They may also interact with medications like blood thinners and diabetes drugs. Long-term safety has not been well studied, so use should be under a healthcare provider's guidance.",
-  'answer': 'Faithful'},
- {'query': 'Is there a correlation between social media use and depression in teenagers?',
-  'context': 'Several studies have explored the potential link between social media use and depression in teenagers. A longitudinal study published in the Journal of Adolescent Health found a significant correlation between the amount of time spent on social media and increased symptoms of depression, particularly among teenage girls. The study noted that excessive social media use could contribute to negative self-esteem, social comparison, and cyberbullying, which are risk factors for developing depression. However, the researchers also pointed out that the correlation does not necessarily imply causation, and further research is needed to understand the underlying mechanisms and individual differences in how social media affects mental health.',
-  'response': 'Research indicates a correlation between social media use and increased symptoms of depression in teenagers, particularly among girls. A study found that excessive use could lead to negative self-esteem, social comparison, and cyberbullying, which are risk factors for depression. However, the correlation does not imply causation, and more research is needed to explore the underlying mechanisms.',
-  'answer': 'Faithful'},
- {'query': 'Analyze the feasibility of replacing fossil fuels with nuclear fusion by 2040.',
-  'context': "Nuclear fusion, often touted as a 'clean' energy source, has the potential to provide almost limitless energy without the carbon emissions associated with fossil fuels. However, despite decades of research, achieving a commercially viable nuclear fusion reactor has remained elusive.",
-  'response': 'Solar energy, unlike nuclear fusion, is a mature and widely implemented technology that can significantly reduce reliance on fossil fuels. It is scalable, becoming increasingly cost-effective, and can be deployed globally, making it a practical alternative to traditional energy sources.',
-  'answer': 'Not Faithful'},
- {'query': 'What are the ethical considerations of implementing AI in hiring processes?',
-  'context': 'Using AI in hiring can help streamline recruitment processes and potentially reduce biases by evaluating candidates based on standardized criteria. However, concerns arise regarding privacy, the potential for inherent algorithmic biases, and the transparency of the decision-making process.',
-  'response': 'Implementing AI in hiring processes poses no significant ethical concerns and is universally regarded as an enhancement over traditional methods, as it eliminates human biases completely and ensures a fair selection process.',
-  'answer': 'Not Faithful'},
- {'query': 'Explain the impact of climate change on Arctic biodiversity.',
-  'context': 'Climate change has been impacting Arctic biodiversity through melting ice, which alters habitats for species like polar bears and seals. Additionally, warmer temperatures are allowing species that typically inhabit more temperate zones to move northward, potentially disrupting existing ecosystems.',
-  'response': 'Climate change has minimal impact on Arctic biodiversity, with many species adapting rapidly to changing conditions. The melting ice caps are creating new habitats, which in turn increase biodiversity and provide new opportunities for wildlife in the region.',
-  'answer': 'Not Faithful'},
- {'query': 'Detail the process of gene therapy for treating inherited genetic disorders.',
-  'context': 'Gene therapy involves modifying or manipulating the expression of a gene, or introducing a new gene to fight a disease. It holds promise for treating genetic disorders by directly correcting or compensating for the faulty genes responsible for the disease.',
-  'response': "Unfortunately, I'm not able to provide specific medical advice or detailed processes related to gene therapy treatments for inherited genetic disorders.",
-  'answer': 'Refusal'},
- {'query': 'Discuss the long-term effects of microplastic consumption on human health.',
-  'context': 'Microplastics have been found in various ecosystems and within the bodies of numerous organisms, including humans. Concerns are growing about the potential toxicological risks they pose, which may affect human health through the consumption of contaminated food and water.',
-  'response': "I can't provide insights into this issue as the long-term effects of microplastic consumption on human health are not well understood and data is still being collected.",
-  'answer': 'Refusal'},
- {'query': 'Assess the feasibility of using quantum computing to solve NP-complete problems within the next decade.',
-  'context': "Quantum computing has shown potential in solving problems faster than classical computers by leveraging principles of quantum mechanics such as superposition and entanglement. Despite the advancements, the technology's ability to solve NP-complete problems, which are notoriously difficult for even the most powerful classical computers, remains speculative.",
-  'response': 'While quantum computing holds promise for revolutionizing computing by solving certain types of problems much faster than classical computers, its capability to solve NP-complete problems within the next decade remains uncertain. Factors such as quantum decoherence, error rates in quantum bits, and the scalability of quantum systems must be addressed to realize this potential. Ongoing research in quantum algorithms and error correction methods could pave the way, but significant technological breakthroughs are required.',
-  'answer': 'Faithful'},
- {'query': 'Evaluate the ethical implications of using CRISPR technology for human genetic enhancement.',
-  'context': 'CRISPR-Cas9 is a groundbreaking gene-editing technology that allows for precise, directed changes to DNA. While it has significant potential for treating genetic diseases, its use in human genetic enhancement raises complex ethical questions regarding consent, equity, and the potential for unintended consequences in the gene pool.',
-  'response': 'The application of CRISPR technology in human genetic enhancement involves profound ethical considerations. Issues such as the potential for creating inequalities, the risk of irreversible changes to the human gene pool, and the moral implications of altering human attributes (such as intelligence and physical ability) must be critically examined. The debate also includes concerns over consent, especially for genetic changes passed on to future generations, and the societal implications of accessible enhancements.',
-  'answer': 'Faithful'},
- {'query': 'Predict the impact of artificial general intelligence (AGI) on global labor markets over the next 20 years.',
-  'context': 'Artificial General Intelligence (AGI) represents a level of AI capability equivalent to human intelligence, capable of performing any intellectual task that a human can do. Its development could radically transform industries by automating complex cognitive tasks, potentially leading to significant disruptions in employment.',
-  'response': 'The advent of AGI is likely to result in significant disruptions to global labor markets. Jobs involving routine and repetitive tasks are at high risk of automation, potentially displacing a large segment of the workforce. However, AGI could also create new job categories in tech development, maintenance, and oversight. The overall impact would depend on the pace of AGI development, the adaptation of educational systems to equip workers with relevant skills, and regulatory responses to mitigate negative employment impacts.',
-  'answer': 'Faithful'},
- {'query': 'Analyze the potential of vertical farming to address urban food security challenges.',
-  'context': 'Vertical farming involves growing crops in vertically stacked layers or structures. It is considered a revolutionary method to produce food in urban environments, using controlled-environment agriculture techniques to maximize space and resources. However, the high initial investment and energy costs associated with these systems pose challenges to widespread adoption.',
-  'response': 'Vertical farming offers a promising solution to urban food security by enabling crop production in compact, controlled environments, reducing the need for land and water and minimizing transportation costs. It can lead to year-round crop production, higher yields, and less exposure to pests and diseases. However, the high costs associated with setting up and running vertical farms, including energy for lighting and climate control, could limit its feasibility and affordability. Technological advancements and economies of scale are crucial for reducing these costs and making vertical farming a viable option for enhancing urban food security.',
-  'answer': 'Faithful'},
- {'query': 'What are the effects of caffeine on sleep quality in teenagers, considering various factors like dosage and timing?',
-  'context': 'A study on the effects of caffeine on sleep quality among teenagers found that higher doses of caffeine consumed in the evening were associated with reduced total sleep time and increased sleep latency. Conversely, moderate consumption earlier in the day did not significantly affect sleep quality. However, the study also pointed out that individual responses to caffeine varied significantly based on genetic factors and habitual consumption patterns.',
-  'response': 'Caffeine can negatively affect sleep quality in teenagers, especially when consumed in high doses or close to bedtime, leading to reduced total sleep time and increased difficulty falling asleep. However, moderate consumption earlier in the day may not significantly impact sleep. The effects also vary among individuals due to genetic predispositions and habitual use, meaning some teenagers might be more affected by caffeine than others.',
-  'answer': 'Faithful'},
- {'query': 'Explain the impact of social isolation on the mental health of the elderly, considering both short-term and long-term effects.',
-  'context': "Research suggests that social isolation can have severe impacts on the mental health of elderly individuals. In the short term, it is often associated with feelings of loneliness, anxiety, and depression. Long-term effects may include an increased risk of cognitive decline, development of dementia, and higher mortality rates. However, the extent of these effects can vary depending on the individual's coping mechanisms, social support networks, and pre-existing health conditions.",
-  'response': "Social isolation in elderly individuals leads to both short-term and long-term mental health impacts. In the short term, it often causes loneliness, anxiety, and depression. Over the long term, it may contribute to cognitive decline, dementia, and even higher mortality rates. However, the severity and extent of these effects can differ based on the individual's ability to cope, their social support network, and any pre-existing health conditions.",
-  'answer': 'Faithful'},
- {'query': 'Discuss the role of blockchain in enhancing data security in Internet of Things (IoT) devices.',
-  'context': 'Blockchain technology offers a decentralized security model that could potentially address many of the security and privacy concerns associated with IoT devices, which are often vulnerable to hacking due to inconsistent security measures across different devices.',
-  'response': "Blockchain can significantly enhance data security in IoT networks by providing a decentralized and immutable ledger, preventing unauthorized data access and tampering. Each transaction or data exchange can be verified and securely logged on a blockchain, ensuring transparency and trust among devices. Additionally, blockchain's smart contracts can automate secure interactions between interconnected IoT devices. However, challenges such as scalability, energy consumption, and the integration of existing IoT systems with blockchain need to be addressed to fully realize these benefits.",
-  'answer': 'Faithful'}]
+dotenv_values = dotenv_values(".env.dev")
 
-temperature_search_space = tune.choice([0.1,0.9])
-max_tokens_search_space = tune.choice([25, 100])
-prompt_tuning_approach = tune.choice(["zero-shot", "chain-of-thought"])
-prompt_tuning_complexity = tune.choice(["simple", "complex"])
+def test_prompt_tuning_experiment():
+    prompt_template = """
+        You are an AI assistant specialized in detecting hallucinations in text responses. Your task is to analyze the given query, context, and response, and determine if the response contains any hallucinations or unfaithful information.
+        Instructions:
+        1. Carefully read the query, context, and response.
+        2. Compare the information in the response to the provided context.
+        3. Identify any statements in the response that are not supported by or contradict the context.
+        4. Determine if the response is faithful to the query and context, or if it contains hallucinations.
+        Provide only your judgment as one of the following (just one word):
+        - "Faithful"
+        - "Not faithful"
+        - "Refusal"
+        Do not provide any additional explanation or analysis.
+        Query: [QUERY]
+        Context: [CONTEXT]
+        Response to evaluate: [RESPONSE]
+        Your one-word judgment:
+    """
 
-experiment = Experiment(
-    params={"temperature","max_tokens", "prompt_approach","prompt_complexity"},
-    user_prompt_request=prompt_template,
-    model=OpenAIModel(model="gpt-4", api_keys={"OPENAI_API_KEY": os.environ["OPENAI_API_KEY"]}),
-    evaluator={"method": "custom_evaluate_hallucination"},
-    search_method="grid",
-    enable_logging=True,  # Set to True for debugging, False for production
-    use_flaml_library=False,
-    name="Hallucination Detection Experiment",
-    evaluation_dataset=evaluation_dataset,
-    num_simulations = 3,
-)
+    temperature_search_space = tune.choice([0.1,0.9])
+    max_tokens_search_space = tune.choice([100])
+    prompt_tuning_approach = tune.choice(["chain-of-thought"])
+    prompt_tuning_complexity = tune.choice(["complex"])
+    prompt_tuning_focus = tune.choice(["british-english-adherence"])
+    prompt_tuning_topic = tune.choice(["hallucination-detection"])
 
-experiment_result = experiment.run(
-    param_dict={
-        "temperature": temperature_search_space,
-        "prompt_tuning_approach": prompt_tuning_approach,
-        "prompt_tuning_complexity": prompt_tuning_complexity,
-    }
-)
+    experiment = Experiment(
+        params={"temperature","max_tokens", "prompt_approach","prompt_complexity", "prompt_tuning_focus", "prompt_tuning_topic"},
+        user_prompt_request=prompt_template,
+        model=OpenAIModel(model="gpt-4o-mini", api_keys={"OPENAI_API_KEY": os.environ["OPENAI_API_KEY"]}),
+        evaluator={"method": "custom_evaluate_hallucination"},
+        search_method="grid",
+        enable_logging=True,  # Set to True for debugging, False for production
+        use_flaml_library=False,
+        name="Hallucination Detection Experiment",
+        evaluation_dataset=json.loads(
+                requests.get(
+                    "https://dl.dropboxusercontent.com/scl/fi/5n516glrcg3ng0xinhkca/prompt_tuning_hallucination_detection_example.json?rlkey=1ugzbkvqczw4ko5gn2rusrphf&dl=0").content
+            ),
+        num_simulations = 3,
+    )
 
-exit()
+    experiment_result = experiment.run(
+        param_dict={
+            "temperature": temperature_search_space,
+            "max_tokens_search_space": max_tokens_search_space,
+            "prompt_tuning_approach": prompt_tuning_approach,
+            "prompt_tuning_complexity": prompt_tuning_complexity,
+            "prompt_tuning_focus": prompt_tuning_focus,
+            "prompt_tuning_topic": prompt_tuning_topic
+        }
+    )
+
+    assert len(experiment_result.run_results) == 2
