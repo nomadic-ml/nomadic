@@ -12,16 +12,19 @@ skip = "./nomadic/core/_static,./examples,./experimental,*.csv,*.html,*.json,*.j
 disallow_untyped_defs = true
 exclude = ["_static", "build", "examples", "notebooks", ".venv"]
 ignore_missing_imports = true
-python_version = "3.8.12"
+python_version = "3.11.9"
 
 [tool.poetry]
 name = "nomadic"
 version = "0.0.1.3"
-description = "Coming soon"
+description = "Nomadic is an enterprise-grade toolkit for teams to continuously optimize compound AI systems"
 authors = ["Mustafa Bal <mustafa@nomadicml.com>"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Development Status :: 1 - Planning",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
@@ -32,10 +35,13 @@ maintainers = [
     "Varun Krishnan <varun@nomadicml.com>",
     "Elizabeth Hu <elizabeth@nomadicml.com>",
 ]
-keywords = ["LLM", "HPO", "data", "devtools", "optimization", "backtesting"]
+keywords = ["LLM", "HPO", "RAG", "data", "devtools", "optimization", "backtesting"]
 readme = "README.md"
 packages = [{include="nomadic"}]
-license = "Proprietary"
+license = "Apache-2.0"
+homepage = "https://nomadicml.com/"
+repository = "https://github.com/nomadic-ml/nomadic"
+documentation = "https://docs.nomadicml.com/"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"

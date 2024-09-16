@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/NomadicMLLogo.png" alt="NomadicMLLogo" width="50%">
+  <img src="https://raw.githubusercontent.com/nomadic-ml/nomadic/main/assets/NomadicMLLogo.png" alt="NomadicMLLogo" width="50%">
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@ Join our <a href="https://discord.gg/PF869aGM">Discord</a>!
 
 # 🗂️  Installation
 
-You can install `nomadic` with pip (Python 3.8+ required):
+You can install `nomadic` with pip (Python 3.9+ required):
 
 ```bash
 pip install nomadic
