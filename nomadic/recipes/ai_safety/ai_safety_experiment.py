@@ -1,13 +1,13 @@
-import numpy as np
-import matplotlib.pyplot as plt
 from typing import Dict, Any, List
+
+import matplotlib.pyplot as plt
+
 from nomadic.result import ExperimentResult, RunResult
 from nomadic.experiment.base import Experiment
-from nomadic.attack_models.tap_algorithm import TAPAlgorithm
-from nomadic.attack_models.iris_algorithm import IRISAlgorithm
-from nomadic.attack_models.rl_agent import RLAgent
-from nomadic.attack_models.evaluators import GPTEvaluator
-from nomadic.attack_models.language_models import GPT
+from nomadic.recipes.ai_safety.tap_algorithm import TAPAlgorithm
+from nomadic.recipes.ai_safety.iris_algorithm import IRISAlgorithm
+from nomadic.recipes.ai_safety.rl_agent import RLAgent
+
 
 class AISafetyExperiment(Experiment):
     def __init__(self, algorithm_type: str, *args, **kwargs):

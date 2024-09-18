@@ -1,7 +1,9 @@
 from typing import List, Dict, Any
 import random
+
 import numpy as np
-from nomadic.attack_models.abstract_attack_logic import AttackAlgorithm
+
+from nomadic.recipes.ai_safety.abstract_attack_logic import AttackAlgorithm
 
 class IRISAlgorithm(AttackAlgorithm):
     def __init__(self, attack_llm, target_llm, evaluator_llm, max_refinement_steps: int = 3, width: int = 3, branching_factor: int = 2, depth: int = 3):

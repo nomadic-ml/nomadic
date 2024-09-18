@@ -1,17 +1,14 @@
-# rl_agent.py
-
 import numpy as np
 import random
 import matplotlib.pyplot as plt
 from typing import List, Dict, Any, Union
 import logging
 
+from nomadic.recipes.ai_safety.abstract_attack_logic import AttackAlgorithm
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Assuming AttackAlgorithm is an abstract base class you have defined elsewhere
-from nomadic.attack_models.abstract_attack_logic import AttackAlgorithm
 
 class RLAgent(AttackAlgorithm):
     """

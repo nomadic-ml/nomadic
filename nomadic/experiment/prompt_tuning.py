@@ -16,6 +16,7 @@ from openai import OpenAI
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 
 
+
 class PromptTuner(BaseModel):
     prompt_tuning_approaches: List[str] = Field(
         default=["None"],

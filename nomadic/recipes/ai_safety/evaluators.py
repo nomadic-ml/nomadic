@@ -1,10 +1,11 @@
 import re
 from abc import ABC, abstractmethod
-from .system_prompts import (
+
+from nomadic.recipes.ai_safety.system_prompts import (
     get_evaluator_system_prompt_for_judge,
     get_evaluator_system_prompt_for_on_topic,
 )
-from .language_models import GPT
+from nomadic.recipes.ai_safety.language_models import GPT
 
 class BaseEvaluator(ABC):
     @abstractmethod

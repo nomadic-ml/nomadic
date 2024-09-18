@@ -1,8 +1,9 @@
-from typing import List, Dict, Any
-from nomadic.attack_models.abstract_attack_logic import AttackAlgorithm
 import random
-import copy
+from typing import List, Dict, Any
+
 import numpy as np
+
+from nomadic.recipes.ai_safety.abstract_attack_logic import AttackAlgorithm
 
 class TAPAlgorithm(AttackAlgorithm):
     def __init__(self, attack_llm, target_llm, evaluator_llm, width: int, branching_factor: int, depth: int,
