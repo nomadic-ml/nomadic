@@ -61,6 +61,13 @@
       ]
     },
     {
+      "group": "More",
+      "pages": [
+        "more/privacy_policy",
+        "more/terms_of_service"
+      ]
+    },
+    {
       "group": "SDK Reference",
       "pages": [
         "api-reference/experiment",
