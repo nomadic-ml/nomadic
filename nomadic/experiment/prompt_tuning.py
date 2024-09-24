@@ -40,6 +40,24 @@ class PromptTuner:
         self.optimal_threshold = optimal_threshold  # Initialize the optimal_threshold attribute
         self.k = k  # Initialize the k attribute
 
+    def evaluate_faithfulness(self, variant):
+        # Implement faithfulness evaluation logic here
+        # Compare the variant's content with the original context
+        if 'context' in self.evaluation_dataset[0] and 'response' in self.evaluation_dataset[0]:
+            context = self.evaluation_dataset[0]['context']
+            response = self.evaluation_dataset[0]['response']
+            if context in variant and response in variant:
+                return 1.0
+            elif context in variant or response in variant:
+                return 0.5
+        return 0.0  # If context or response is missing or not found in variant
+
+    def evaluate_relevance(self, variant):
+        # Implement relevance evaluation logic here
+        # For example, check if the variant addresses the given query
+        # Return a score between 0 and 1
+        return 0.5  # Placeholder implementation
+
     def generate_prompt_variants(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5, prompt_tuning_approach: str = "zero-shot", prompt_tuning_complexity: str = "simple"):
         """
         Generate prompt variants using either static or dspy-based optimization.
@@ -92,6 +110,12 @@ class PromptTuner:
             variant = self.generate_prompt_variant(client, template, max_retries, retry_delay)
             prompt_variants.extend(variant)
         return prompt_variants
+
+    def evaluate_variant(self, variant):
+        # Evaluate the variant based on faithfulness and relevance
+        faithfulness_score = self.evaluate_faithfulness(variant)
+        relevance_score = self.evaluate_relevance(variant)
+        return (faithfulness_score + relevance_score) / 2  # Average of both scores
 
     def generate_prompt_variants_dspy(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5, prompt_tuning_approach: str = "zero-shot", prompt_tuning_complexity: str = "simple"):
         prompt_variants = []

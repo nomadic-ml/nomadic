@@ -98,7 +98,9 @@ class Experiment(BaseModel):
     )
     search_method: Optional[str] = Field(
         default="grid",
-        description="Tuner search option. Can be: [grid, bayesian "
+        description="Tuner search option. Can be: [grid, bayesian, dspy]. "
+                    "The 'dspy' option uses the dspy-ai library for "
+                    "iterative prompt tuning optimization."
     )
     use_dspy_optimization: Optional[bool] = Field(
         default=False,
@@ -179,7 +181,7 @@ class Experiment(BaseModel):
         return value
 
     def model_post_init(self, ctx):
-        if self.search_method not in ("grid", "bayesian"):
+        if self.search_method not in ("grid", "bayesian", "dspy"):
             raise ValueError(
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
