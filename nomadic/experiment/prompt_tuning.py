@@ -8,7 +8,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import random
 import numpy as np
 from itertools import product
-from openai import OpenAI
+import dspy
 
 
 
@@ -17,33 +17,75 @@ DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 
 
 
-class PromptTuner(BaseModel):
-    prompt_tuning_approaches: List[str] = Field(
-        default=["None"],
-        description="List of prompting approaches to use. If ['None'], no tuning is applied.",
-    )
-    prompt_tuning_topics: List[str] = Field(
-        default=["hallucination-detection"],
-        description="List of prompt topics which are the goals of the experiment. If ['None'], no tuning is applied.",
-    )
-    prompt_tuning_complexities: List[str] = Field(
-        default=["None"],
-        description="List of prompt complexities to use. If ['None'], no tuning is applied.",
-    )
-    prompt_tuning_focuses: List[str] = Field(
-        default=["None"],
-        description="List of prompt tasks to focus on. If ['None'], no tuning is applied.",
-    )
-    enable_logging: bool = Field(
-        default=True,
-        description="Flag to enable or disable print logging.",
-    )
-    evaluation_dataset: List[Dict[str, str]] = Field(
-        default=[],
-        description="List of evaluation examples.",
-    )
+class PromptTuner:
+    def __init__(
+        self,
+        prompt_tuning_approaches=["None"],
+        prompt_tuning_topics=["hallucination-detection"],
+        prompt_tuning_complexities=["None"],
+        prompt_tuning_focuses=["None"],
+        enable_logging=True,
+        evaluation_dataset=[],
+        use_dspy_optimization=False,
+        optimal_threshold=0.8,  # Add optimal_threshold with a default value
+        k=5  # Add k attribute with a default value
+    ):
+        self.prompt_tuning_approaches = prompt_tuning_approaches
+        self.prompt_tuning_topics = prompt_tuning_topics
+        self.prompt_tuning_complexities = prompt_tuning_complexities
+        self.prompt_tuning_focuses = prompt_tuning_focuses
+        self.enable_logging = enable_logging
+        self.evaluation_dataset = evaluation_dataset
+        self.use_dspy_optimization = use_dspy_optimization
+        self.optimal_threshold = optimal_threshold  # Initialize the optimal_threshold attribute
+        self.k = k  # Initialize the k attribute
 
-    def generate_prompt_variants(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+    def generate_prompt_variants(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5, prompt_tuning_approach: str = "zero-shot", prompt_tuning_complexity: str = "simple"):
+        """
+        Generate prompt variants using either static or dspy-based optimization.
+
+        This method uses the dspy library (https://github.com/stanfordnlp/dspy) for iterative prompt tuning
+        when self.use_dspy_optimization is True. Otherwise, it uses static optimization.
+
+        Args:
+            client: The client object for API calls.
+            user_prompt_request: List of prompt templates.
+            max_retries: Maximum number of retries for API calls.
+            retry_delay: Delay between retries.
+            prompt_tuning_approach: Approach for prompt tuning (e.g., "zero-shot", "chain-of-thought").
+            prompt_tuning_complexity: Complexity level for prompt tuning (e.g., "simple", "complex").
+
+        Returns:
+            List of generated prompt variants.
+        """
+        # Check if evaluation dataset is correctly populated and formatted
+        if not self.evaluation_dataset or not isinstance(self.evaluation_dataset, list):
+            print("Warning: Evaluation dataset is empty or not properly formatted.")
+            return []
+
+        for entry in self.evaluation_dataset:
+            if not all(key in entry for key in ['query', 'context', 'response', 'answer']):
+                print(f"Warning: Invalid entry in evaluation dataset: {entry}")
+                return []
+
+        if self.use_dspy_optimization:
+            return self.generate_prompt_variants_dspy(client, user_prompt_request, max_retries, retry_delay, prompt_tuning_approach, prompt_tuning_complexity)
+        else:
+            return self.generate_prompt_variants_static(client, user_prompt_request, max_retries, retry_delay)
+
+    def generate_prompt_variants_static(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+        """
+        Generate prompt variants using static optimization method.
+
+        Args:
+            client: The client object for API calls.
+            user_prompt_request: List of prompt templates.
+            max_retries: Maximum number of retries for API calls.
+            retry_delay: Delay between retries.
+
+        Returns:
+            List of generated prompt variants.
+        """
         prompt_variants = []
         for template in user_prompt_request:  # Assume prompt_templates is now a list
             # Generate variants for each template
@@ -51,12 +93,117 @@ class PromptTuner(BaseModel):
             prompt_variants.extend(variant)
         return prompt_variants
 
+    def evaluate_variant(self, variant):
+        # Mock implementation that returns a random score between 0 and 1
+        return random.random()
+
+    def generate_prompt_variants_dspy(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5, prompt_tuning_approach: str = "zero-shot", prompt_tuning_complexity: str = "simple"):
+        prompt_variants = []
+        for template in user_prompt_request:
+            # Ensure template is a string
+            if not isinstance(template, str):
+                print(f"Warning: Template '{template}' is not a string. Converting to string.")
+                template = str(template)
+
+            # Use dspy-ai for iterative prompt tuning
+            best_variant = None
+            best_score = float('-inf')
+            iterations = 0
+            max_iterations = 10  # Set a maximum number of iterations
+
+            while iterations < max_iterations:
+                # Generate a new variant using dspy-ai
+                # TODO: Implement dspy-ai variant generation
+                variant = self.generate_dspy_variant(client, template, max_retries, retry_delay, prompt_tuning_approach, prompt_tuning_complexity)
+
+                # Evaluate the variant using the evaluate_variant method
+                score = self.evaluate_variant(variant)
+
+                if score > best_score:
+                    best_variant = variant
+                    best_score = score
+
+                # Check if we've reached the optimal solution
+                if score >= self.optimal_threshold:
+                    break
+
+                iterations += 1
+
+            prompt_variants.append(best_variant)
+
+        return prompt_variants
+
+    def generate_dspy_variant(self, client, user_prompt_request, max_retries, retry_delay, prompt_tuning_approach, prompt_tuning_complexity):
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
+        logger = logging.getLogger(__name__)
+
+        logger.debug(f"Starting generate_dspy_variant with approach: {prompt_tuning_approach}, complexity: {prompt_tuning_complexity}")
+
+        # Ensure user_prompt_request is a string
+        if not isinstance(user_prompt_request, str):
+            logger.warning(f"user_prompt_request is not a string. Converting to string.")
+            user_prompt_request = str(user_prompt_request)
+
+        # Initialize the language model
+        lm = dspy.OpenAI(model='gpt-3.5-turbo')
+        dspy.configure(lm=lm)
+        logger.debug("Initialized OpenAI language model")
+
+        # Initialize the LabeledFewShot optimizer
+        optimizer = dspy.teleprompt.LabeledFewShot(k=self.k)
+        logger.debug("Initialized LabeledFewShot optimizer")
+
+        # Define a class-based signature for the predictor module
+        class PromptSignature(dspy.Signature):
+            """Generate an optimized prompt variant based on the given template."""
+            query = dspy.InputField()
+            context = dspy.InputField()
+            response = dspy.InputField()
+            evaluation = dspy.OutputField(desc="Evaluation result: 'Faithful', 'Not faithful', or 'Refusal'")
+
+        class Predictor(dspy.Module):
+            def __init__(self):
+                super().__init__()
+                self.evaluate = dspy.ChainOfThought(PromptSignature)
+
+            def forward(self, query, context, response):
+                return self.evaluate(query=query, context=context, response=response)
+
+        # Create a training dataset from the evaluation examples
+        trainset = [{"query": str(ex.get("query", "")), "context": str(ex.get("context", "")), "response": str(ex.get("response", "")), "evaluation": str(ex.get("answer", ""))} for ex in self.evaluation_dataset]
+        logger.debug(f"Created training dataset with {len(trainset)} examples")
+
+        # Compile the optimizer with the predictor and trainset
+        compiled_predictor = optimizer.compile(Predictor(), trainset=trainset)
+        logger.debug("Compiled predictor with optimizer")
+
+        # Generate the evaluation result
+        for attempt in range(max_retries):
+            logger.debug(f"Attempt {attempt + 1} of {max_retries}")
+            try:
+                result = compiled_predictor(query=user_prompt_request, context=self.evaluation_dataset[0].get("context", ""), response=self.evaluation_dataset[0].get("response", ""))
+                logger.debug("Successfully generated result from compiled_predictor")
+
+                # Ensure the evaluation result is one of the expected values
+                if result.evaluation not in ['Faithful', 'Not faithful', 'Refusal']:
+                    logger.warning(f"Unexpected evaluation result: {result.evaluation}. Defaulting to 'Not faithful'.")
+                    result.evaluation = 'Not faithful'
+
+                logger.debug(f"Evaluation result: {result.evaluation}")
+                return f"{user_prompt_request}\nEvaluation: {result.evaluation}"
+            except Exception as e:
+                logger.error(f"Error generating DSPy variant: {e}", exc_info=True)
+                time.sleep(retry_delay)
+
+        # If all retries fail, return a default evaluation
+        logger.error(f"Failed to generate DSPy variant after {max_retries} attempts.")
+        return f"{user_prompt_request}\nEvaluation: Not faithful"
+
 
     def generate_prompt_variant(self, client, user_prompt_request, max_retries, retry_delay):
         # Create a list to store all generated prompt variants
         full_prompt_variants = []
-        client = OpenAI()
-
         if (
             self.prompt_tuning_approaches == ["None"]
             and self.prompt_tuning_complexities == ["None"]
@@ -74,62 +221,76 @@ class PromptTuner(BaseModel):
 
         # Iterate over all possible combinations
         for approach, topic, complexity, focus in combinations:
-            if self.enable_logging:
-                print(
-                    f"\nGenerating prompt for: Approach={approach}, Topic={topic}, Complexity={complexity}, Focus={focus}"
-                )
-
-            # Create the system message based on the current combination
-            system_message = self._create_system_message(
-                user_prompt_request, approach, complexity, focus, topic
-            )
-            print("system message")
-            print(system_message)
-            retry_count = 0
-            while retry_count < max_retries:
-                try:
-                    # Generate the prompt variant
-                    response = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": system_message},
-                            {
-                                "role": "user",
-                                "content": "Generate the prompt variant.",
-                            },
-                        ],
-                        temperature=0.7,
+            try:
+                if self.enable_logging:
+                    print(
+                        f"\nGenerating prompt for: Approach={approach}, Topic={topic}, Complexity={complexity}, Focus={focus}"
                     )
 
-                    generated_prompt = response.choices[0].message.content.strip()
-
-                    # If the approach is 'few-shot', generate and incorporate examples
-                    if approach == "few-shot":
-                        examples = self._generate_examples(
-                            client, user_prompt_request, topic, complexity, focus
+                # Create the system message based on the current combination
+                system_message = self._create_system_message(
+                    user_prompt_request, approach, complexity, focus, topic
+                )
+                print("system message")
+                print(system_message)
+                retry_count = 0
+                while retry_count < max_retries:
+                    try:
+                        # Generate the prompt variant
+                        print(f"Attempt {retry_count + 1}: Calling OpenAI API")
+                        response = client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {"role": "system", "content": system_message},
+                                {
+                                    "role": "user",
+                                    "content": "Generate the prompt variant.",
+                                },
+                            ],
+                            temperature=0.7,
                         )
-                        generated_prompt = self._incorporate_examples(
-                            generated_prompt, examples
-                        )
+                        print(f"API Response: {response}")
 
-                    # Use only the generated prompt, don't append the original user_prompt_request
-                    full_prompt = generated_prompt
-                    full_prompt_variants.append(full_prompt)
+                        generated_prompt = response.choices[0].message.content.strip()
+                        print(f"Generated prompt: {generated_prompt[:100]}...")
 
-                    if self.enable_logging:
-                        print(f"Generated full prompt:\n{full_prompt[:500]}...")
+                        # If the approach is 'few-shot', generate and incorporate examples
+                        if approach == "few-shot":
+                            print("Generating examples for few-shot approach")
+                            examples = self._generate_examples(
+                                client, user_prompt_request, topic, complexity, focus
+                            )
+                            generated_prompt = self._incorporate_examples(
+                                generated_prompt, examples
+                            )
+                            print(f"Prompt after incorporating examples: {generated_prompt[:100]}...")
 
-                    break  # Exit retry loop on success
+                        # Use only the generated prompt, don't append the original user_prompt_request
+                        full_prompt = generated_prompt
+                        full_prompt_variants.append(full_prompt)
 
-                except Exception as e:
-                    print(f"Error generating prompt variant: {e}")
-                    print(f"Retrying... ({retry_count + 1}/{max_retries})")
-                    time.sleep(retry_delay)
-                    retry_count += 1
+                        if self.enable_logging:
+                            print(f"Generated full prompt:\n{full_prompt[:500]}...")
 
-            if retry_count == max_retries:
-                print(f"Failed to generate prompt variant after {max_retries} attempts.")
+                        break  # Exit retry loop on success
 
+                    except Exception as e:
+                        print(f"Error generating prompt variant: {e}")
+                        print(f"Retrying... ({retry_count + 1}/{max_retries})")
+                        time.sleep(retry_delay)
+                        retry_count += 1
+
+                if retry_count == max_retries:
+                    print(f"Failed to generate prompt variant after {max_retries} attempts.")
+                    # Add the original user_prompt_request as a fallback
+                    full_prompt_variants.append(user_prompt_request)
+
+            except Exception as e:
+                print(f"Error in generate_prompt_variant: {e}")
+                # Add the original user_prompt_request as a fallback
+                full_prompt_variants.append(user_prompt_request)
+
+        print(f"Total prompt variants generated: {len(full_prompt_variants)}")
         return full_prompt_variants
     def _create_system_message(
         self, user_prompt_request: str, approach: str, complexity: str, focus: str, topic: str = "hallucination-detection"
@@ -296,6 +457,9 @@ class PromptTuner(BaseModel):
     def __repr__(self):
         return self.__str__()
 
+    def evaluate_variant(self, variant):
+        # Mock implementation that returns a random score between 0 and 1
+        return random.random()
 
 def custom_evaluate(
     response: str,
