@@ -98,9 +98,7 @@ class Experiment(BaseModel):
     )
     search_method: Optional[str] = Field(
         default="grid",
-        description="Tuner search option. Can be: [grid, bayesian, dspy]. "
-                    "The 'dspy' option uses the dspy-ai library for "
-                    "iterative prompt tuning optimization."
+        description="Tuner search option. Can be: [grid, bayesian]."
     )
     use_dspy_optimization: Optional[bool] = Field(
         default=False,
