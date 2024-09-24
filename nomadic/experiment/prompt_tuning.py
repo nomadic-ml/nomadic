@@ -93,10 +93,6 @@ class PromptTuner:
             prompt_variants.extend(variant)
         return prompt_variants
 
-    def evaluate_variant(self, variant):
-        # Mock implementation that returns a random score between 0 and 1
-        return random.random()
-
     def generate_prompt_variants_dspy(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5, prompt_tuning_approach: str = "zero-shot", prompt_tuning_complexity: str = "simple"):
         prompt_variants = []
         for template in user_prompt_request:
