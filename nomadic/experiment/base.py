@@ -100,7 +100,7 @@ class Experiment(BaseModel):
     start_datetime: Optional[datetime] = Field(
         default=None, description="Start datetime."
     )
-    use_iterative_optimization: Optional[bool] = Field(
+    use_iterative_optimization: Optional[Any] = Field(
         default=False,
         description="Whether to use dspy-ai for iterative prompt tuning optimization.",
     )

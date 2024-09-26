@@ -27,7 +27,7 @@ class PromptTuner:
         prompt_tuning_focuses=["None"],
         enable_logging=True,
         evaluation_dataset=[],
-        use_dspy_optimization=False,
+        use_iterative_optimization=False,
         optimal_threshold=0.8,  # Default threshold for optimization
         k=5,  # Default number of examples for few-shot learning
         optimizer_type="BootstrapFewShotWithRandomSearch"  # Default optimizer
@@ -38,13 +38,13 @@ class PromptTuner:
         self.prompt_tuning_focuses = prompt_tuning_focuses
         self.enable_logging = enable_logging
         self.evaluation_dataset = evaluation_dataset
-        self.use_dspy_optimization = use_dspy_optimization
+        self.use_iterative_optimization = use_iterative_optimization
         self.optimal_threshold = optimal_threshold
         self.k = k
         self.optimizer_type = optimizer_type
 
         # Initialize the optimizer if DSPy optimization is enabled
-        if self.use_dspy_optimization:
+        if self.use_iterative_optimization:
             if self.optimizer_type == "BootstrapFewShotWithRandomSearch":
                 from dspy.teleprompt import BootstrapFewShotWithRandomSearch
                 # Configure the BootstrapFewShotWithRandomSearch optimizer
@@ -69,9 +69,9 @@ class PromptTuner:
         Returns:
             List of generated prompt variants.
         """
-        if self.use_dspy_optimization == "dspy":
+        if self.use_iterative_optimization == "dspy":
             return self.generate_prompt_variants_optimized(client, user_prompt_request, max_retries, retry_delay)
-        elif self.use_dspy_optimization == "iterative":
+        elif self.use_iterative_optimization == "iterative":
             return self.generate_prompt_variants_iterative(client, user_prompt_request, max_retries, retry_delay)
         else:
             return self.generate_prompt_variants_static(client, user_prompt_request, max_retries, retry_delay)
@@ -177,12 +177,12 @@ class PromptTuner:
                 raise ValueError(f"Unsupported optimizer type: {self.optimizer_type}")
 
             # Perform optimization to find the best parameters
-            if self.use_dspy_optimization == "dspy":
+            if self.use_iterative_optimization == "dspy":
                 optimized_program = self.optimizer.compile(
                     student=lambda x: objective_function(**x),
                     trainset=self.trainset,  # Use actual trainset
                 )
-            elif self.use_dspy_optimization == "iterative":
+            elif self.use_iterative_optimization == "iterative":
                 optimized_program = self.iterative_optimization(objective_function)
             else:
                 optimized_program = objective_function
