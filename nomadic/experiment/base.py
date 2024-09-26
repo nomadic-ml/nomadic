@@ -100,6 +100,11 @@ class Experiment(BaseModel):
     start_datetime: Optional[datetime] = Field(
         default=None, description="Start datetime."
     )
+    use_iterative_optimization: Optional[Any] = Field(
+        default=False,
+        description="Whether to use dspy-ai for iterative prompt tuning optimization.",
+    )
+
     end_datetime: Optional[datetime] = Field(default=None, description="End datetime.")
     experiment_result: Optional[ExperimentResult] = Field(
         default=None, description="Experiment result of Experiment"
@@ -206,6 +211,7 @@ class Experiment(BaseModel):
             prompt_tuning_focuses=[
                 prompt_tuning_params.get("prompt_tuning_focus", "None")
             ],
+            use_iterative_optimization=self.use_iterative_optimization,
             enable_logging=self.enable_logging,
         )
         self.user_prompt_request = self.user_prompt_request * self.num_simulations
