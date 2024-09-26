@@ -6,8 +6,6 @@ from enum import Enum
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable, Set, Union, Tuple
-import os
-import json
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -97,16 +95,16 @@ class Experiment(BaseModel):
         description="Optional dictionary of current hyperparameter values.",
     )
     search_method: Optional[str] = Field(
-        default="grid",
-        description="Tuner search option. Can be: [grid, bayesian]."
-    )
-    use_dspy_optimization: Optional[bool] = Field(
-        default=False,
-        description="Whether to use dspy-ai for iterative prompt tuning optimization.",
+        default="grid", description="Tuner search option. Can be: [grid, bayesian]"
     )
     start_datetime: Optional[datetime] = Field(
         default=None, description="Start datetime."
     )
+    use_iterative_optimization: Optional[bool] = Field(
+        default=False,
+        description="Whether to use dspy-ai for iterative prompt tuning optimization.",
+    )
+
     end_datetime: Optional[datetime] = Field(default=None, description="End datetime.")
     experiment_result: Optional[ExperimentResult] = Field(
         default=None, description="Experiment result of Experiment"
@@ -143,10 +141,6 @@ class Experiment(BaseModel):
         default=False,
         description="Whether to use Ray Tune as parameter tuning backend. If False, Optuna will be used.",
     )
-    use_dspy_optimization: Optional[bool] = Field(
-        default=False,
-        description="Whether to use dspy for iterative prompt tuning optimization.",
-    )
     results_filepath: Optional[str] = Field(
         default=None, description="Path of outputting tuner run results."
     )
@@ -179,7 +173,7 @@ class Experiment(BaseModel):
         return value
 
     def model_post_init(self, ctx):
-        if self.search_method not in ("grid", "bayesian", "dspy"):
+        if self.search_method not in ("grid", "bayesian"):
             raise ValueError(
                 f"Selected Experiment search_method `{self.search_method}` is not valid."
             )
@@ -203,12 +197,6 @@ class Experiment(BaseModel):
 
         openai_params, prompt_tuning_params = type_safe_param_values
 
-        # Ensure the evaluation dataset is properly initialized
-        if not self.evaluation_dataset:
-            if self.enable_logging:
-                print("Warning: Evaluation dataset is empty or not properly formatted.")
-            return [], [], [], []
-
         # Initialize PromptTuner with the current parameters
         prompt_tuner = PromptTuner(
             prompt_tuning_approaches=[
@@ -223,9 +211,8 @@ class Experiment(BaseModel):
             prompt_tuning_focuses=[
                 prompt_tuning_params.get("prompt_tuning_focus", "None")
             ],
+            use_iterative_optimization=self.use_iterative_optimization,
             enable_logging=self.enable_logging,
-            use_dspy_optimization=self.use_dspy_optimization,
-            evaluation_dataset=self.evaluation_dataset,  # Pass the evaluation dataset to PromptTuner
         )
         self.user_prompt_request = self.user_prompt_request * self.num_simulations
 
@@ -240,10 +227,8 @@ class Experiment(BaseModel):
                 print(f"Prompt variant: {prompt_variant[:200]}...")  # Print part of the variant
 
             pred_responses, eval_qs, ref_responses = [], [], []
-            for j, example in enumerate(self.evaluation_dataset):
-                if self.enable_logging:
-                    print(f"Processing example {j+1}/{len(self.evaluation_dataset)}")
-                full_prompt = self._construct_prompt(prompt_variant, example)
+            if not self.evaluation_dataset:
+                full_prompt = prompt_variant
                 completion_response: CompletionResponse = self.model.run(
                     prompt=full_prompt,
                     parameters=openai_params,
@@ -251,18 +236,29 @@ class Experiment(BaseModel):
                 pred_response = self._extract_response(completion_response)
                 pred_responses.append(pred_response)
                 eval_qs.append(full_prompt)
-                ref_responses.append(example.get("answer") or example.get("Answer", None))
+                ref_responses.append(None)
                 all_prompt_variants.append(prompt_variant)
                 if self.enable_logging:
                     print(f"Response: {pred_response[:100]}...")
+            else:
+                for j, example in enumerate(self.evaluation_dataset):
+                    if self.enable_logging:
+                        print(f"Processing example {j+1}/{len(self.evaluation_dataset)}")
+                    full_prompt = self._construct_prompt(prompt_variant, example)
+                    completion_response: CompletionResponse = self.model.run(
+                        prompt=full_prompt,
+                        parameters=openai_params,
+                    )
+                    pred_response = self._extract_response(completion_response)
+                    pred_responses.append(pred_response)
+                    eval_qs.append(full_prompt)
+                    ref_responses.append(example.get("answer") or example.get("Answer", None))
+                    all_prompt_variants.append(prompt_variant)
+                    if self.enable_logging:
+                        print(f"Response: {pred_response[:100]}...")
             all_pred_responses.extend(pred_responses)
             all_eval_qs.extend(eval_qs)
             all_ref_responses.extend(ref_responses)
-
-        if not all_pred_responses:
-            if self.enable_logging:
-                print("Warning: No evaluation results provided.")
-
         return (
             all_pred_responses,
             all_eval_qs,
