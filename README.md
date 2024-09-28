@@ -93,20 +93,26 @@ os.environ["OPENAI_API_KEY"]= <YOUR_OPENAI_KEY>
 
 Say we want to explore (all of!) the following hyperparameters and search spaces to optimize a RAG performance:
 
-| Parameter                     | Search Space                                                   | Pipeline Stage |
-|-------------------------|------------------------------------------------------------------------|----------------|
-| **chunk_size**          | 128, 256, 512                                                          | Retrieval      |
-| **top_k**               | 1, 3, 5                                                                | Retrieval      |
-| **overlap**             | 50, 100, 150                                                           | Retrieval      |
-| **similarity_threshold**| 0.5, 0.7, 0.9                                                          | Retrieval      |
-| **embedding_model**     | "text-embedding-ada-002", "text-embedding-curie-001"                   | Retrieval      |
-| **model_name**          | "gpt-3.5-turbo", "gpt-4"                                               | Both           |
-| **temperature**         | 0.3, 0.7, 0.9                                                          | Inference      |
-| **max_tokens**          | 300, 500, 700                                                          | Inference      |
-| **retrieval_strategy**  | "sentence-window", "full-document"                                     | Retrieval      |
-| **reranking_model**     | true, false                                                            | Inference      |
-| **query_transformation**| "rephrasing", "HyDE", "sub-queries"                                    | Both           |
+| Parameter                       | Supported values                                                       | Pipeline Stage |
+|---------------------------|----------------------------------------------------------------------------|----------------|
+| **chunk_size**             | 128, 256, 512                                                              | Retrieval      |
+| **top_k**                  | 1, 3, 5                                                                    | Retrieval      |
+| **overlap**                | 50, 100, 150                                                               | Retrieval      |
+| **similarity_threshold**   | 0.5, 0.7, 0.9                                                              | Retrieval      |
+| **embedding_model**        | "text-embedding-ada-002", "text-embedding-curie-001"                       | Retrieval      |
+| **model_name**             | "gpt-3.5-turbo", "gpt-4"                                                   | Both           |
+| **temperature**            | 0.3, 0.7, 0.9                                                              | Inference      |
+| **max_tokens**             | 300, 500, 700                                                              | Inference      |
+| **retrieval_strategy**     | "sentence-window", "full-document"                                         | Retrieval      |
+| **reranking_model**        | true, false                                                                | Inference      |
+| **query_transformation**   | "rephrasing", "HyDE", "Advanced contextual refinement"                     | Retrieval      |
+| **reranking_step**         | "BM25-based reranking", "dense passage retrieval (DPR)", "cross-encoder"   | Inference      |
+| **reranking_model_type**   | "BM25", "DPR", "ColBERT", "cross-encoder"                                  | Retrieval      |
 
+### Explanation of New Parameters:
+- **reranking_step**: Introduces techniques for reranking the retrieved documents or chunks. This helps refine retrieval results using models such as BM25, DPR, or cross-encoders before inference.
+- **reranking_model_type**: Defines the type of model used for reranking the retrieved results. Options include sparse retrieval models (BM25), dense retrieval models (DPR), and more advanced approaches like cross-encoders or ColBERT.
+"sub-queries"                                    | Both           |
 Then, define the search spaces for each RAG pipeline hyperparameter you want to experiment with.
 
 ```python
@@ -136,7 +142,14 @@ eval_json = {
 }
 pdf_url = "https://www.dropbox.com/scl/fi/sbko6nyzsuw00f2nhxa38/CS229_Lecture_Notes.pdf?rlkey=pebhb2qrdh08bnyxtus8qm11v&st=yha4ikm2&dl=1"
 
+
 ```
+
+Reranking Support
+Nomadic supports reranking models to enhance the retrieval stage of the RAG pipeline. Reranking models, such as cross-encoders, can significantly improve the relevance of retrieved documents by scoring and reordering them based on their contextual relevance to the query. This process ensures that the most pertinent documents are provided to the language model for generating accurate and contextually appropriate responses.
+
+To enable reranking in your experiments, specify a reranking_model in the hyperparameters and include it in the retrieval pipeline. You can experiment with different reranking models to find the one that best suits your use case. Currently supported options are: BM25, DPR, ColBERT, and Cross-encoder.
+
 ### Evaluation Metrics for Retrieval and Inference
 
 In this demo, we use specialized evaluation metrics that work specifically well for the retrieval / inferencing stages of a RAG.
