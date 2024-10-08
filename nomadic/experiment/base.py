@@ -778,6 +778,66 @@ class Experiment(BaseModel):
         plt.title("Correlation Heatmap of Numeric Parameters and Scores")
         plt.show()
 
+    def get_best_prompt_variant(self,experiment_result):
+        data = []
+
+        # Extract relevant data
+        for run_result in experiment_result.run_results:
+            individual_results = run_result.metadata.get('Individual Simulation Results', [])
+            for result in individual_results:
+                # Extract data from the result
+                answers = result.get('Answers', [])
+                ground_truths = result.get('Ground Truth', [])
+                full_prompts = result.get('Full Prompts', [])
+                prompt_variants = result.get('Prompt Variants', [])
+                queries = result.get('Queries', [])
+
+                if not all([answers, ground_truths, full_prompts, prompt_variants, queries]):
+                    continue
+
+                # Ensure all lists have the same length
+                min_length = min(len(answers), len(ground_truths), len(full_prompts), len(queries))
+
+                # Create a row for each prompt variant and corresponding data
+                for i in range(min_length):
+                    row = {
+                        "Run Score": float(run_result.score),
+                        "Prompt Variant": prompt_variants[i % len(prompt_variants)],
+                        "Full Prompt": full_prompts[i],
+                        "Generated Answer": answers[i],
+                        "Ground Truth": ground_truths[i],
+                        "Query": queries[i],
+                    }
+                    # Process parameters to ensure scalar values
+                    processed_params = {}
+                    for key, value in run_result.params.items():
+                        if isinstance(value, (list, np.ndarray)):
+                            if len(value) == 1:
+                                processed_params[key] = value[0]
+                            else:
+                                processed_params[key] = str(value)
+                        else:
+                            processed_params[key] = value
+                    row.update(processed_params)
+                    data.append(row)
+
+        # Create DataFrame
+        df = pd.DataFrame(data)
+
+        # Get the row with the highest score
+        if df.empty:
+            print("No data available.")
+            return None
+
+        # Get the row with the highest score
+        best_row = df.loc[df['Run Score'].idxmax()]
+
+        # Display the best row as a table
+        best_row_df = pd.DataFrame([best_row])
+
+        # Display the best row DataFramebest_prompt_variant, best_score =
+        return best_row["Prompt Variant"], best_row["Run Score"]
+
     def create_parameter_combination_heatmap(
         self,
         experiment_result,
