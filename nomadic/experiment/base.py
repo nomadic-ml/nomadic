@@ -27,7 +27,22 @@ from nomadic.experiment.prompt_tuning import (
     PromptTuner,
     custom_evaluate,
     custom_evaluate_hallucination,
+    accuracy_evaluator
 )
+
+def transform_eval_dataset_to_eval_json(eval_dataset):
+    eval_json = {
+        "queries": {},
+        "responses": {}
+    }
+
+    # Loop through each entry in eval_dataset
+    for idx, entry in enumerate(eval_dataset, start=1):
+        query_key = f"query{idx}"
+        eval_json["queries"][query_key] = entry['query']
+        eval_json["responses"][query_key] = entry['answer']
+
+    return eval_json
 
 def retry_with_exponential_backoff(
     max_retries=5, base_delay=1, max_delay=300, exceptions=(Exception,)
@@ -43,9 +58,6 @@ def retry_with_exponential_backoff(
                         raise e
                     delay = min(
                         max_delay, (base_delay * (2**attempt)) + random.uniform(0, 1)
-                    )
-                    print(
-                        f"Exception occurred: {str(e)}. Retrying in {delay:.2f} seconds..."
                     )
                     time.sleep(delay)
 
@@ -111,7 +123,7 @@ class Experiment(BaseModel):
     )
     all_experiment_results: Optional[List[ExperimentResult]] = Field(
         default=[],
-        description="All expeirment results of experiment (including from Workspace)",
+        description="All experiment results of experiment (including from Workspace)",
     )
     experiment_status: Optional[ExperimentStatus] = Field(
         default=ExperimentStatus("not_started"),
@@ -156,6 +168,7 @@ class Experiment(BaseModel):
         default=1,
         description="Number of simulations to run for each configuration.",
     )
+
     @field_validator('user_prompt_request')
     def validate_user_prompt_request(cls, v):
         if isinstance(v, str):
@@ -164,7 +177,6 @@ class Experiment(BaseModel):
             return v
         else:
             raise ValueError("user_prompt_request must be a string or a list of strings")
-
 
     @field_validator("tuner")
     def check_tuner_class(cls, value):
@@ -185,7 +197,7 @@ class Experiment(BaseModel):
                 nomadic_client.experiments.register(self)
 
     def _get_responses(
-        self,  # Add 'self' here to make it an instance method
+        self,
         type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]]
     ) -> Tuple[List[str], List[str], List[str], List[str]]:
         all_pred_responses, all_eval_qs, all_ref_responses, all_prompt_variants = (
@@ -218,14 +230,10 @@ class Experiment(BaseModel):
 
         # Generate prompt variants using PromptTuner
         prompt_variants = prompt_tuner.generate_prompt_variants(
-            client=self.model,  # Pass the client or the required object
+            client=self.model,
             user_prompt_request=self.user_prompt_request
         )
         for i, prompt_variant in enumerate(prompt_variants):
-            if self.enable_logging:
-                print(f"\nProcessing prompt variant {i+1}/{len(prompt_variants)}")
-                print(f"Prompt variant: {prompt_variant[:200]}...")  # Print part of the variant
-
             pred_responses, eval_qs, ref_responses = [], [], []
             if not self.evaluation_dataset:
                 full_prompt = prompt_variant
@@ -238,12 +246,8 @@ class Experiment(BaseModel):
                 eval_qs.append(full_prompt)
                 ref_responses.append(None)
                 all_prompt_variants.append(prompt_variant)
-                if self.enable_logging:
-                    print(f"Response: {pred_response[:100]}...")
             else:
                 for j, example in enumerate(self.evaluation_dataset):
-                    if self.enable_logging:
-                        print(f"Processing example {j+1}/{len(self.evaluation_dataset)}")
                     full_prompt = self._construct_prompt(prompt_variant, example)
                     completion_response: CompletionResponse = self.model.run(
                         prompt=full_prompt,
@@ -254,8 +258,6 @@ class Experiment(BaseModel):
                     eval_qs.append(full_prompt)
                     ref_responses.append(example.get("answer") or example.get("Answer", None))
                     all_prompt_variants.append(prompt_variant)
-                    if self.enable_logging:
-                        print(f"Response: {pred_response[:100]}...")
             all_pred_responses.extend(pred_responses)
             all_eval_qs.extend(eval_qs)
             all_ref_responses.extend(ref_responses)
@@ -266,16 +268,10 @@ class Experiment(BaseModel):
             all_prompt_variants,
         )
 
-
     def run(self, param_dict: Dict[str, Any]) -> ExperimentResult:
         self.params = set(param_dict.keys())  # Set the params attribute
 
         def _default_param_function(param_values: Dict[str, Any]) -> RunResult:
-            if self.enable_logging:
-                print("\nStarting new experiment run with parameters:")
-                for param, value in param_values.items():
-                    print(f"{param}: {value}")
-
             all_scores = []
             all_metadata = []
 
@@ -287,10 +283,7 @@ class Experiment(BaseModel):
                 all_ref_responses,
                 prompt_variants,
             ) = self._get_responses(type_safe_param_values)
-            print(all_pred_responses,
-                all_full_prompts,
-                all_ref_responses,
-                prompt_variants)
+
             if self.evaluation_dataset:
                 eval_results = self._evaluate_responses(
                     all_pred_responses, all_ref_responses, self.evaluation_dataset
@@ -342,11 +335,6 @@ class Experiment(BaseModel):
 
             final_score = sum(all_scores) / len(all_scores)
 
-            if self.enable_logging:
-                print(
-                    f"\nAll simulations completed. Final average score: {final_score}"
-                )
-
             import numpy as np
 
             return RunResult(
@@ -367,26 +355,17 @@ class Experiment(BaseModel):
         self.start_datetime = datetime.now()
         experiment_result: ExperimentResult = None
         try:
-            if self.enable_logging:
-                print("Setting up tuner...")
             self._setup_tuner(param_dict, _default_param_function)
-            if self.enable_logging:
-                print("Starting experiment...")
             experiment_result = self.tuner.fit()
         except Exception as e:
             is_error = True
             self.experiment_status_message = self._format_error_message(e)
-            if self.enable_logging:
-                print(f"Error occurred: {self.experiment_status_message}")
 
         self.end_datetime = datetime.now()
         self.experiment_status = self._determine_experiment_status(is_error)
         self.experiment_result = (
             experiment_result or self._create_default_experiment_result(param_dict)
         )
-
-        if self.enable_logging:
-            print(f"\nExperiment completed. Status: {self.experiment_status}")
 
         nomadic_client: NomadicClient = get_client()
         if nomadic_client.auto_sync_enabled:
@@ -466,13 +445,13 @@ class Experiment(BaseModel):
             if self.evaluator:
                 if isinstance(self.evaluator, dict):
                     method = self.evaluator.get("method")
-                    if method == "custom_evaluate_hallucination":
+                    if method in ["accuracy_evaluator", "custom_evaluate_hallucination"]:
+                        # Support both accuracy_evaluator and custom_evaluate_hallucination
+                        evaluator_function = accuracy_evaluator if method == "accuracy_evaluator" else custom_evaluate_hallucination
                         if evaluation_dataset:
-                            eval_result = custom_evaluate_hallucination(
-                                pred, ref, evaluation_dataset
-                            )
+                            eval_result = evaluator_function(pred, ref, evaluation_dataset)
                         else:
-                            eval_result = custom_evaluate_hallucination(pred, ref)
+                            eval_result = evaluator_function(pred, ref)
                         eval_result.update({"generated_answer": pred, "ground_truth": ref})
                         eval_results.append(eval_result)
 
@@ -511,12 +490,10 @@ class Experiment(BaseModel):
                     raise ValueError("Invalid evaluator type")
 
         return eval_results
-
     def _calculate_mean_score(
         self, eval_results: List[Dict[str, Any]]
     ) -> Dict[str, float]:
         if not eval_results:
-            print("Warning: No evaluation results provided.")
             return {}
 
         scores_by_params = {}
@@ -541,22 +518,15 @@ class Experiment(BaseModel):
                         if param_key not in scores_by_params:
                             scores_by_params[param_key] = []
                         scores_by_params[param_key].append(overall_score)
-                    else:
-                        print(f"Warning: 'scores' present but 'overall_score' is missing or invalid: {result}")
                 else:
-                    print(f"Warning: Unexpected result format for custom evaluation: {result}")
                     continue
             else:
                 # Standard evaluation logic
                 if not isinstance(result, dict) or "score" not in result:
-                    print(f"Warning: Unexpected result format: {result}")
                     continue
 
                 score = result["score"]
                 if not isinstance(score, (int, float)):
-                    print(
-                        f"Warning: Invalid score type: {type(score)}. Expected int or float."
-                    )
                     continue
 
                 params = result.get("params", {})
@@ -574,14 +544,10 @@ class Experiment(BaseModel):
             for param_key, scores in scores_by_params.items()
         }
 
-        print("Debug: Calculated mean_scores =", mean_scores)
-
         return mean_scores
 
     def _setup_tuner(self, param_dict: Dict[str, Any], param_function: Callable):
         if not self.tuner:
-            if self.enable_logging:
-                print("\nSetting up tuner...")
             if self.use_flaml_library:
                 from nomadic.tuner import FlamlParamTuner
 
@@ -654,6 +620,7 @@ class Experiment(BaseModel):
         with open(folder_path + file_name, "w") as file:
             file.write(self.model_dump_json(exclude=("model", "evaluator")))
 
+    # Original plotting methods
     def visualize_results(self, experiment_result, graphs_to_include=None):
         if not experiment_result or not experiment_result.run_results:
             if self.enable_logging:
@@ -701,8 +668,62 @@ class Experiment(BaseModel):
             self._create_correlation_heatmap(df, numeric_cols)
 
         if "parameter_combination_heatmap" in graphs_to_include:
-            self._create_parameter_combination_heatmap(experiment_result)
+            self.create_parameter_combination_heatmap(experiment_result)
 
+    # Additional HTML-compatible plotting methods
+    def visualize_results_html(self, experiment_result, graphs_to_include=None, output_folder='output'):
+        import os
+        if not experiment_result or not experiment_result.run_results:
+            return
+
+        if graphs_to_include is None:
+            graphs_to_include = [
+                "overall_score_distribution",
+                "metric_score_distributions",
+                "parameter_relationships",
+                "summary_statistics",
+                "correlation_heatmap",
+                "parameter_combination_heatmap",
+            ]
+
+        # Ensure output directory exists
+        os.makedirs(output_folder, exist_ok=True)
+
+        # Extract data from experiment results
+        data = self._extract_data_from_results(experiment_result)
+
+        # Create and clean DataFrame
+        df = self._create_and_clean_dataframe(data)
+
+        # Separate numeric and categorical columns
+        numeric_cols, categorical_cols = self._separate_column_types(df)
+
+        if "overall_score_distribution" in graphs_to_include:
+            self._plot_score_distribution_html(
+                df, "overall_score", "Distribution of Overall Scores", output_folder
+            )
+
+        if "metric_score_distributions" in graphs_to_include:
+            for metric in data["all_metric_scores"].keys():
+                if metric in df.columns:
+                    self._plot_score_distribution_html(
+                        df, metric, f"Distribution of {metric} Scores", output_folder
+                    )
+
+        if "parameter_relationships" in graphs_to_include:
+            self._visualize_parameter_relationships_html(df, numeric_cols, categorical_cols, output_folder)
+
+        if "summary_statistics" in graphs_to_include:
+            self._print_summary_statistics_html(df, data["all_metric_scores"], output_folder)
+
+        if "correlation_heatmap" in graphs_to_include:
+            self._create_correlation_heatmap_html(df, numeric_cols, output_folder)
+
+        if "parameter_combination_heatmap" in graphs_to_include:
+            # You can call the HTML version of the method here
+            self.create_parameter_combination_heatmap_html(experiment_result, output_folder=output_folder)
+
+    # Original methods continue
     def _extract_data_from_results(self, experiment_result):
         all_scores = []
         all_params = []
@@ -746,6 +767,12 @@ class Experiment(BaseModel):
         plt.ylabel("Frequency")
         plt.show()
 
+    # HTML-compatible version
+    def _plot_score_distribution_html(self, df, column, title, output_folder):
+        import plotly.express as px
+        fig = px.histogram(df, x=column, nbins=30, title=title)
+        fig.write_html(f"{output_folder}/{column}_distribution.html")
+
     def _visualize_parameter_relationships(self, df, numeric_cols, categorical_cols):
         for col in categorical_cols:
             if col != "overall_score":
@@ -764,6 +791,19 @@ class Experiment(BaseModel):
                 plt.ylabel("Overall Score")
                 plt.show()
 
+    # HTML-compatible version
+    def _visualize_parameter_relationships_html(self, df, numeric_cols, categorical_cols, output_folder):
+        import plotly.express as px
+        for col in categorical_cols:
+            if col != "overall_score":
+                fig = px.box(df, x=col, y="overall_score", title=f"Overall Score Distribution by {col}")
+                fig.write_html(f"{output_folder}/boxplot_{col}.html")
+
+        for col in numeric_cols:
+            if col != "overall_score":
+                fig = px.scatter(df, x=col, y="overall_score", title=f"Overall Score vs {col}")
+                fig.write_html(f"{output_folder}/scatter_{col}.html")
+
     def _print_summary_statistics(self, df, all_metric_scores):
         print("Score Summary Statistics:")
         print(df[["overall_score"] + list(all_metric_scores.keys())].describe())
@@ -772,13 +812,28 @@ class Experiment(BaseModel):
         top_5 = df.sort_values("overall_score", ascending=False).head()
         print(top_5.to_string(index=False))
 
+    # HTML-compatible version
+    def _print_summary_statistics_html(self, df, all_metric_scores, output_folder):
+        summary = df[["overall_score"] + list(all_metric_scores.keys())].describe()
+        summary.to_html(f"{output_folder}/summary_statistics.html")
+
+        top_5 = df.sort_values("overall_score", ascending=False).head()
+        top_5.to_html(f"{output_folder}/top_5_parameters.html", index=False)
+
     def _create_correlation_heatmap(self, df, numeric_cols):
         plt.figure(figsize=(12, 10))
         sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", center=0)
         plt.title("Correlation Heatmap of Numeric Parameters and Scores")
         plt.show()
 
-    def get_best_prompt_variant(self,experiment_result):
+    # HTML-compatible version
+    def _create_correlation_heatmap_html(self, df, numeric_cols, output_folder):
+        import plotly.express as px
+        corr = df[numeric_cols].corr()
+        fig = px.imshow(corr, text_auto=True, title="Correlation Heatmap of Numeric Parameters and Scores")
+        fig.write_html(f"{output_folder}/correlation_heatmap.html")
+
+    def get_best_prompt_variant(self, experiment_result):
         data = []
 
         # Extract relevant data
@@ -826,16 +881,14 @@ class Experiment(BaseModel):
 
         # Get the row with the highest score
         if df.empty:
-            print("No data available.")
+            if self.enable_logging:
+                print("No data available.")
             return None
 
         # Get the row with the highest score
         best_row = df.loc[df['Run Score'].idxmax()]
 
-        # Display the best row as a table
-        best_row_df = pd.DataFrame([best_row])
-
-        # Display the best row DataFramebest_prompt_variant, best_score =
+        # Return the best prompt variant and its score
         return best_row["Prompt Variant"], best_row["Run Score"]
 
     def create_parameter_combination_heatmap(
@@ -1054,21 +1107,226 @@ class Experiment(BaseModel):
 
         return df
 
+    def create_parameter_combination_heatmap_html(
+        self,
+        experiment_result,
+        score_metric='Run Score',
+        max_rows=None,
+        max_prompt_length=100,
+        max_answer_length=500,
+    ):
+        import plotly.graph_objs as go
+        import pandas as pd
+        import numpy as np
+
+        data = []
+        for run_result in experiment_result.run_results:
+            individual_results = run_result.metadata.get('Individual Simulation Results', [])
+            for result in individual_results:
+                # Extract data from the result
+                answers = result.get('Answers', [])
+                ground_truths = result.get('Ground Truth', [])
+                full_prompts = result.get('Full Prompts', [])
+                prompt_variants = result.get('Prompt Variants', [])
+                queries = result.get('Queries', [])
+
+                if not all([answers, ground_truths, full_prompts, prompt_variants, queries]):
+                    continue
+
+                # Ensure all lists have the same length
+                min_length = min(len(answers), len(ground_truths), len(full_prompts), len(queries))
+
+                # Create a row for each prompt variant and corresponding data
+                for i in range(min_length):
+                    row = {
+                        "Run Score": float(run_result.score),
+                        "Prompt Variant": self._wrap_text(prompt_variants[i % len(prompt_variants)], max_prompt_length),
+                        "Full Prompt": self._wrap_text(full_prompts[i], max_prompt_length),
+                        "Generated Answer": self._wrap_text(answers[i], max_answer_length),
+                        "Ground Truth": self._wrap_text(ground_truths[i], max_answer_length),
+                        "Query": self._wrap_text(queries[i], max_prompt_length),
+                    }
+                    # Process parameters to ensure scalar values
+                    processed_params = {}
+                    for key, value in run_result.params.items():
+                        # Handle NumPy arrays and scalars
+                        if isinstance(value, (list, np.ndarray)):
+                            if len(value) == 1:
+                                scalar_value = value[0]
+                                if isinstance(scalar_value, np.generic):
+                                    scalar_value = scalar_value.item()
+                                processed_params[key] = scalar_value
+                            else:
+                                processed_params[key] = str(value)
+                        elif isinstance(value, np.generic):
+                            # NumPy scalar types
+                            processed_params[key] = value.item()
+                        else:
+                            processed_params[key] = value
+                    row.update(processed_params)
+                    data.append(row)
+
+        df = pd.DataFrame(data)
+
+        if max_rows is not None:
+            df = df.head(max_rows)
+
+        # Ensure parameter columns have scalar values
+        param_columns = [col for col in df.columns if col not in ["Run Score", "Prompt Variant", "Full Prompt", "Generated Answer", "Ground Truth", "Query"]]
+        for param in param_columns:
+            # Convert parameter columns to Python scalar types
+            def convert_to_scalar(x):
+                if isinstance(x, (list, np.ndarray)):
+                    if len(x) == 1:
+                        x = x[0]
+                    else:
+                        x = str(x)
+                if isinstance(x, np.generic):
+                    return x.item()
+                else:
+                    return x
+            df[param] = df[param].apply(convert_to_scalar)
+
+        # Now convert numeric columns to appropriate types
+        for param in param_columns:
+            # Try to convert to numeric
+            try:
+                df[param] = pd.to_numeric(df[param])
+            except ValueError:
+                pass  # Ignore if cannot convert to numeric
+
+        if len(param_columns) < 2:
+            if self.enable_logging:
+                print("Not enough parameter columns to create an interactive heatmap.")
+            return None
+
+        # Create list of options for parameters
+        param_options = param_columns.copy()
+
+        # Prepare data for all parameter combinations
+        heatmaps = []
+        buttons = []
+        parameter_pairs = [(p1, p2) for p1 in param_options for p2 in param_options if p1 != p2]
+
+        for (param1, param2) in parameter_pairs:
+            pivot_df = df.pivot_table(values=score_metric, index=param2, columns=param1, aggfunc='mean')
+            # Handle cases where pivot table might be empty
+            if pivot_df.empty:
+                continue
+            # Prepare text annotations
+            text = pivot_df.values.round(2).astype(str)  # Round the scores for display
+            heatmap = go.Heatmap(
+                z=pivot_df.values,
+                x=pivot_df.columns.astype(str),
+                y=pivot_df.index.astype(str),
+                colorscale='Viridis',
+                visible=False,  # Initially set all heatmaps to not visible
+                text=text,
+                texttemplate="%{text}",
+                textfont={"size":12},
+                hovertemplate='X: %{x}<br>Y: %{y}<br>Score: %{z:.2f}<extra></extra>'
+            )
+            heatmaps.append(heatmap)
+
+        if not heatmaps:
+            if self.enable_logging:
+                print("No valid parameter combinations to display in heatmap.")
+            return None
+
+        # Now create buttons with correct visibility settings
+        for idx, (param1, param2) in enumerate(parameter_pairs):
+            pivot_df = df.pivot_table(values=score_metric, index=param2, columns=param1, aggfunc='mean')
+            if pivot_df.empty:
+                continue
+            visibility = [False] * len(heatmaps)
+            visibility[idx] = True  # Only the current heatmap is visible
+            button = dict(
+                label=f"{param1} vs {param2}",
+                method='update',
+                args=[{'visible': visibility},
+                    {'title': f"{score_metric} for {param1} vs {param2}",
+                    'xaxis': {'title': param1},
+                    'yaxis': {'title': param2}}]
+            )
+            buttons.append(button)
+
+        updatemenus = [dict(
+            active=0,
+            buttons=buttons,
+            direction='down',
+            pad={'r': 10, 't': 10},
+            showactive=True,
+            x=0.5,
+            xanchor='center',
+            y=1.15,  # Adjusted y position to prevent overlap
+            yanchor='top'
+        )]
+
+        # Set the first heatmap to visible by default
+        heatmaps[0].visible = True
+
+        layout = go.Layout(
+            title=dict(
+                text=f"{score_metric} for {parameter_pairs[0][0]} vs {parameter_pairs[0][1]}",
+                y=0.95,  # Adjusted y position to prevent overlap
+                x=0.5,
+                xanchor='center',
+                yanchor='top'
+            ),
+            xaxis=dict(title=parameter_pairs[0][0]),
+            yaxis=dict(title=parameter_pairs[0][1]),
+            updatemenus=updatemenus,
+            width=800,
+            height=600,
+            margin=dict(l=60, r=60, t=150, b=60)  # Increased top margin
+        )
+
+        fig = go.Figure(data=heatmaps, layout=layout)
+
+        # Enhance aesthetics
+        fig.update_layout(
+            template='plotly_white',
+            title_font=dict(size=20, family='Arial'),
+            xaxis_title_font=dict(size=16, family='Arial'),
+            yaxis_title_font=dict(size=16, family='Arial'),
+            legend=dict(font=dict(size=12)),
+        )
+
+        # Add annotation for the dropdown menu
+        fig.update_layout(
+            annotations=[dict(
+                text='Select Parameters:',
+                showarrow=False,
+                x=0.5,
+                y=1.08,
+                xref='paper',
+                yref='paper',
+                xanchor='center',
+                yanchor='bottom',
+                font=dict(size=14)
+            )]
+        )
+
+        # Return the figure object instead of displaying it
+        return fig
+
 
 
 
     def test_significance(self, experiment_result: ExperimentResult, n: int = 5):
         if not experiment_result or not experiment_result.run_results:
-            print("No results to test for significance.")
+            if self.enable_logging:
+                print("No results to test for significance.")
             return
 
         scores = [run.score for run in experiment_result.run_results]
         sorted_scores = sorted(scores, reverse=True)
 
         if len(sorted_scores) <= n:
-            print(
-                f"Not enough data points to perform significance test. Need more than {n} results."
-            )
+            if self.enable_logging:
+                print(
+                    f"Not enough data points to perform significance test. Need more than {n} results."
+                )
             return
 
         top_n_scores = sorted_scores[:n]
@@ -1107,6 +1365,7 @@ class Experiment(BaseModel):
         else:
             print("The effect size is large.")
 
+        # Create boxplot using matplotlib
         plt.figure(figsize=(10, 6))
         sns.boxplot(data=[top_n_scores, rest_scores], orient="h")
         plt.title(f"Comparison of Top {n} Scores vs Rest")
@@ -1121,7 +1380,6 @@ class Experiment(BaseModel):
             "top_n_scores": top_n_scores,
             "rest_scores": rest_scores,
         }
-
 
     def _wrap_text(self, text, max_length):
         if len(text) <= max_length:
@@ -1267,5 +1525,63 @@ class Experiment(BaseModel):
         controls.children[-1].on_click(on_button_click)
 
         display(controls, output)
+
+        return df
+
+    # HTML-compatible version
+    def create_run_results_table_html(
+        self,
+        experiment_result,
+        max_rows=None,
+        max_prompt_length=100,
+        max_answer_length=500,
+        output_file='run_results_table.html',
+        output_folder='output'
+    ):
+        import os
+        os.makedirs(output_folder, exist_ok=True)
+
+        data = []
+        for run_result in experiment_result.run_results:
+            individual_results = run_result.metadata.get('Individual Simulation Results', [])
+            for result in individual_results:
+                # Extract data from the result
+                answers = result.get('Answers', [])
+                ground_truths = result.get('Ground Truth', [])
+                prompt_variants = result.get('Prompt Variants', [])
+                queries = result.get('Queries', [])
+
+                if not all([answers, ground_truths, prompt_variants, queries]):
+                    continue
+
+                # Ensure all lists have the same length
+                min_length = min(len(answers), len(ground_truths), len(queries))
+
+                # Create a row for each prompt variant and corresponding data
+                for i in range(min_length):
+                    row = {
+                        "Run Score": float(run_result.score),
+                        "Prompt Variant": self._wrap_text(prompt_variants[i % len(prompt_variants)], max_prompt_length),
+                        "Generated Answer": self._wrap_text(answers[i], max_answer_length),
+                        "Ground Truth": self._wrap_text(ground_truths[i], max_answer_length),
+                        "Query": self._wrap_text(queries[i], max_prompt_length),
+                    }
+                    row.update(run_result.params)
+                    data.append(row)
+
+        df = pd.DataFrame(data)
+
+        if max_rows is not None:
+            df = df.head(max_rows)
+
+        # Convert DataFrame to HTML
+        html_table = df.to_html(index=False, escape=False)
+
+        # Save HTML table to file
+        with open(f"{output_folder}/{output_file}", 'w') as f:
+            f.write(html_table)
+
+        if self.enable_logging:
+            print(f"Run results table saved to {output_folder}/{output_file}")
 
         return df

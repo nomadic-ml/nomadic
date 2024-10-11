@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from typing import List, Dict, Any, Union
 import logging
 import hashlib
-
+import os
 from nomadic.recipes.ai_safety.abstract_attack_logic import AttackAlgorithm
 
 # Configure logging
@@ -518,7 +518,9 @@ class RLAgent(AttackAlgorithm):
 
     def plot_progress(self):
         """
-        Plot the collected metrics to visualize the agent's progress.
+        Plot the collected metrics to visualize the agent's progress and save the plot as an image.
+
+        The plot is saved as 'rl_agent_progress.png' in the current working directory.
         """
         iterations = self.metrics['iterations']
         epsilon = self.metrics['epsilon']
@@ -589,16 +591,24 @@ class RLAgent(AttackAlgorithm):
         plt.grid(True)
 
         # Plot Moving Average of Rewards
-        if len(self.metrics['reward_distribution']) >= 10:
-            moving_avg = np.convolve(self.metrics['reward_distribution'], np.ones(10)/10, mode='valid')
+        if len(reward_distribution) >= 10:
+            moving_avg = np.convolve(reward_distribution, np.ones(10)/10, mode='valid')
             plt.subplot(3, 3, 7)
-            plt.plot(range(10, len(self.metrics['reward_distribution']) + 1), moving_avg, color='darkgreen')
+            plt.plot(range(10, len(reward_distribution) + 1), moving_avg, color='darkgreen')
             plt.xlabel('Prompt')
             plt.ylabel('Moving Average Reward')
             plt.title('Moving Average of Rewards')
             plt.grid(True)
         else:
             logger.warning("Not enough data points for moving average plot.")
+            plt.subplot(3, 3, 7)
+            plt.text(0.5, 0.5, 'Not enough data points for moving average plot.',
+                     horizontalalignment='center', verticalalignment='center',
+                     transform=plt.gca().transAxes)
+            plt.xlabel('Prompt')
+            plt.ylabel('Moving Average Reward')
+            plt.title('Moving Average of Rewards')
+            plt.grid(True)
 
         # Plot Boxplot of Q-Values
         plt.subplot(3, 3, 8)
@@ -609,11 +619,28 @@ class RLAgent(AttackAlgorithm):
             plt.title('Boxplot of Q-Values')
             plt.grid(True)
         else:
-            plt.text(1, 0.5, 'No Q-Values to Display', horizontalalignment='center', verticalalignment='center')
+            plt.text(0.5, 0.5, 'No Q-Values to Display',
+                     horizontalalignment='center', verticalalignment='center',
+                     transform=plt.gca().transAxes)
+            plt.xlabel('Q-Values')
             plt.title('Boxplot of Q-Values')
             plt.grid(True)
 
         # Adjust layout and add a title
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.suptitle('RLAgent Progress Metrics', fontsize=20)
-        plt.show()
+
+        # Define the save path
+        save_path = 'rl_agent_progress.png'
+
+        # Ensure the directory exists (optional, since save_path is just a filename)
+        directory = os.path.dirname(save_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory)
+
+        # Save the figure
+        plt.savefig(save_path, bbox_inches='tight')
+        logger.info(f"Progress plot saved to '{save_path}'.")
+
+        # Close the figure to free up memory
+        plt.close()
