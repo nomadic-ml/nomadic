@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-Join our <a href="https://discord.gg/cqnxY4as">Discord</a>!
+Join our <a href="https://discord.gg/mp5EJE8h">Discord</a>!
 </p>
 
 # 🗂️  Installation
