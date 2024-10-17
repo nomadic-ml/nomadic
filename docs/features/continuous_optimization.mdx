@@ -1,0 +1,54 @@
+# Continuous Optimization with Live Data
+
+Continuous optimization refers to a process where machine learning experiments are continuously tuned based on live data inputs, ensuring that models remain adaptive and responsive to changing conditions. This can be crucial for experiments requiring real-time data updates, such as applications using constantly evolving datasets from sources like cloud storage or APIs.
+
+In the following setup, we demonstrate how to implement continuous optimization using live data retrieved from an Amazon S3 bucket. We use a hyperparameter tuning approach and an experiment configuration that allows fetching the latest data for evaluation. By adjusting model hyperparameters and using fresh data, the experiment optimizes for better performance over time.
+
+## Example Python Code
+
+```python
+experiment = Experiment(
+    name="Sample_Nomadic_Experiment",
+    model=OpenAIModel(api_keys={"OPENAI_API_KEY": os.environ["OPENAI_API_KEY"]}),
+    evaluation_dataset=Dataset(
+        continuous_source={
+            "bucket_name": "testBucket",
+            "json_file_key": "YOUR_KEY_HERE"
+        }
+    ),
+    params={"temperature", "max_tokens"},
+    evaluator=SemanticSimilarityEvaluator(embed_model=OpenAIEmbedding()),
+    # current_hp_values = {...}
+    # fixed_param_dict = {...}
+)
+
+results = experiment.run(
+    param_dict={
+        "temperature": tune.choice([0.1, 0.5, 0.9]),
+        "max_tokens": tune.choice([50, 100, 200]),
+    },
+    evaluation_dataset_cutoff_date=datetime.fromisoformat("2023-09-01T00:00:00")
+)
+
+best_result = experiment.experiment_result.run_results[0]
+
+print(f"Best result: {best_result.params} - Score: {best_result.score}")
+```
+### Explanation
+
+#### Experiment Configuration:
+- `name`: Assigns a name to your experiment.
+- `model`: Specifies the model to use, here an `OpenAIModel` with the necessary API key.
+- `evaluation_dataset`: Uses a `Dataset` that fetches data from a continuous source defined by your S3 bucket and JSON file key, ensuring that the experiment runs with the latest data.
+- `params`: Lists the hyperparameters ("temperature" and "max_tokens") that are subject to tuning during the experiment.
+- `evaluator`: Sets up the evaluation method, here using `SemanticSimilarityEvaluator` which evaluates the experiment results based on semantic similarity using `OpenAIEmbedding`.
+
+#### Running the Experiment:
+- `param_dict`: Defines the ranges of hyperparameter values to explore using `tune.choice()`. The specified hyperparameters in this example are `temperature` and `max_tokens`.
+- `evaluation_dataset_cutoff_date`: Filters the dataset to include only data uploaded after the specified cutoff date (in this case, September 1, 2023), ensuring that older data does not influence the results.
+
+#### Retrieving Results:
+- After running the experiment, the best result is retrieved from the experiment's run results.
+- The code prints out the best hyperparameter settings and their corresponding evaluation score, which can be used to guide further model optimizations.
+
+This setup allows for the integration of live data into a continuous optimization process, making it easier to keep machine learning models updated and aligned with current data trends.
