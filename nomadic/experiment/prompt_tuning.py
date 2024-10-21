@@ -1,49 +1,94 @@
+# prompt_tuner.py
+
 from typing import List, Optional, Dict, Union, Any
-from openai import OpenAI
-from pydantic import BaseModel, Field
-import re
-import time
-import json
-from sklearn.feature_extraction.text import TfidfVectorizer
-import random
-import numpy as np
 from itertools import product
-from openai import OpenAI
+import time
+import re
+import json
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+import dspy
 
+# Import the OpenAI class as per your code
+from openai import OpenAI  # Ensure this import aligns with your environment
 
+# Import dspy
+import dspy  # Ensure dspy is installed in your environment
 
-# Mock implementation of DEFAULT_OPENAI_MODEL
-DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
+# Set your default model name here
+DEFAULT_OPENAI_MODEL = "gpt-4o"  # or another model as needed
 
+class PromptTuner:
+    def __init__(
+        self,
+        prompt_tuning_approaches=["None"],
+        prompt_tuning_topics=["hallucination-detection"],
+        prompt_tuning_complexities=["None"],
+        prompt_tuning_focuses=["None"],
+        enable_logging=True,
+        evaluation_dataset=[],
+        use_iterative_optimization=False,
+        optimal_threshold=0.8,  # Default threshold for optimization
+        k=5,  # Default number of examples for few-shot learning
+        optimizer_type="BootstrapFewShotWithRandomSearch"  # Default optimizer
+    ):
+        self.prompt_tuning_approaches = prompt_tuning_approaches
+        self.prompt_tuning_topics = prompt_tuning_topics
+        self.prompt_tuning_complexities = prompt_tuning_complexities
+        self.prompt_tuning_focuses = prompt_tuning_focuses
+        self.enable_logging = enable_logging
+        self.evaluation_dataset = evaluation_dataset
+        self.use_iterative_optimization = use_iterative_optimization
+        self.optimal_threshold = optimal_threshold
+        self.k = k
+        self.optimizer_type = optimizer_type
 
-
-class PromptTuner(BaseModel):
-    prompt_tuning_approaches: List[str] = Field(
-        default=["None"],
-        description="List of prompting approaches to use. If ['None'], no tuning is applied.",
-    )
-    prompt_tuning_topics: List[str] = Field(
-        default=["hallucination-detection"],
-        description="List of prompt topics which are the goals of the experiment. If ['None'], no tuning is applied.",
-    )
-    prompt_tuning_complexities: List[str] = Field(
-        default=["None"],
-        description="List of prompt complexities to use. If ['None'], no tuning is applied.",
-    )
-    prompt_tuning_focuses: List[str] = Field(
-        default=["None"],
-        description="List of prompt tasks to focus on. If ['None'], no tuning is applied.",
-    )
-    enable_logging: bool = Field(
-        default=True,
-        description="Flag to enable or disable print logging.",
-    )
-    evaluation_dataset: List[Dict[str, str]] = Field(
-        default=[],
-        description="List of evaluation examples.",
-    )
+        # Initialize the optimizer if DSPy optimization is enabled
+        if self.use_iterative_optimization:
+            if self.optimizer_type == "BootstrapFewShotWithRandomSearch":
+                from dspy.teleprompt import BootstrapFewShotWithRandomSearch
+                # Configure the BootstrapFewShotWithRandomSearch optimizer
+                self.optimizer = BootstrapFewShotWithRandomSearch(
+                    metric=self.evaluate_variant,
+                    max_bootstrapped_demos=self.k,
+                    max_labeled_demos=self.k
+                )
+            else:
+                raise ValueError(f"Unsupported optimizer type: {self.optimizer_type}")
 
     def generate_prompt_variants(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+        """
+        Generate prompt variants using either static or iterative optimization.
+
+        Args:
+            client: The client object for API calls.
+            user_prompt_request: List of prompt templates.
+            max_retries: Maximum number of retries for API calls.
+            retry_delay: Delay between retries.
+
+        Returns:
+            List of generated prompt variants.
+        """
+        if self.use_iterative_optimization == "dspy":
+            return self.generate_prompt_variants_optimized(client, user_prompt_request, max_retries, retry_delay)
+        elif self.use_iterative_optimization == "iterative":
+            return self.generate_prompt_variants_iterative(client, user_prompt_request, max_retries, retry_delay)
+        else:
+            return self.generate_prompt_variants_static(client, user_prompt_request, max_retries, retry_delay)
+
+    def generate_prompt_variants_static(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+        """
+        Generate prompt variants using static method.
+
+        Args:
+            client: The client object for API calls.
+            user_prompt_request: List of prompt templates.
+            max_retries: Maximum number of retries for API calls.
+            retry_delay: Delay between retries.
+
+        Returns:
+            List of generated prompt variants.
+        """
         prompt_variants = []
         for template in user_prompt_request:  # Assume prompt_templates is now a list
             # Generate variants for each template
@@ -51,6 +96,118 @@ class PromptTuner(BaseModel):
             prompt_variants.extend(variant)
         return prompt_variants
 
+    def generate_prompt_variants_optimized(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+        """
+        Generate prompt variants using iterative optimization with FewShotOptimizer from dspy.
+
+        This method employs the FewShotOptimizer to iteratively refine prompt variants based on
+        a set of parameters and an objective function. It aims to find the optimal combination
+        of prompt tuning approaches, complexities, and focuses for each given template.
+
+        Args:
+            client: The client object for API calls.
+            user_prompt_request: List of prompt templates to be optimized.
+            max_retries: Maximum number of retries for API calls to mitigate transient errors.
+            retry_delay: Delay between retries in seconds to avoid overwhelming the API.
+        """
+        prompt_variants = []
+        for template in user_prompt_request:
+            # Compile the optimizer with the current template
+            compiled_program = self.optimizer.compile(trainset=[(template, None)])
+
+            # Generate optimized variant
+            variant = compiled_program(template)
+            prompt_variants.append(variant)
+
+        return prompt_variants
+
+    def generate_prompt_variants_iterative(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+        """
+        Generate prompt variants using an iterative optimization method without dspy.
+
+        This method uses a simple iterative approach to refine prompt variants based on
+        a set of parameters and an objective function. It aims to find an improved combination
+        of prompt tuning approaches, complexities, and focuses for each given template.
+
+        Args:
+            client: The client object for API calls.
+            user_prompt_request: List of prompt templates to be optimized.
+            max_retries: Maximum number of retries for API calls to mitigate transient errors.
+            retry_delay: Delay between retries in seconds to avoid overwhelming the API.
+
+        Returns:
+            List of optimized prompt variants, one for each input template.
+        """
+        prompt_variants = []
+        for template in user_prompt_request:
+            # Ensure template is a string for consistency in processing
+            if not isinstance(template, str):
+                if self.enable_logging:
+                    print(f"Warning: Template '{template}' is not a string. Converting to string.")
+                template = str(template)
+
+            # Define the parameter space for optimization
+            param_space = {
+                'approach': self.prompt_tuning_approaches,
+                'complexity': self.prompt_tuning_complexities,
+                'focus': self.prompt_tuning_focuses,
+            }
+
+            # Define the objective function for optimization
+            def objective_function(**params):
+                # Update the current parameters with those provided by the optimizer
+                self.prompt_tuning_approaches = [params['approach']]
+                self.prompt_tuning_complexities = [params['complexity']]
+                self.prompt_tuning_focuses = [params['focus']]
+
+                # Generate a prompt variant using the current parameters
+                variants = self.generate_prompt_variant(client, template, max_retries, retry_delay)
+                if not variants:
+                    return 0.0  # Return zero score if no variant is generated
+                variant = variants[0]
+
+                # Evaluate the variant and return its score
+                score = self.evaluate_variant(variant)
+                return score
+
+            # Initialize the selected optimizer
+            if self.optimizer_type == "BootstrapFewShotWithRandomSearch":
+                optimizer = self.optimizer
+            else:
+                raise ValueError(f"Unsupported optimizer type: {self.optimizer_type}")
+
+            # Perform optimization to find the best parameters
+            if self.use_iterative_optimization == "dspy":
+                optimized_program = self.optimizer.compile(
+                    student=lambda x: objective_function(**x),
+                    trainset=self.trainset,  # Use actual trainset
+                )
+            elif self.use_iterative_optimization == "iterative":
+                optimized_program = self.iterative_optimization(objective_function)
+            else:
+                optimized_program = objective_function
+
+            best_params = optimized_program.best_params
+            best_score = optimized_program.best_score
+
+            if self.enable_logging:
+                print(f"Best parameters found: {best_params} with score: {best_score}")
+
+            # Update the instance variables with the best found parameters
+            self.prompt_tuning_approaches = [best_params['approach']]
+            self.prompt_tuning_complexities = [best_params['complexity']]
+            self.prompt_tuning_focuses = [best_params['focus']]
+
+            # Generate the best prompt variant using the optimal parameters
+            best_variants = self.generate_prompt_variant(client, template, max_retries, retry_delay)
+            if best_variants:
+                prompt_variants.extend(best_variants)
+            else:
+                prompt_variants.append(template)  # Fallback to the original template if generation fails
+
+        return prompt_variants
+
+        return prompt_variants
 
     def generate_prompt_variant(self, client, user_prompt_request, max_retries, retry_delay):
         # Create a list to store all generated prompt variants
@@ -83,14 +240,15 @@ class PromptTuner(BaseModel):
             system_message = self._create_system_message(
                 user_prompt_request, approach, complexity, focus, topic
             )
-            print("system message")
-            print(system_message)
+            if self.enable_logging:
+                print("system message")
+                print(system_message)
             retry_count = 0
             while retry_count < max_retries:
                 try:
                     # Generate the prompt variant
                     response = client.chat.completions.create(
-                        model="gpt-4o",
+                        model=DEFAULT_OPENAI_MODEL,
                         messages=[
                             {"role": "system", "content": system_message},
                             {
@@ -131,12 +289,50 @@ class PromptTuner(BaseModel):
                 print(f"Failed to generate prompt variant after {max_retries} attempts.")
 
         return full_prompt_variants
+
+    def optimize_prompt(self, client, prompt_variant, max_retries, retry_delay):
+        """
+        Optimize the prompt variant using client API calls directly.
+
+        Args:
+            client: The client object.
+            prompt_variant: The prompt variant to optimize.
+            max_retries: Maximum number of retries.
+            retry_delay: Delay between retries.
+
+        Returns:
+            Optimized prompt variant.
+        """
+        for attempt in range(max_retries):
+            try:
+                # Use client API for optimization
+                response = client.chat.completions.create(
+                    model=DEFAULT_OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are an expert prompt engineer."},
+                        {"role": "user", "content": f"Improve the following prompt for better hallucination detection:\n\n{prompt_variant}\n\nOptimized Prompt:"},
+                    ],
+                    temperature=0.7,
+                )
+                optimized_prompt = response.choices[0].message.content.strip()
+                return optimized_prompt
+            except Exception as e:
+                if self.enable_logging:
+                    print(f"Error during prompt optimization: {e}")
+                    print(f"Retrying... ({attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+
+        # If all retries fail, return the original prompt variant
+        if self.enable_logging:
+            print(f"Failed to optimize prompt variant after {max_retries} attempts.")
+        return prompt_variant
+
     def _create_system_message(
         self, user_prompt_request: str, approach: str, complexity: str, focus: str, topic: str = "hallucination-detection"
     ) -> str:
 
         # Mapping topic to specific instructions
-        topic_instructions= {
+        topic_instructions = {
             "hallucination-detection": "hallucination detection"
         }
 
@@ -157,7 +353,7 @@ class PromptTuner(BaseModel):
         # Mapping task to specific instructions
         focus_instructions = {
             "fact-extraction": f"Direct the model to extract and verify facts potentially prone to {selected_topic}.",
-            "action-points": f"Delinate clear, actionable steps that the user can take to do {selected_topic}.",
+            "action-points": f"Delineate clear, actionable steps that the user can take to do {selected_topic}.",
             "summarization": f"Summarize the key points necessary for effective {selected_topic}.",
             "language-simplification": "Simplify the complexity of the language used in the prompt to make it more accessible.",
             "tone-changes": "Adapt the tone to be more formal or informal, depending on the context or target audience.",
@@ -167,16 +363,16 @@ class PromptTuner(BaseModel):
         selected_focus = focus_instructions.get(focus, "Ensure that the prompt is coherent.")
         # Define the initial part of the message that describes the AI's specialization
         base_message = f"""
-        You are an AI assistant specialized in generating prompts for a system where the goal is {selected_topic}.
-        As the assistant, your goal is to create a prompt that integrates the following parameters effectively:
+You are an AI assistant specialized in generating prompts for a system where the goal is {selected_topic}.
+As the assistant, your goal is to create a prompt that integrates the following parameters effectively:
 
-        - Approach: Use {approach} when generating the prompt.
-        - Complexity: {complexity}
-        - Focus: {selected_focus}
+- Approach: Use {approach} when generating the prompt.
+- Complexity: {complexity}
+- Focus: {selected_focus}
 
 
-        Based on these settings, adjust the base user prompt provided below:
-        """
+Based on these settings, adjust the base user prompt provided below:
+"""
 
         # Construct the final system message
         system_message = base_message + f"Base prompt:\n\n{user_prompt_request}\n\n"
@@ -210,71 +406,109 @@ class PromptTuner(BaseModel):
         topic: Optional[str],
         complexity: Optional[str],
         focus: Optional[str],
+        max_retries: int = 3,
+        retry_delay: int = 5,
     ) -> List[Dict[str, str]]:
         system_message = f"""
-        Generate 3 concise input-output pairs for few-shot learning on {topic}.
-        Tailor examples to these parameters:
-        - Complexity: {complexity}
-        - Focus: {focus}
+Generate 3 concise input-output pairs for few-shot learning on {topic}.
+Tailor examples to these parameters:
+- Complexity: {complexity}
+- Focus: {focus}
 
-        Base prompt: {user_prompt_request}
+Base prompt: {user_prompt_request}
 
-        Format:
-        Input:
-        Query: [query text]
-        Context: [context text]
-        Response: [response text]
+Format:
+Input:
+Query: [query text]
+Context: [context text]
+Response: [response text]
 
-        Output: [Faithful/Not faithful/Refusal]
+Output: [Faithful/Not faithful/Refusal]
 
-        Ensure examples reflect various {topic} scenarios.
-        """
-        if complexity is None or focus is None:
-            return []
+Ensure examples reflect various {topic} scenarios.
+"""
 
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": "Generate the examples."},
-            ],
-            temperature=0.7,
-        )
+        retry_count = 0
+        while retry_count < max_retries:
+            try:
+                response = client.chat.completions.create(
+                    model=DEFAULT_OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": "Generate the examples."},
+                    ],
+                    temperature=0.7,
+                )
 
-        examples_text = response.choices[0].message.content.strip()
-        examples = []
+                examples_text = response.choices[0].message.content.strip()
+                examples = []
 
-        example_pairs = re.findall(
-            r"Input:\nQuery: (.*?)\nContext: (.*?)\nResponse: (.*?)\n\nOutput: (.*?)(?=\n\nInput:|$)",
-            examples_text,
-            re.DOTALL,
-        )
-        for query, context, response, output in example_pairs:
-            examples.append(
-                {
-                    "query": query.strip(),
-                    "context": context.strip(),
-                    "response": response.strip(),
-                    "output": output.strip(),
-                }
-            )
+                example_pairs = re.findall(
+                    r"Input:\nQuery: (.*?)\nContext: (.*?)\nResponse: (.*?)\n\nOutput: (.*?)(?=\n\nInput:|$)",
+                    examples_text,
+                    re.DOTALL,
+                )
+                for query, context, response_text, output in example_pairs:
+                    examples.append(
+                        {
+                            "query": query.strip(),
+                            "context": context.strip(),
+                            "response": response_text.strip(),
+                            "output": output.strip(),
+                        }
+                    )
+                return examples
 
-        return examples
+            except Exception as e:
+                if self.enable_logging:
+                    print(f"Error generating examples: {e}")
+                    print(f"Retrying... ({retry_count + 1}/{max_retries})")
+                time.sleep(retry_delay)
+                retry_count += 1
+
+        if self.enable_logging:
+            print(f"Failed to generate examples after {max_retries} attempts.")
+        return []
 
     def _incorporate_examples(
         self, generated_prompt: str, examples: List[Dict[str, str]]
     ) -> str:
+        examples_text = ""
         for i, example in enumerate(examples, 1):
             example_text = f"""
-            Example {i}:
-            Query: {example['query']}
-            Context: {example['context']}
-            Response: {example['response']}
-            Judgment: {example['output']}
+Example {i}:
+Input:
+Query: {example['query']}
+Context: {example['context']}
+Response: {example['response']}
 
-            """
-            generated_prompt = generated_prompt.replace(f"[EXAMPLE_{i}]", example_text)
-        return generated_prompt
+Output: {example['output']}
+"""
+            examples_text += example_text
+
+        # Incorporate the examples into the generated prompt
+        full_prompt = f"{generated_prompt}\n\n{examples_text}"
+        return full_prompt
+
+    def evaluate_variant(self, variant):
+        # Use the custom_evaluate function to evaluate the variant
+        if self.evaluation_dataset:
+            evaluation_sample = self.evaluation_dataset[0]
+            generated_answer = variant
+            ground_truth = evaluation_sample.get('answer')
+            evaluation_metrics = [
+                {"metric": "Accuracy", "weight": 1.0}
+            ]
+            openai_api_key = None  # Replace with your OpenAI API key if necessary
+            evaluation_result = custom_evaluate(
+                response=generated_answer,
+                evaluation_metrics=evaluation_metrics,
+                openai_api_key=openai_api_key,
+            )
+            return evaluation_result['overall_score']
+        else:
+            # If no evaluation dataset, return a default score
+            return 0.0
 
     def update_params(self, params: Dict[str, Any]):
         if "prompt_tuning_approach" in params:
@@ -296,14 +530,18 @@ class PromptTuner(BaseModel):
     def __repr__(self):
         return self.__str__()
 
-
 def custom_evaluate(
     response: str,
     evaluation_metrics: List[Dict[str, Union[str, float]]],
-    openai_api_key: str,
+    openai_api_key: Optional[str] = None,
     max_retries: int = 3,
     retry_delay: int = 5,  # seconds
 ) -> dict:
+    if openai_api_key:
+        # Set the API key if provided
+        import openai
+        openai.api_key = openai_api_key
+
     metrics = [metric["metric"] for metric in evaluation_metrics]
     weights = {metric["metric"]: metric["weight"] for metric in evaluation_metrics}
 
@@ -311,62 +549,65 @@ def custom_evaluate(
     metrics_format = "\n".join([f'"{metric}": [SCORE]' for metric in metrics])
 
     evaluation_prompt = f"""
-    You are a highly critical expert in evaluating responses to prompts. Your task is to rigorously assess the quality and accuracy of a generated response. Your evaluation must be extremely thorough, critical, and unbiased.
+You are a highly critical expert in evaluating responses to prompts. Your task is to rigorously assess the quality and accuracy of a generated response. Your evaluation must be extremely thorough, critical, and unbiased.
 
-    Evaluate the following response based on these criteria, scoring each from 0 to 100:
+Evaluate the following response based on these criteria, scoring each from 0 to 100:
 
-    {metrics_prompt}
+{metrics_prompt}
 
-    Crucial evaluation guidelines:
-    1. Accuracy is paramount. Any factual errors or misleading information should result in a very low accuracy score.
-    2. Be exceptionally critical. High scores (above 80) should be rare and only given for truly outstanding responses.
-    3. Consider the real-world implications of the advice. Would it be genuinely helpful and appropriate for a context?
-    4. Look for nuance and depth. Surface-level or overly generic advice should not score highly.
-    5. Evaluate the coherence and logical flow of the response.
-    6. Check for potential biases or unfounded assumptions in the advice.
-    7. Assess whether the response addresses all aspects of the original query or instruction.
+Crucial evaluation guidelines:
+1. Accuracy is paramount. Any factual errors or misleading information should result in a very low accuracy score.
+2. Be exceptionally critical. High scores (above 80) should be rare and only given for truly outstanding responses.
+3. Consider the real-world implications of the advice. Would it be genuinely helpful and appropriate for a context?
+4. Look for nuance and depth. Surface-level or overly generic advice should not score highly.
+5. Evaluate the coherence and logical flow of the response.
+6. Check for potential biases or unfounded assumptions in the advice.
+7. Assess whether the response addresses all aspects of the original query or instruction.
 
-    Response to evaluate:
-    {response}
+Response to evaluate:
+{response}
 
-    Provide your evaluation in the following JSON format:
-    {{
-        "scores": {{
-    {metrics_format}
-        }},
-        "overall_score": [OVERALL_SCORE],
-        "critical_analysis": "[Your detailed critical analysis, highlighting strengths, weaknesses, and specific issues]"
-    }}
+Provide your evaluation in the following JSON format:
+{{
+    "scores": {{
+{metrics_format}
+    }},
+    "overall_score": [OVERALL_SCORE],
+    "critical_analysis": "[Your detailed critical analysis, highlighting strengths, weaknesses, and specific issues]"
+}}
 
-    CRITICAL INSTRUCTIONS:
-    1. Scores MUST be integers between 0 and 100. Use the full range appropriately.
-    2. The overall_score should reflect a weighted consideration of all criteria, not just an average.
-    3. In your critical_analysis, provide specific examples from the response to justify your scores.
-    4. Be explicit about any shortcomings, inaccuracies, or areas for improvement.
-    5. Consider potential negative consequences of following the advice, if any.
-    6. If the response is clearly inappropriate or harmful, do not hesitate to give very low scores.
+CRITICAL INSTRUCTIONS:
+1. Scores MUST be integers between 0 and 100. Use the full range appropriately.
+2. The overall_score should reflect a weighted consideration of all criteria, not just an average.
+3. In your critical_analysis, provide specific examples from the response to justify your scores.
+4. Be explicit about any shortcomings, inaccuracies, or areas for improvement.
+5. Consider potential negative consequences of following the advice, if any.
+6. If the response is clearly inappropriate or harmful, do not hesitate to give very low scores.
 
-    Remember: Your evaluation could influence real  decisions. Be as critical and thorough as possible.
-    """
+Remember: Your evaluation could influence real decisions. Be as critical and thorough as possible.
+"""
 
-    client = OpenAI(api_key=openai_api_key)
-    def get_evaluation_result(prompt):
-        completion = client.chat.completions.create(
-            model=DEFAULT_OPENAI_MODEL,
-            messages=[
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            import openai
+            messages = [
                 {
                     "role": "system",
-                    "content": "You are an AI assistant tasked with critically evaluating responses. Your evaluation must be thorough, unbiased, and reflect high standards of accuracy and quality. Do not wrap the json codes in JSON markers",
+                    "content": "You are an AI assistant tasked with critically evaluating responses. Your evaluation must be thorough, unbiased, and reflect high standards of accuracy and quality.",
                 },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-        )
-        return completion.choices[0].message.content
+                {"role": "user", "content": evaluation_prompt},
+            ]
+            completion = openai.ChatCompletion.create(
+                model=DEFAULT_OPENAI_MODEL,
+                messages=messages,
+                temperature=0,
+                max_tokens=1000,
+            )
+            evaluation_result = completion.choices[0].message.content.strip()
 
-    def parse_evaluation_result(evaluation_result: str):
-        evaluation_result_cleaned = evaluation_result.replace("\n", "")
-        try:
+            # Parse the evaluation result
+            evaluation_result_cleaned = evaluation_result.replace("\n", "")
             result = json.loads(evaluation_result_cleaned)
             scores = result.get("scores", {})
             overall_score = result.get("overall_score", 0)
@@ -397,59 +638,32 @@ def custom_evaluate(
                 overall_score = max(0, min(overall_score, 100))
             scaled_overall_score = overall_score / 100
 
-            return scaled_scores, scaled_overall_score, analysis
+            return {
+                "scores": scaled_scores,
+                "overall_score": scaled_overall_score,
+                "explanation": analysis,
+                "evaluation_prompt": evaluation_prompt,
+            }
 
-        except json.JSONDecodeError as e:
-            print(f"Error parsing evaluation result: {e}")
-            print(f"Raw evaluation result: {evaluation_result_cleaned}")
-            return {metric: 0 for metric in metrics}, 0, "Error in evaluation."
+        except Exception as e:
+            print(f"Error during evaluation: {e}")
+            print(f"Retrying... ({retry_count + 1}/{max_retries})")
+            time.sleep(retry_delay)
+            retry_count += 1
 
-    retry_count = 0
-    while retry_count < max_retries:
-        evaluation_result = get_evaluation_result(evaluation_prompt)
-        scores, overall_score, analysis = parse_evaluation_result(evaluation_result)
-
-        if all(metric in scores for metric in metrics) and overall_score is not None:
-            break
-
-        print(f"Retrying evaluation... ({retry_count + 1}/{max_retries})")
-        time.sleep(retry_delay)
-        retry_count += 1
-
-    # Sanity check for obviously wrong answers
-    if (
-        "Accuracy" in scores
-        and scores["Accuracy"] > 0.8
-        and ("error" in response.lower() or "incorrect" in analysis.lower())
-    ):
-        print(
-            "Warning: High accuracy score for potentially erroneous response. Adjusting scores."
-        )
-        scores["Accuracy"] = min(scores["Accuracy"], 0.2)
-        analysis += (
-            " Note: Accuracy score adjusted due to potential errors in the response."
-        )
-
-    # Calculate weighted score
-    total_weight = sum(weights.values())
-    weighted_score = (
-        sum(scores.get(metric, 0) * weights.get(metric, 1) for metric in metrics)
-        / total_weight
-    )
-
+    print(f"Failed to evaluate after {max_retries} attempts.")
     return {
-        "scores": scores,
-        "overall_score": weighted_score,
-        "explanation": analysis,
+        "scores": {metric: 0 for metric in metrics},
+        "overall_score": 0,
+        "explanation": "Evaluation failed.",
         "evaluation_prompt": evaluation_prompt,
     }
-
 
 def custom_evaluate_hallucination(
     generated_answer: str,
     ground_truth: Optional[str],
     evaluation_dataset: List[Dict[str, str]] = None,
-) -> Dict[str, Any]:
+    ) -> Dict[str, Any]:
     """
     Evaluate the generated answer by comparing it with the ground truth and
     dynamically match the closest answer from the given evaluation dataset using TF-IDF based similarity.
@@ -500,7 +714,7 @@ def custom_evaluate_hallucination(
 
     normalized_answer = best_match if highest_similarity > 0.75 else "Not Faithful"
     is_correct = normalized_answer.lower() == ground_truth.lower()
-    score = 1.0 if is_correct  else 0.0
+    score = 1.0 if is_correct else 0.0
 
     analysis = (
         f"The generated answer '{generated_answer}' is most similar to '{best_match}' "
@@ -518,74 +732,3 @@ def custom_evaluate_hallucination(
         "is_correct": is_correct,
         "score": score,
     }
-
-import torch
-from transformers import BertTokenizer, BertModel
-from typing import List, Dict, Optional, Any
-import numpy as np
-
-# Load BERT model and tokenizer
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained('bert-base-uncased')
-
-def get_bert_embedding(text: str) -> torch.Tensor:
-    """Converts text into a BERT embedding vector."""
-    inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True)
-    with torch.no_grad():
-        outputs = model(**inputs)
-    # Use the mean of the token embeddings to create a single vector representation
-    return outputs.last_hidden_state.mean(dim=1).squeeze()
-
-def accuracy_evaluator(
-    generated_answer: str,
-    ground_truth: Optional[str],
-    evaluation_dataset: List[Dict[str, str]] = None,
-) -> Dict[str, Any]:
-    """
-    Evaluate the generated answer by comparing it with the ground truth using BERT-based similarity.
-
-    Args:
-    - generated_answer: The generated answer to be evaluated.
-    - ground_truth: The correct ground truth answer.
-    - evaluation_dataset: (Optional) A list of dictionaries containing 'query', 'context', 'response', and 'answer'.
-
-    Returns:
-    - A dictionary with the normalized answer, analysis, and similarity score as a measure of accuracy.
-    """
-    if not isinstance(ground_truth, str):
-        return {
-            "answer": "Not provided",
-            "analysis": "The ground truth is not provided or is not a valid string.",
-            "score": 0.0,
-        }
-
-    # Get BERT embeddings for both the generated answer and the ground truth
-    generated_vec = get_bert_embedding(generated_answer.lower())
-    ground_truth_vec = get_bert_embedding(ground_truth.lower())
-
-    # Calculate cosine similarity between the BERT embeddings
-    similarity_score = torch.nn.functional.cosine_similarity(generated_vec, ground_truth_vec, dim=0).item()
-
-    analysis = (
-        f"The generated answer '{generated_answer}' has a similarity score of {similarity_score:.2f} "
-        f"compared to the ground truth answer '{ground_truth}'. "
-    )
-
-    return {
-        "answer": generated_answer,
-        "analysis": analysis,
-        "score": similarity_score,
-    }
-def transform_eval_dataset_to_eval_json(eval_dataset):
-    eval_json = {
-        "queries": {},
-        "responses": {}
-    }
-
-    # Loop through each entry in eval_dataset
-    for idx, entry in enumerate(eval_dataset, start=1):
-        query_key = f"query{idx}"
-        eval_json["queries"][query_key] = entry['query']
-        eval_json["responses"][query_key] = entry['answer']
-
-    return eval_json
