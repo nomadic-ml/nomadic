@@ -3,12 +3,15 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import io
 
 # Third-party imports
 import numpy as np
 import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import networkx as nx
+import matplotlib.pyplot as plt
 
 # llama_index imports
 from llama_index.core import (
@@ -32,6 +35,66 @@ from llama_index.readers.file import PDFReader
 # Local imports
 from nomadic.model import OpenAIModel
 from nomadic.result import RunResult
+
+class RunResult:
+    def __init__(self, response: Response, eval_result: Dict[str, Any], visualization: Optional[bytes] = None):
+        self.response = response
+        self.eval_result = eval_result
+        self.visualization = visualization
+
+class GraphRAG:
+    def __init__(self, docs: List[Document]):
+        self.docs = docs
+        self.knowledge_graph = self.build_knowledge_graph()
+        self.index = self.create_index()
+        self.top_results = []
+        self.accuracy_scores = []
+        self.explanations = []
+
+    def build_knowledge_graph(self):
+        G = nx.Graph()
+        for doc in self.docs:
+            G.add_node(doc.doc_id, content=doc.text)
+            # Add edges based on similarity or other criteria
+        return G
+
+    def create_index(self):
+        return VectorStoreIndex.from_documents(self.docs)
+
+    def global_search(self, query: str):
+        # Use community detection for global search
+        communities = nx.community.greedy_modularity_communities(self.knowledge_graph)
+        relevant_communities = []
+        for community in communities:
+            if any(query.lower() in self.knowledge_graph.nodes[node]['content'].lower() for node in community):
+                relevant_communities.extend(community)
+        return [self.docs[int(node)] for node in relevant_communities]
+
+    def local_search(self, query: str):
+        # Use vector search for local entity-centric search
+        query_engine = self.index.as_query_engine()
+        response = query_engine.query(query)
+        return response.source_nodes
+
+    def apply_prompt_tuning(self, prompt: str, strategy: str):
+        if strategy == "entity_extraction":
+            return f"Extract key entities from the following: {prompt}"
+        elif strategy == "relationship_focus":
+            return f"Focus on relationships between entities in: {prompt}"
+        else:
+            return prompt  # Default: no tuning
+
+    def store_results(self, top_results, accuracy_scores, explanations):
+        self.top_results = top_results
+        self.accuracy_scores = accuracy_scores
+        self.explanations = explanations
+
+    def get_visualization_data(self):
+        return {
+            "top_results": self.top_results,
+            "accuracy_scores": self.accuracy_scores,
+            "explanations": self.explanations
+        }
 
 
 def download_file(url: str, output_path: str):
@@ -272,13 +335,17 @@ def run_retrieval_pipeline(params_dict: Dict[str, Any]) -> RunResult:
     similarity_threshold = params_dict.get("similarity_threshold", 0.7)
     embedding_model = params_dict.get("embedding_model", "text-embedding-ada-002")
     query_transformation = params_dict.get("query_transformation", None)
+    rag_mode = params_dict.get("rag_mode", "regular")
 
     transformed_queries = [
         apply_query_transformation(query, query_transformation)
         for query in fixed_params["eval_qs"]
     ]
 
-    index = _build_index(chunk_size, fixed_params["docs"], overlap, embedding_model)
+    if rag_mode == "graphrag":
+        index = GraphRAG(fixed_params["docs"])
+    else:
+        index = _build_index(chunk_size, fixed_params["docs"], overlap, embedding_model)
 
     query_engine = index.as_query_engine(
         similarity_top_k=top_k,
@@ -358,6 +425,19 @@ def run_retrieval_pipeline(params_dict: Dict[str, Any]) -> RunResult:
     with open("retrieval_results.json", "w") as f:
         json.dump(retrieval_results, f)
 
+    # Generate visualization for both GraphRAG and normal RAG
+    if rag_mode == "graphrag":
+        index.store_results(
+            [result["best_doc"]["content"] for result in best_retrieval_results],
+            [result["best_doc"]["score"] for result in best_retrieval_results],
+            [f"Top result for query: {result['query']}" for result in best_retrieval_results]
+        )
+    visualization = visualize_rag_results(
+        index,
+        fixed_params["eval_qs"],
+        avg_score
+    )
+
     return RunResult(
         score=avg_score,
         params=params_dict,  # This now only contains the variable parameters
@@ -366,6 +446,7 @@ def run_retrieval_pipeline(params_dict: Dict[str, Any]) -> RunResult:
             "best_retrieval_results": best_retrieval_results,
             "retrieval_time_ms": retrieval_time_ms,  # Include retrieval time in the metadata
         },
+        visualization=visualization
     )
 
 
@@ -516,6 +597,9 @@ def run_rag_pipeline(param_dict: Dict[str, Any], evaluator: Any = None) -> RunRe
         "temperature": 0.7,
         "model_name": "gpt-3.5-turbo",
         "embedding_model": "text-embedding-ada-002",
+        "rag_mode": "regular",
+        "query_mode": "global",
+        "prompt_tuning_strategy": None,
     }
 
     required_params = ["docs", "eval_qs", "ref_response_strs"]
@@ -542,45 +626,39 @@ def run_rag_pipeline(param_dict: Dict[str, Any], evaluator: Any = None) -> RunRe
     temperature = param_dict["temperature"]
     model_name = param_dict["model_name"]
     embedding_model = param_dict["embedding_model"]
+    rag_mode = param_dict["rag_mode"]
+    query_mode = param_dict["query_mode"]
+    prompt_tuning_strategy = param_dict["prompt_tuning_strategy"]
 
     # Use SemanticSimilarityEvaluator if no evaluator is provided
     if evaluator is None:
         evaluator = SemanticSimilarityEvaluator()
 
-    # build index
-    index = _build_index(chunk_size, docs, overlap, embedding_model)
+    # Run retrieval pipeline
+    retrieval_result = run_retrieval_pipeline(param_dict)
 
-    # query engine
-    query_engine = index.as_query_engine(
-        similarity_top_k=top_k,
-        similarity_threshold=similarity_threshold,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        model_name=model_name,
-    )
+    # Run inference pipeline
+    inference_result = run_inference_pipeline({
+        **param_dict,
+        "best_retrieval_results": retrieval_result.metadata["best_retrieval_results"],
+    })
 
-    # get predicted responses
-    pred_response_objs = get_responses(eval_qs, query_engine, show_progress=True)
+    # Combine scores from retrieval and inference
+    combined_score = (retrieval_result.score + inference_result.score) / 2
 
-    # run evaluator
-    eval_results, pred_responses = [], []
-    for _, (eval_q, pred_response, ref_response) in enumerate(
-        zip(eval_qs, pred_response_objs, ref_response_strs)
-    ):
-        eval_results.append(
-            evaluator.evaluate_response(
-                eval_q, response=pred_response, reference=ref_response
-            )
-        )
-        pred_responses.append(pred_response)
-
-    # get mean score
-    mean_score = np.array([r.score for r in eval_results]).mean()
+    # Combine metadata
+    combined_metadata = {
+        **retrieval_result.metadata,
+        **inference_result.metadata,
+        "retrieval_score": retrieval_result.score,
+        "inference_score": inference_result.score,
+    }
 
     return RunResult(
-        score=mean_score,
+        score=combined_score,
         params=param_dict,
-        metadata={"pred_responses": pred_responses},
+        metadata=combined_metadata,
+        visualization=retrieval_result.visualization
     )
 
 
@@ -759,7 +837,54 @@ def create_inference_heatmap(experiment_result):
 
     return pivot_df
 
+def visualize_rag_results(rag_object, queries, retrieval_score):
+    """
+    Create visualizations for RAG results including retrieved results, comparison to questions, and retrieval score.
 
-# Usage:
-# Assuming you have your ExperimentResult in a variable called 'experiment_result'
-# create_inference_heatmap(experiment_result)
+    Args:
+        rag_object: The RAG object (GraphRAG or normal RAG) containing results to visualize.
+        queries (List[str]): List of queries/questions asked.
+        retrieval_score (float): The overall retrieval score.
+
+    Returns:
+        bytes: PNG image of the visualization.
+    """
+    data = rag_object.get_visualization_data()
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 15))
+
+    # Accuracy scores visualization
+    accuracy_scores = data['accuracy_scores'][:5]  # Limit to top 5 results
+    ax1.bar(range(len(accuracy_scores)), accuracy_scores)
+    ax1.set_title('Accuracy Scores for Top 5 Results')
+    ax1.set_xlabel('Result Index')
+    ax1.set_ylabel('Accuracy Score')
+    ax1.set_ylim(0, 1)
+    for i, v in enumerate(accuracy_scores):
+        ax1.text(i, v, f'{v:.2f}', ha='center', va='bottom')
+    ax1.text(0.95, 0.95, f'Overall Retrieval Score: {retrieval_score:.2f}',
+             transform=ax1.transAxes, ha='right', va='top', fontweight='bold')
+
+    # Top results visualization
+    ax2.axis('off')
+    ax2.set_title('Top 5 Retrieved Results')
+    text = "\n".join([f"{i+1}. {result[:100]}..." for i, result in enumerate(data['top_results'][:5])])
+    ax2.text(0, 1, text, verticalalignment='top', wrap=True)
+
+    # Comparison of results to questions
+    ax3.axis('off')
+    ax3.set_title('Comparison of Results to Questions')
+    comparison_text = ""
+    for i, (query, result) in enumerate(zip(queries[:5], data['top_results'][:5])):
+        comparison_text += f"Q{i+1}: {query}\n"
+        comparison_text += f"R{i+1}: {result[:100]}...\n"
+        comparison_text += f"Explanation: {data['explanations'][i][:100]}...\n\n"
+    ax3.text(0, 1, comparison_text, verticalalignment='top', wrap=True)
+
+    plt.tight_layout()
+
+    # Save the plot to a bytes object
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    return buf.getvalue()
