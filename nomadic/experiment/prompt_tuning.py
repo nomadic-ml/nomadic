@@ -1,5 +1,3 @@
-# prompt_tuner.py
-
 from typing import List, Optional, Dict, Union, Any
 from itertools import product
 import time
@@ -7,10 +5,19 @@ import re
 import json
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-import dspy
-
 # Import the OpenAI class as per your code
 from openai import OpenAI  # Ensure this import aligns with your environment
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from ipywidgets import interact, widgets
+from typing import List, Dict, Union, Optional
+import numpy as np
+import time
+import torch
+from transformers import BertTokenizer, BertModel
+from typing import List, Dict, Optional, Any
+import numpy as np
+
 
 # Import dspy
 import dspy  # Ensure dspy is installed in your environment
@@ -44,7 +51,7 @@ class PromptTuner:
         self.optimizer_type = optimizer_type
 
         # Initialize the optimizer if DSPy optimization is enabled
-        if self.use_iterative_optimization:
+        if self.use_iterative_optimization == "dspy":
             if self.optimizer_type == "BootstrapFewShotWithRandomSearch":
                 from dspy.teleprompt import BootstrapFewShotWithRandomSearch
                 # Configure the BootstrapFewShotWithRandomSearch optimizer
@@ -73,6 +80,8 @@ class PromptTuner:
             return self.generate_prompt_variants_optimized(client, user_prompt_request, max_retries, retry_delay)
         elif self.use_iterative_optimization == "iterative":
             return self.generate_prompt_variants_iterative(client, user_prompt_request, max_retries, retry_delay)
+        elif self.use_iterative_optimization == "rl_agent":
+            return self.generate_prompt_variants_rl_agent(client, user_prompt_request, max_retries, retry_delay)
         else:
             return self.generate_prompt_variants_static(client, user_prompt_request, max_retries, retry_delay)
 
@@ -206,6 +215,67 @@ class PromptTuner:
                 prompt_variants.append(template)  # Fallback to the original template if generation fails
 
         return prompt_variants
+
+    def generate_prompt_variants_rl_agent(self, client, user_prompt_request, max_retries: int = 3, retry_delay: int = 5):
+        """
+        Generate prompt variants using an iterative optimization method with an RL agent.
+
+        This method uses a reinforcement learning agent to iteratively refine prompt variants based on
+        a defined reward function, which is the evaluation score of the prompt. The agent continues to
+        improve the prompt until an optimal score is achieved or the maximum iterations are reached.
+
+        Args:
+            client: The client object for API calls.
+            user_prompt_request: List of prompt templates to be optimized.
+            max_retries: Maximum number of retries for API calls.
+            retry_delay: Delay between retries.
+
+        Returns:
+            List of optimized prompt variants, one for each input template.
+        """
+        prompt_variants = []
+        max_iterations = 50  # Maximum number of iterations for the RL agent
+        epsilon = 0.01  # Threshold for convergence
+
+        for template in user_prompt_request:
+            current_prompt = template
+            best_prompt = current_prompt
+            best_score = float('-inf')
+            iteration = 0
+
+            while iteration < max_iterations:
+                if self.enable_logging:
+                    print(f"\nIteration {iteration + 1}/{max_iterations}")
+                    print(f"Current Prompt:\n{current_prompt}\n")
+
+                # State: Current prompt
+                state = current_prompt
+
+                # Evaluate the current prompt to get the reward
+                reward = self.evaluate_variant(state)
+                if self.enable_logging:
+                    print(f"Evaluation Score: {reward}")
+
+                # Update the best prompt if the reward is better
+                if reward > best_score:
+                    best_score = reward
+                    best_prompt = state
+
+                # Check for convergence
+                if reward >= 1.0 - epsilon:
+                    if self.enable_logging:
+                        print("Optimal prompt achieved.")
+                    break
+
+                # Action: Modify the prompt based on feedback
+                feedback = self.get_feedback(state)
+                action = self.modify_prompt_with_feedback(client, state, feedback, max_retries, retry_delay)
+
+                # Update the prompt (next state)
+                current_prompt = action
+                iteration += 1
+
+            prompt_variants.append(best_prompt)
 
         return prompt_variants
 
@@ -510,6 +580,77 @@ Output: {example['output']}
             # If no evaluation dataset, return a default score
             return 0.0
 
+    def get_feedback(self, prompt):
+        """
+        Generate feedback for the given prompt.
+
+        Args:
+            prompt: The prompt to evaluate.
+
+        Returns:
+            Feedback string based on evaluation.
+        """
+        # For simplicity, we can use the evaluation explanation as feedback
+        evaluation_metrics = [
+            {"metric": "Accuracy", "weight": 1.0}
+        ]
+        openai_api_key = None  # Replace with your OpenAI API key if necessary
+        evaluation_result = custom_evaluate(
+            response=prompt,
+            evaluation_metrics=evaluation_metrics,
+            openai_api_key=openai_api_key,
+        )
+        feedback = evaluation_result.get('explanation', '')
+        return feedback
+
+    def modify_prompt_with_feedback(self, client, prompt, feedback, max_retries, retry_delay):
+        """
+        Modify the prompt based on the feedback.
+
+        Args:
+            client: The client object for API calls.
+            prompt: The current prompt.
+            feedback: Feedback string to guide the modification.
+            max_retries: Maximum number of retries.
+            retry_delay: Delay between retries.
+
+        Returns:
+            Modified prompt.
+        """
+        system_message = f"""
+You are an expert prompt engineer. Improve the following prompt based on the feedback provided.
+
+Original Prompt:
+{prompt}
+
+Feedback:
+{feedback}
+
+Provide the improved prompt, ensuring it addresses the issues mentioned.
+"""
+
+        for attempt in range(max_retries):
+            try:
+                response = client.chat.completions.create(
+                    model=DEFAULT_OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": "Provide the improved prompt."},
+                    ],
+                    temperature=0.7,
+                )
+                new_prompt = response.choices[0].message.content.strip()
+                return new_prompt
+            except Exception as e:
+                if self.enable_logging:
+                    print(f"Error modifying prompt: {e}")
+                    print(f"Retrying... ({attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+
+        if self.enable_logging:
+            print(f"Failed to modify prompt after {max_retries} attempts.")
+        return prompt  # Return the original prompt if unable to modify
+
     def update_params(self, params: Dict[str, Any]):
         if "prompt_tuning_approach" in params:
             self.prompt_tuning_approaches = [params["prompt_tuning_approach"]]
@@ -732,3 +873,145 @@ def custom_evaluate_hallucination(
         "is_correct": is_correct,
         "score": score,
     }
+class RLSimulation:
+    def __init__(self, prompt_tuner, client, initial_prompt, evaluation_metrics, openai_api_key=None):
+        self.prompt_tuner = prompt_tuner
+        self.client = client
+        self.initial_prompt = initial_prompt
+        self.evaluation_metrics = evaluation_metrics
+        self.openai_api_key = openai_api_key
+        self.prompts = []
+        self.scores = []
+        self.feedbacks = []
+        self.iterations = 0
+        self.max_iterations = 10  # You can adjust this
+        self.epsilon = 0.01  # Convergence threshold
+
+    def run_simulation(self):
+        current_prompt = self.initial_prompt
+        best_prompt = current_prompt
+        best_score = float('-inf')
+
+        for iteration in range(self.max_iterations):
+            print(f"Iteration {iteration + 1}/{self.max_iterations}")
+            print(f"Current Prompt:\n{current_prompt}\n")
+
+            # Evaluate the current prompt
+            evaluation_result = custom_evaluate(
+                response=current_prompt,
+                evaluation_metrics=self.evaluation_metrics,
+                openai_api_key=self.openai_api_key,
+            )
+            score = evaluation_result['overall_score']
+            feedback = evaluation_result.get('explanation', '')
+
+            print(f"Evaluation Score: {score}")
+            print(f"Feedback:\n{feedback}\n")
+
+            # Store the data for visualization
+            self.prompts.append(current_prompt)
+            self.scores.append(score)
+            self.feedbacks.append(feedback)
+            self.iterations += 1
+
+            # Update the best prompt if the score is better
+            if score > best_score:
+                best_score = score
+                best_prompt = current_prompt
+
+            # Check for convergence
+            if score >= 1.0 - self.epsilon:
+                print("Optimal prompt achieved.")
+                break
+
+            # Generate a new prompt variant using the feedback
+            current_prompt = self.prompt_tuner.modify_prompt_with_feedback(
+                self.client, current_prompt, feedback, max_retries=3, retry_delay=2
+            )
+
+        print("Simulation complete.")
+        return best_prompt
+
+    def plot_scores(self):
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(1, self.iterations + 1), self.scores, marker='o', linestyle='-')
+        plt.title('Prompt Evaluation Score Over Iterations')
+        plt.xlabel('Iteration')
+        plt.ylabel('Evaluation Score')
+        plt.xticks(range(1, self.iterations + 1))
+        plt.ylim(0, 1)
+        plt.grid(True)
+        plt.show()
+
+    def display_prompts(self):
+        def show_prompt(iteration):
+            index = iteration - 1
+            print(f"Iteration {iteration}")
+            print(f"Prompt:\n{self.prompts[index]}\n")
+            print(f"Evaluation Score: {self.scores[index]}")
+            print(f"Feedback:\n{self.feedbacks[index]}\n")
+
+        interact(
+            show_prompt,
+            iteration=widgets.IntSlider(
+                min=1, max=self.iterations, step=1, value=1,
+                description='Iteration',
+                style={'description_width': 'initial'}
+            )
+        )
+# Load BERT model and tokenizer
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained('bert-base-uncased')
+
+def get_bert_embedding(text: str) -> torch.Tensor:
+    """Converts text into a BERT embedding vector."""
+    inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    # Use the mean of the token embeddings to create a single vector representation
+    return outputs.last_hidden_state.mean(dim=1).squeeze()
+def accuracy_evaluator(
+    generated_answer: str,
+    ground_truth: Optional[str],
+    evaluation_dataset: List[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluate the generated answer by comparing it with the ground truth using BERT-based similarity.
+    Args:
+    - generated_answer: The generated answer to be evaluated.
+    - ground_truth: The correct ground truth answer.
+    - evaluation_dataset: (Optional) A list of dictionaries containing 'query', 'context', 'response', and 'answer'.
+    Returns:
+    - A dictionary with the normalized answer, analysis, and similarity score as a measure of accuracy.
+    """
+    if not isinstance(ground_truth, str):
+        return {
+            "answer": "Not provided",
+            "analysis": "The ground truth is not provided or is not a valid string.",
+            "score": 0.0,
+        }
+    # Get BERT embeddings for both the generated answer and the ground truth
+    generated_vec = get_bert_embedding(generated_answer.lower())
+    ground_truth_vec = get_bert_embedding(ground_truth.lower())
+    # Calculate cosine similarity between the BERT embeddings
+    similarity_score = torch.nn.functional.cosine_similarity(generated_vec, ground_truth_vec, dim=0).item()
+    analysis = (
+        f"The generated answer '{generated_answer}' has a similarity score of {similarity_score:.2f} "
+        f"compared to the ground truth answer '{ground_truth}'. "
+    )
+    return {
+        "answer": generated_answer,
+        "analysis": analysis,
+        "score": similarity_score,
+    }
+def transform_eval_dataset_to_eval_json(eval_dataset):
+    eval_json = {
+        "queries": {},
+        "responses": {}
+    }
+    # Loop through each entry in eval_dataset
+    for idx, entry in enumerate(eval_dataset, start=1):
+        query_key = f"query{idx}"
+        eval_json["queries"][query_key] = entry['query']
+        eval_json["responses"][query_key] = entry['answer']
+    return eval_json
