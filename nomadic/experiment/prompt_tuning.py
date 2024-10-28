@@ -5,19 +5,23 @@ import re
 import json
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-# Import the OpenAI class as per your code
-from openai import OpenAI  # Ensure this import aligns with your environment
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from ipywidgets import interact, widgets
-from typing import List, Dict, Union, Optional
-import numpy as np
-import time
 import torch
 from transformers import BertTokenizer, BertModel
-from typing import List, Dict, Optional, Any
-import numpy as np
+from openai import OpenAI
 
+# Import evaluation functions
+from src.helpers.evaluation.base_evaluator import (
+    accuracy_evaluator,
+    get_bert_embedding,
+    evaluate_response,
+    calculate_mean_score
+)
+
+# Import base experiment class
+from src.experiment.base import BaseExperiment
 
 # Import dspy
 import dspy  # Ensure dspy is installed in your environment
@@ -561,21 +565,18 @@ Output: {example['output']}
         return full_prompt
 
     def evaluate_variant(self, variant):
-        # Use the custom_evaluate function to evaluate the variant
+        # Use the base_evaluator's accuracy_evaluator function to evaluate the variant
         if self.evaluation_dataset:
             evaluation_sample = self.evaluation_dataset[0]
             generated_answer = variant
             ground_truth = evaluation_sample.get('answer')
-            evaluation_metrics = [
-                {"metric": "Accuracy", "weight": 1.0}
-            ]
-            openai_api_key = None  # Replace with your OpenAI API key if necessary
-            evaluation_result = custom_evaluate(
-                response=generated_answer,
-                evaluation_metrics=evaluation_metrics,
-                openai_api_key=openai_api_key,
+            from src.helpers.evaluation.base_evaluator import accuracy_evaluator
+            evaluation_result = accuracy_evaluator(
+                generated_answer=generated_answer,
+                ground_truth=ground_truth,
+                evaluation_dataset=self.evaluation_dataset
             )
-            return evaluation_result['overall_score']
+            return evaluation_result['similarity_score']
         else:
             # If no evaluation dataset, return a default score
             return 0.0
@@ -590,18 +591,26 @@ Output: {example['output']}
         Returns:
             Feedback string based on evaluation.
         """
-        # For simplicity, we can use the evaluation explanation as feedback
-        evaluation_metrics = [
-            {"metric": "Accuracy", "weight": 1.0}
-        ]
-        openai_api_key = None  # Replace with your OpenAI API key if necessary
-        evaluation_result = custom_evaluate(
-            response=prompt,
-            evaluation_metrics=evaluation_metrics,
-            openai_api_key=openai_api_key,
-        )
-        feedback = evaluation_result.get('explanation', '')
-        return feedback
+        # Use accuracy_evaluator to evaluate the prompt
+        if self.evaluation_dataset and len(self.evaluation_dataset) > 0:
+            evaluation_sample = self.evaluation_dataset[0]
+            ground_truth = evaluation_sample.get('answer', '')
+
+            evaluation_result = accuracy_evaluator(
+                generated_answer=prompt,
+                ground_truth=ground_truth,
+                evaluation_dataset=self.evaluation_dataset
+            )
+
+            # Construct feedback from evaluation metrics
+            feedback = f"Similarity score: {evaluation_result['similarity_score']:.2f}"
+            if 'evaluation_metrics' in evaluation_result:
+                metrics = evaluation_result['evaluation_metrics']
+                feedback += f"\nExact match: {metrics.get('exact_match', 0)}"
+                if 'bert_similarity' in metrics:
+                    feedback += f"\nBERT similarity: {metrics['bert_similarity']:.2f}"
+            return feedback
+        return "No evaluation dataset available for feedback"
 
     def modify_prompt_with_feedback(self, client, prompt, feedback, max_retries, retry_delay):
         """
@@ -671,215 +680,26 @@ Provide the improved prompt, ensuring it addresses the issues mentioned.
     def __repr__(self):
         return self.__str__()
 
-def custom_evaluate(
-    response: str,
-    evaluation_metrics: List[Dict[str, Union[str, float]]],
-    openai_api_key: Optional[str] = None,
-    max_retries: int = 3,
-    retry_delay: int = 5,  # seconds
-) -> dict:
-    if openai_api_key:
-        # Set the API key if provided
-        import openai
-        openai.api_key = openai_api_key
 
-    metrics = [metric["metric"] for metric in evaluation_metrics]
-    weights = {metric["metric"]: metric["weight"] for metric in evaluation_metrics}
 
-    metrics_prompt = "\n".join([f"{i+1}. {metric}" for i, metric in enumerate(metrics)])
-    metrics_format = "\n".join([f'"{metric}": [SCORE]' for metric in metrics])
 
-    evaluation_prompt = f"""
-You are a highly critical expert in evaluating responses to prompts. Your task is to rigorously assess the quality and accuracy of a generated response. Your evaluation must be extremely thorough, critical, and unbiased.
 
-Evaluate the following response based on these criteria, scoring each from 0 to 100:
-
-{metrics_prompt}
-
-Crucial evaluation guidelines:
-1. Accuracy is paramount. Any factual errors or misleading information should result in a very low accuracy score.
-2. Be exceptionally critical. High scores (above 80) should be rare and only given for truly outstanding responses.
-3. Consider the real-world implications of the advice. Would it be genuinely helpful and appropriate for a context?
-4. Look for nuance and depth. Surface-level or overly generic advice should not score highly.
-5. Evaluate the coherence and logical flow of the response.
-6. Check for potential biases or unfounded assumptions in the advice.
-7. Assess whether the response addresses all aspects of the original query or instruction.
-
-Response to evaluate:
-{response}
-
-Provide your evaluation in the following JSON format:
-{{
-    "scores": {{
-{metrics_format}
-    }},
-    "overall_score": [OVERALL_SCORE],
-    "critical_analysis": "[Your detailed critical analysis, highlighting strengths, weaknesses, and specific issues]"
-}}
-
-CRITICAL INSTRUCTIONS:
-1. Scores MUST be integers between 0 and 100. Use the full range appropriately.
-2. The overall_score should reflect a weighted consideration of all criteria, not just an average.
-3. In your critical_analysis, provide specific examples from the response to justify your scores.
-4. Be explicit about any shortcomings, inaccuracies, or areas for improvement.
-5. Consider potential negative consequences of following the advice, if any.
-6. If the response is clearly inappropriate or harmful, do not hesitate to give very low scores.
-
-Remember: Your evaluation could influence real decisions. Be as critical and thorough as possible.
-"""
-
-    retry_count = 0
-    while retry_count < max_retries:
-        try:
-            import openai
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are an AI assistant tasked with critically evaluating responses. Your evaluation must be thorough, unbiased, and reflect high standards of accuracy and quality.",
-                },
-                {"role": "user", "content": evaluation_prompt},
-            ]
-            completion = openai.ChatCompletion.create(
-                model=DEFAULT_OPENAI_MODEL,
-                messages=messages,
-                temperature=0,
-                max_tokens=1000,
-            )
-            evaluation_result = completion.choices[0].message.content.strip()
-
-            # Parse the evaluation result
-            evaluation_result_cleaned = evaluation_result.replace("\n", "")
-            result = json.loads(evaluation_result_cleaned)
-            scores = result.get("scores", {})
-            overall_score = result.get("overall_score", 0)
-            analysis = result.get("critical_analysis", "")
-
-            # Ensure all scores are integers and within range
-            for metric in metrics:
-                if metric not in scores or not isinstance(scores[metric], (int, float)):
-                    print(
-                        f"Warning: Invalid or missing score for metric '{metric}'. Assigning default score of 0."
-                    )
-                    scores[metric] = 0
-                else:
-                    scores[metric] = round(scores[metric])
-                    scores[metric] = max(0, min(scores[metric], 100))
-
-            # Scale scores to be between 0 and 1
-            scaled_scores = {metric: score / 100 for metric, score in scores.items()}
-
-            # Ensure overall score is an integer and within range, then scale
-            if not isinstance(overall_score, (int, float)):
-                print(
-                    f"Warning: Invalid overall score: {overall_score}. Calculating from individual scores."
-                )
-                overall_score = sum(scores.values()) / len(scores)
-            else:
-                overall_score = round(overall_score)
-                overall_score = max(0, min(overall_score, 100))
-            scaled_overall_score = overall_score / 100
-
-            return {
-                "scores": scaled_scores,
-                "overall_score": scaled_overall_score,
-                "explanation": analysis,
-                "evaluation_prompt": evaluation_prompt,
-            }
-
-        except Exception as e:
-            print(f"Error during evaluation: {e}")
-            print(f"Retrying... ({retry_count + 1}/{max_retries})")
-            time.sleep(retry_delay)
-            retry_count += 1
-
-    print(f"Failed to evaluate after {max_retries} attempts.")
-    return {
-        "scores": {metric: 0 for metric in metrics},
-        "overall_score": 0,
-        "explanation": "Evaluation failed.",
-        "evaluation_prompt": evaluation_prompt,
-    }
-
-def custom_evaluate_hallucination(
-    generated_answer: str,
-    ground_truth: Optional[str],
-    evaluation_dataset: List[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
-    """
-    Evaluate the generated answer by comparing it with the ground truth and
-    dynamically match the closest answer from the given evaluation dataset using TF-IDF based similarity.
-
-    Args:
-    - generated_answer: The generated answer to be evaluated.
-    - ground_truth: The correct ground truth answer.
-    - evaluation_dataset: A list of dictionaries, each containing 'query', 'context', 'response', and 'answer'.
-
-    Returns:
-    - A dictionary with the normalized answer, analysis, correctness, and score.
-    """
-    if not evaluation_dataset:
-        return {
-            "answer": "Not provided",
-            "analysis": "Evaluation dataset is missing or not provided.",
-            "is_correct": False,
-            "score": 0.0,
-        }
-
-    if not isinstance(ground_truth, str):
-        return {
-            "answer": "Not provided",
-            "analysis": "The ground truth is not provided or is not a valid string.",
-            "is_correct": False,
-            "score": 0.0,
-        }
-
-    # Prepare the data for TF-IDF vectorization
-    evaluation_labels = [entry["answer"].strip().lower() for entry in evaluation_dataset]
-    all_answers = [generated_answer.strip().lower()] + evaluation_labels
-
-    # Use TF-IDF to create embeddings
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform(all_answers)
-
-    # Calculate cosine similarity between generated answer and all evaluation labels
-    generated_vec = tfidf_matrix[0].toarray()
-    label_vecs = tfidf_matrix[1:].toarray()
-
-    cosine_similarities = np.dot(label_vecs, generated_vec.T).flatten() / (
-        np.linalg.norm(label_vecs, axis=1) * np.linalg.norm(generated_vec)
-    )
-
-    best_match_index = np.argmax(cosine_similarities)
-    highest_similarity = cosine_similarities[best_match_index]
-    best_match = evaluation_labels[best_match_index]
-
-    normalized_answer = best_match if highest_similarity > 0.75 else "Not Faithful"
-    is_correct = normalized_answer.lower() == ground_truth.lower()
-    score = 1.0 if is_correct else 0.0
-
-    analysis = (
-        f"The generated answer '{generated_answer}' is most similar to '{best_match}' "
-        f"with a similarity score of {highest_similarity:.2f}. "
-    )
-    analysis += (
-        "The answer is considered correct as it matches the ground truth."
-        if is_correct
-        else f"The answer is considered incorrect as it does not match the ground truth '{ground_truth}'."
-    )
-
-    return {
-        "answer": normalized_answer,
-        "analysis": analysis,
-        "is_correct": is_correct,
-        "score": score,
-    }
-class RLSimulation:
-    def __init__(self, prompt_tuner, client, initial_prompt, evaluation_metrics, openai_api_key=None):
-        self.prompt_tuner = prompt_tuner
-        self.client = client
-        self.initial_prompt = initial_prompt
-        self.evaluation_metrics = evaluation_metrics
-        self.openai_api_key = openai_api_key
+class RLSimulation(BaseExperiment):
+    def __init__(self, param_fn=None, params=None, fixed_param_dict=None, enable_logging=True):
+        super().__init__(
+            model="gpt-4",  # Default model
+            evaluation_dataset=[],  # Will be populated during simulation
+            use_iterative_optimization=True,
+            param_fn=param_fn,
+            params=params,
+            fixed_param_dict=fixed_param_dict,
+            enable_logging=enable_logging
+        )
+        self.prompt_tuner = None  # Will be initialized in setup
+        self.client = None
+        self.initial_prompt = None
+        self.evaluation_metrics = None
+        self.openai_api_key = None
         self.prompts = []
         self.scores = []
         self.feedbacks = []
@@ -887,32 +707,60 @@ class RLSimulation:
         self.max_iterations = 10  # You can adjust this
         self.epsilon = 0.01  # Convergence threshold
 
-    def run_simulation(self):
+    def _get_responses(self, **kwargs) -> tuple:
+        """Override base method to implement RL-specific response generation."""
+        # Initialize prompt tuner if not already done
+        if not self.prompt_tuner:
+            self.prompt_tuner = PromptTuner(
+                enable_logging=self.enable_logging,
+                evaluation_dataset=self.evaluation_dataset
+            )
+            self.initial_prompt = kwargs.get('initial_prompt', '')
+            self.evaluation_metrics = kwargs.get('evaluation_metrics', [])
+            self.client = kwargs.get('client')
+            self.openai_api_key = kwargs.get('openai_api_key')
+
         current_prompt = self.initial_prompt
         best_prompt = current_prompt
         best_score = float('-inf')
+        responses = []
+        eval_questions = []
+        prompt_variants = []
 
         for iteration in range(self.max_iterations):
-            print(f"Iteration {iteration + 1}/{self.max_iterations}")
-            print(f"Current Prompt:\n{current_prompt}\n")
+            if self.enable_logging:
+                print(f"Iteration {iteration + 1}/{self.max_iterations}")
+                print(f"Current Prompt:\n{current_prompt}\n")
 
-            # Evaluate the current prompt
-            evaluation_result = custom_evaluate(
-                response=current_prompt,
-                evaluation_metrics=self.evaluation_metrics,
-                openai_api_key=self.openai_api_key,
-            )
-            score = evaluation_result['overall_score']
-            feedback = evaluation_result.get('explanation', '')
-
-            print(f"Evaluation Score: {score}")
-            print(f"Feedback:\n{feedback}\n")
+            # Evaluate the current prompt using base_evaluator's accuracy_evaluator
+            if self.evaluation_dataset and len(self.evaluation_dataset) > 0:
+                evaluation_sample = self.evaluation_dataset[0]
+                ground_truth = evaluation_sample.get('answer', '')
+                evaluation_result = accuracy_evaluator(
+                    generated_answer=current_prompt,
+                    ground_truth=ground_truth,
+                    evaluation_dataset=self.evaluation_dataset
+                )
+                score = evaluation_result['similarity_score']
+                feedback = f"Similarity score: {score:.2f}"
+                if 'evaluation_metrics' in evaluation_result:
+                    metrics = evaluation_result['evaluation_metrics']
+                    feedback += f"\nExact match: {metrics.get('exact_match', 0)}"
+                    if 'bert_similarity' in metrics:
+                        feedback += f"\nBERT similarity: {metrics['bert_similarity']:.2f}"
+            else:
+                score = 0.5  # Default score if no evaluation dataset
+                feedback = "No evaluation dataset available for feedback"
 
             # Store the data for visualization
             self.prompts.append(current_prompt)
             self.scores.append(score)
             self.feedbacks.append(feedback)
             self.iterations += 1
+
+            responses.append(current_prompt)
+            eval_questions.append(feedback)
+            prompt_variants.append(current_prompt)
 
             # Update the best prompt if the score is better
             if score > best_score:
@@ -921,7 +769,8 @@ class RLSimulation:
 
             # Check for convergence
             if score >= 1.0 - self.epsilon:
-                print("Optimal prompt achieved.")
+                if self.enable_logging:
+                    print("Optimal prompt achieved.")
                 break
 
             # Generate a new prompt variant using the feedback
@@ -929,10 +778,36 @@ class RLSimulation:
                 self.client, current_prompt, feedback, max_retries=3, retry_delay=2
             )
 
-        print("Simulation complete.")
-        return best_prompt
+        return responses, eval_questions, prompt_variants
+
+    def _evaluate_responses(self, responses: List[str], eval_questions: List[str]) -> List[float]:
+        """Override base method to implement RL-specific evaluation."""
+        if not self.evaluation_metrics:
+            return [0.5] * len(responses)  # Default neutral score if no metrics
+
+        scores = []
+        for response, question in zip(responses, eval_questions):
+            # Get the ground truth from evaluation dataset if available
+            ground_truth = None
+            if self.evaluation_dataset:
+                for entry in self.evaluation_dataset:
+                    if entry['query'] == question:
+                        ground_truth = entry['answer']
+                        break
+
+            if ground_truth:
+                result = accuracy_evaluator(
+                    generated_answer=response,
+                    ground_truth=ground_truth,
+                    evaluation_dataset=self.evaluation_dataset
+                )
+                scores.append(result['similarity_score'])
+            else:
+                scores.append(0.5)  # Default score if no ground truth found
+        return scores
 
     def plot_scores(self):
+        """Visualize the progression of scores during RL optimization."""
         plt.figure(figsize=(10, 6))
         plt.plot(range(1, self.iterations + 1), self.scores, marker='o', linestyle='-')
         plt.title('Prompt Evaluation Score Over Iterations')
@@ -944,6 +819,7 @@ class RLSimulation:
         plt.show()
 
     def display_prompts(self):
+        """Display interactive prompt history with scores and feedback."""
         def show_prompt(iteration):
             index = iteration - 1
             print(f"Iteration {iteration}")
@@ -959,51 +835,9 @@ class RLSimulation:
                 style={'description_width': 'initial'}
             )
         )
-# Load BERT model and tokenizer
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained('bert-base-uncased')
 
-def get_bert_embedding(text: str) -> torch.Tensor:
-    """Converts text into a BERT embedding vector."""
-    inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True)
-    with torch.no_grad():
-        outputs = model(**inputs)
-    # Use the mean of the token embeddings to create a single vector representation
-    return outputs.last_hidden_state.mean(dim=1).squeeze()
-def accuracy_evaluator(
-    generated_answer: str,
-    ground_truth: Optional[str],
-    evaluation_dataset: List[Dict[str, str]] = None,
-) -> Dict[str, Any]:
-    """
-    Evaluate the generated answer by comparing it with the ground truth using BERT-based similarity.
-    Args:
-    - generated_answer: The generated answer to be evaluated.
-    - ground_truth: The correct ground truth answer.
-    - evaluation_dataset: (Optional) A list of dictionaries containing 'query', 'context', 'response', and 'answer'.
-    Returns:
-    - A dictionary with the normalized answer, analysis, and similarity score as a measure of accuracy.
-    """
-    if not isinstance(ground_truth, str):
-        return {
-            "answer": "Not provided",
-            "analysis": "The ground truth is not provided or is not a valid string.",
-            "score": 0.0,
-        }
-    # Get BERT embeddings for both the generated answer and the ground truth
-    generated_vec = get_bert_embedding(generated_answer.lower())
-    ground_truth_vec = get_bert_embedding(ground_truth.lower())
-    # Calculate cosine similarity between the BERT embeddings
-    similarity_score = torch.nn.functional.cosine_similarity(generated_vec, ground_truth_vec, dim=0).item()
-    analysis = (
-        f"The generated answer '{generated_answer}' has a similarity score of {similarity_score:.2f} "
-        f"compared to the ground truth answer '{ground_truth}'. "
-    )
-    return {
-        "answer": generated_answer,
-        "analysis": analysis,
-        "score": similarity_score,
-    }
+from base_evaluator import get_bert_embedding, accuracy_evaluator
+
 def transform_eval_dataset_to_eval_json(eval_dataset):
     eval_json = {
         "queries": {},
