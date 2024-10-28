@@ -40,7 +40,7 @@ def display_prompts(prompts: List[str], scores: Optional[List[float]] = None):
         step=1,
         description='Iteration:',
         continuous_update=False
-    )
+    )  # Removed extra '=' here
 
     def display_prompt(iteration):
         prompt = prompts[iteration]
