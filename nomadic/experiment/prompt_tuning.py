@@ -13,7 +13,7 @@ from transformers import BertTokenizer, BertModel
 from openai import OpenAI
 
 # Import evaluation functions
-from src.helpers.evaluation.base_evaluator import (
+from nomadic.experiment.helpers.base_evaluator import (
     accuracy_evaluator,
     get_bert_embedding,
     evaluate_response,
@@ -21,7 +21,7 @@ from src.helpers.evaluation.base_evaluator import (
 )
 
 # Import base experiment class
-from src.experiment.base import BaseExperiment
+from nomadic.experiment.experiment_types import BaseExperiment
 
 # Import dspy
 import dspy  # Ensure dspy is installed in your environment
