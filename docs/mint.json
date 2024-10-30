@@ -53,7 +53,7 @@
         {
           "group": "Systematic Optimization",
           "icon": "sliders",
-          "pages": [ "features/hpo-tuning", "features/system-hpo-tuning", "features/prompt-optimizer"]
+          "pages": [ "features/hpo-tuning", "features/system-hpo-tuning", "features/prompt-optimizer", "features/continuous_optimization"]
         },
         "features/experiments",
         "features/evaluations",
