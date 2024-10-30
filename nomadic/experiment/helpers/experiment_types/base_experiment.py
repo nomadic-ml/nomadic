@@ -6,13 +6,12 @@ from datetime import datetime
 from pathlib import Path
 import os
 
-from ..experiment_helpers import (
-    ExperimentStatus,
-    ResultManager,
-    ExperimentSetup,
-    ResponseManager,
-    Evaluator,
-    DefaultPromptConstructor
+from nomadic.experiment.helpers import (
+    BaseEvaluator as Evaluator,
+    BaseResultManager as ResultManager,
+    BaseExperimentSetup as ExperimentSetup,
+    BaseResponseManager as ResponseManager,
+    BasePromptConstructor as DefaultPromptConstructor
 )
 
 class BaseExperiment(ABC, BaseModel):
@@ -47,7 +46,6 @@ class BaseExperiment(ABC, BaseModel):
 
     # Internal state
     start_datetime: datetime = Field(default_factory=datetime.now)
-    status: ExperimentStatus = ExperimentStatus.NOT_STARTED
 
     @abstractmethod
     def run(self, param_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -60,7 +58,6 @@ class BaseExperiment(ABC, BaseModel):
 
     def _validate_and_setup(self, param_dict: Dict[str, Any]) -> None:
         """Validate parameters and setup experiment."""
-        self.status = ExperimentStatus.RUNNING
         if self.enable_logging:
             ExperimentSetup.setup_logging(self.name)
 
