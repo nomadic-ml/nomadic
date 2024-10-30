@@ -30,7 +30,7 @@ from nomadic.experiment.prompt_tuning import (
 )
 
 def retry_with_exponential_backoff(
-    max_retries=5, base_delay=1, max_delay=300, exceptions=(Exception,)
+    max_retries=3, base_delay=1, max_delay=300, exceptions=(Exception,)
 ):
     def decorator(func):
         @wraps(func)
