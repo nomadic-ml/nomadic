@@ -5,148 +5,103 @@ import logging
 import time
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-class BaseResponseManager(ABC):
-    """Base class for managing response generation and handling."""
+def get_responses(
+    self,
+    type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]],
+    model: Any,
+    prompt_constructor: Any,
+    evaluation_dataset: Optional[List[Dict[str, Any]]] = None,
+    user_prompt_request: Optional[str] = None,
+    num_simulations: int = 1,
+    enable_logging: bool = False,
+    use_iterative_optimization: bool = False,
+) -> Tuple[List[str], List[str], List[str], List[str]]:
+    """Default implementation of response generation."""
 
-    @abstractmethod
-    def get_responses(
-        self,
-        type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]],
-        model: Any,
-        prompt_constructor: Any,
-        evaluation_dataset: Optional[List[Dict[str, Any]]] = None,
-        user_prompt_request: Optional[str] = None,
-        num_simulations: int = 1,
-        enable_logging: bool = False,
-        use_iterative_optimization: bool = False,
-    ) -> Tuple[List[str], List[str], List[str], List[str]]:
-        """
-        Generate responses for the given parameters and dataset.
+    openai_params, prompt_tuning_params = type_safe_param_values
+    pred_responses = []
+    eval_questions = []
+    ref_responses = []
+    prompt_variants = []
 
-        Args:
-            type_safe_param_values: Tuple of (openai_params, prompt_tuning_params)
-            model: The model instance to use for generating responses
-            prompt_constructor: The prompt constructor instance
-            evaluation_dataset: Optional dataset for evaluation
-            user_prompt_request: Optional user prompt request
-            num_simulations: Number of simulations to run
-            enable_logging: Whether to enable logging
-            use_iterative_optimization: Whether to use iterative optimization
+    if enable_logging:
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
 
-        Returns:
-            Tuple of (pred_responses, eval_questions, ref_responses, prompt_variants)
-        """
-        pass
+    try:
+        # Handle evaluation dataset if provided
+        if evaluation_dataset:
+            for item in evaluation_dataset:
+                question = item.get('question', '')
+                reference = item.get('reference', '')
 
-    @abstractmethod
-    def extract_response(self, completion_response: Any) -> str:
-        """Extract the response from a completion response object."""
-        pass
+                prompt = prompt_constructor.construct_prompt(
+                    template=prompt_tuning_params.get('template', ''),
+                    params={'question': question, **prompt_tuning_params}
+                )
 
-class DefaultResponseManager(BaseResponseManager, BaseModel):
-    """Default implementation of response generation and handling."""
+                response = self._get_model_response(model, prompt, openai_params)
 
-    max_retries: int = 3
-    retry_wait_min: float = 1
-    retry_wait_max: float = 10
+                pred_responses.append(response)
+                eval_questions.append(question)
+                ref_responses.append(reference)
+                prompt_variants.append(prompt)
 
-    def get_responses(
-        self,
-        type_safe_param_values: Tuple[Dict[str, Any], Dict[str, Any]],
-        model: Any,
-        prompt_constructor: Any,
-        evaluation_dataset: Optional[List[Dict[str, Any]]] = None,
-        user_prompt_request: Optional[str] = None,
-        num_simulations: int = 1,
-        enable_logging: bool = False,
-        use_iterative_optimization: bool = False,
-    ) -> Tuple[List[str], List[str], List[str], List[str]]:
-        """Default implementation of response generation."""
+                if enable_logging:
+                    logger.info(f"Generated response for question: {question}")
 
-        openai_params, prompt_tuning_params = type_safe_param_values
-        pred_responses = []
-        eval_questions = []
-        ref_responses = []
-        prompt_variants = []
+        # Handle user prompt request if provided
+        elif user_prompt_request:
+            for _ in range(num_simulations):
+                prompt = prompt_constructor.construct_prompt(
+                    template=prompt_tuning_params.get('template', ''),
+                    params={'question': user_prompt_request, **prompt_tuning_params}
+                )
 
+                response = self._get_model_response(model, prompt, openai_params)
+
+                pred_responses.append(response)
+                prompt_variants.append(prompt)
+
+                if enable_logging:
+                    logger.info(f"Generated response for user prompt")
+
+                if use_iterative_optimization:
+                    # Add delay between iterations
+                    time.sleep(1)
+
+        return pred_responses, eval_questions, ref_responses, prompt_variants
+
+    except Exception as e:
         if enable_logging:
-            logging.basicConfig(level=logging.INFO)
-            logger = logging.getLogger(__name__)
+            logger.error(f"Error generating responses: {str(e)}")
+        return [], [], [], []
 
-        try:
-            # Handle evaluation dataset if provided
-            if evaluation_dataset:
-                for item in evaluation_dataset:
-                    question = item.get('question', '')
-                    reference = item.get('reference', '')
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+def _get_model_response(self, model: Any, prompt: str, params: Dict[str, Any]) -> str:
+    """Get response from model with retry logic."""
+    try:
+        completion = model.complete(prompt, **params)
+        return self.extract_response(completion)
+    except Exception as e:
+        logging.error(f"Error getting model response: {str(e)}")
+        raise
 
-                    prompt = prompt_constructor.construct_prompt(
-                        template=prompt_tuning_params.get('template', ''),
-                        params={'question': question, **prompt_tuning_params}
-                    )
-
-                    response = self._get_model_response(model, prompt, openai_params)
-
-                    pred_responses.append(response)
-                    eval_questions.append(question)
-                    ref_responses.append(reference)
-                    prompt_variants.append(prompt)
-
-                    if enable_logging:
-                        logger.info(f"Generated response for question: {question}")
-
-            # Handle user prompt request if provided
-            elif user_prompt_request:
-                for _ in range(num_simulations):
-                    prompt = prompt_constructor.construct_prompt(
-                        template=prompt_tuning_params.get('template', ''),
-                        params={'question': user_prompt_request, **prompt_tuning_params}
-                    )
-
-                    response = self._get_model_response(model, prompt, openai_params)
-
-                    pred_responses.append(response)
-                    prompt_variants.append(prompt)
-
-                    if enable_logging:
-                        logger.info(f"Generated response for user prompt")
-
-                    if use_iterative_optimization:
-                        # Add delay between iterations
-                        time.sleep(1)
-
-            return pred_responses, eval_questions, ref_responses, prompt_variants
-
-        except Exception as e:
-            if enable_logging:
-                logger.error(f"Error generating responses: {str(e)}")
-            return [], [], [], []
-
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-    def _get_model_response(self, model: Any, prompt: str, params: Dict[str, Any]) -> str:
-        """Get response from model with retry logic."""
-        try:
-            completion = model.complete(prompt, **params)
-            return self.extract_response(completion)
-        except Exception as e:
-            logging.error(f"Error getting model response: {str(e)}")
-            raise
-
-    def extract_response(self, completion_response: Any) -> str:
-        """Extract response from completion object."""
-        try:
-            if hasattr(completion_response, 'choices') and completion_response.choices:
-                # Handle OpenAI-style response
-                return completion_response.choices[0].text.strip()
-            elif isinstance(completion_response, str):
-                # Handle string response
-                return completion_response.strip()
-            elif hasattr(completion_response, 'response'):
-                # Handle custom response object
-                return completion_response.response.strip()
-            else:
-                # Try to convert to string as fallback
-                return str(completion_response).strip()
-        except Exception as e:
-            logging.error(f"Error extracting response: {str(e)}")
-            return ""
+def extract_response(self, completion_response: Any) -> str:
+    """Extract response from completion object."""
+    try:
+        if hasattr(completion_response, 'choices') and completion_response.choices:
+            # Handle OpenAI-style response
+            return completion_response.choices[0].text.strip()
+        elif isinstance(completion_response, str):
+            # Handle string response
+            return completion_response.strip()
+        elif hasattr(completion_response, 'response'):
+            # Handle custom response object
+            return completion_response.response.strip()
+        else:
+            # Try to convert to string as fallback
+            return str(completion_response).strip()
+    except Exception as e:
+        logging.error(f"Error extracting response: {str(e)}")
+        return ""
