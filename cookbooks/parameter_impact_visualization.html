@@ -1,0 +1,96 @@
+
+        <html>
+        <head>
+            <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+            <style>
+                .container { max-width: 1200px; margin: auto; padding: 20px; }
+                .chart { margin-bottom: 30px; }
+                .metric-cell {
+                    padding: 10px;
+                    border-radius: 4px;
+                    margin: 5px;
+                    transition: all 0.3s ease;
+                }
+                .metric-cell:hover {
+                    transform: scale(1.05);
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div id="parameterImpact" class="chart"></div>
+                <div id="metricComparison" class="chart"></div>
+            </div>
+            <script>
+        
+            var trace1 = {
+                x: ['technical', 'technical', 'technical', 'narrative', 'narrative', 'narrative', 'actionable', 'actionable', 'actionable'],
+                y: [53, 53, 53, 24, 24, 24, 19, 19, 19],
+                name: 'Output Length',
+                type: 'bar'
+            };
+
+            var trace2 = {
+                x: ['technical', 'technical', 'technical', 'narrative', 'narrative', 'narrative', 'actionable', 'actionable', 'actionable'],
+                y: [7, 7, 7, 4, 4, 4, 3, 3, 3],
+                name: 'Key Terms Count',
+                type: 'bar'
+            };
+
+            var layout1 = {
+                title: 'Impact of Different Prompt Types',
+                barmode: 'group',
+                xaxis: {title: 'Prompt Type'},
+                yaxis: {title: 'Count'}
+            };
+
+            Plotly.newPlot('parameterImpact', [trace1, trace2], layout1);
+
+            // Add metric comparison visualization
+            var metricTraces = [];
+            
+                metricTraces.push({
+                    x: ['technical', 'technical', 'technical', 'narrative', 'narrative', 'narrative', 'actionable', 'actionable', 'actionable'],
+                    y: [0.1379811572606567, 0.1379811572606567, 0.1379811572606567, 0.1379811572606567, 0.1379811572606567, 0.1379811572606567, 0.1379811572606567, 0.1379811572606567, 0.1379811572606567],
+                    name: 'Volatility',
+                    type: 'scatter',
+                    mode: 'lines+markers'
+                });
+            
+                metricTraces.push({
+                    x: ['technical', 'technical', 'technical', 'narrative', 'narrative', 'narrative', 'actionable', 'actionable', 'actionable'],
+                    y: [1.2677133993015426, 1.2677133993015426, 1.2677133993015426, 1.2677133993015426, 1.2677133993015426, 1.2677133993015426, 1.2677133993015426, 1.2677133993015426, 1.2677133993015426],
+                    name: 'Sharpe Ratio',
+                    type: 'scatter',
+                    mode: 'lines+markers'
+                });
+            
+                metricTraces.push({
+                    x: ['technical', 'technical', 'technical', 'narrative', 'narrative', 'narrative', 'actionable', 'actionable', 'actionable'],
+                    y: [0.10987380025422488, 0.10987380025422488, 0.10987380025422488, 0.10987380025422488, 0.10987380025422488, 0.10987380025422488, 0.10987380025422488, 0.10987380025422488, 0.10987380025422488],
+                    name: 'Drawdown',
+                    type: 'scatter',
+                    mode: 'lines+markers'
+                });
+            
+                metricTraces.push({
+                    x: ['technical', 'technical', 'technical', 'narrative', 'narrative', 'narrative', 'actionable', 'actionable', 'actionable'],
+                    y: [nan, nan, nan, nan, nan, nan, nan, nan, nan],
+                    name: 'Tracking Error',
+                    type: 'scatter',
+                    mode: 'lines+markers'
+                });
+            
+            var layout2 = {
+                title: 'Metric Comparison Across Prompt Types',
+                xaxis: {title: 'Prompt Type'},
+                yaxis: {title: 'Metric Value'},
+                showlegend: true
+            };
+
+            Plotly.newPlot('metricComparison', metricTraces, layout2);
+        </script>
+        </body>
+        </html>
+        
