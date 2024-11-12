@@ -73,3 +73,15 @@ def retry_with_exponential_backoff(
             raise last_exception  # type: ignore
         return wrapper
     return decorator
+
+def transform_eval_dataset_to_eval_json(eval_dataset):
+    eval_json = {
+        "queries": {},
+        "responses": {}
+    }
+    # Loop through each entry in eval_dataset
+    for idx, entry in enumerate(eval_dataset, start=1):
+        query_key = f"query{idx}"
+        eval_json["queries"][query_key] = entry['query']
+        eval_json["responses"][query_key] = entry['answer']
+    return eval_json

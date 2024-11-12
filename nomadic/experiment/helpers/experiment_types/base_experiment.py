@@ -1,127 +1,150 @@
-"""Base experiment implementation supporting both parameter-based and dataset-based experiments."""
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union, Callable, Set
+from abc import ABC
+from typing import Any, Dict, List, Optional, Union, Tuple, Set
 from pydantic import BaseModel, Field
 from datetime import datetime
 from pathlib import Path
-import os
+import logging
+import time
 
-from nomadic.experiment.helpers import (
-    BaseEvaluator as Evaluator,
-    BaseResultManager as ResultManager,
-    BaseExperimentSetup as ExperimentSetup,
-    BaseResponseManager as ResponseManager,
-    BasePromptConstructor as DefaultPromptConstructor
+from nomadic.experiment.helpers.base_prompt_constructor import construct_prompt
+from nomadic.experiment.helpers.base_response_manager import get_responses
+from nomadic.experiment.helpers.base_evaluator import (
+    accuracy_evaluator,
+    transform_eval_dataset_to_eval_json,
+    evaluate_responses,
+    calculate_mean_score
 )
+from nomadic.experiment.helpers.base_result_manager import (
+    format_error_message,
+    determine_experiment_status,
+    create_default_experiment_result,
+    save_experiment
+)
+from nomadic.experiment.helpers.base_setup import setup_tuner, enforce_param_types
 
 class BaseExperiment(ABC, BaseModel):
     """Abstract base class for all experiment types.
 
-    Supports both parameter-based experiments (using param_fn) and dataset-based
-    experiments (using evaluation_dataset and model). Only requires minimal core
-    configuration with optional extended functionality.
+    Supports both parameter-based experiments and dataset-based experiments with
+    integrated evaluation, response management, and result handling.
     """
 
     # Required core configuration
     name: str = "default_experiment"
-    params: Set[str]
+    params: Set[str] = Field(default_factory=set)
     enable_logging: bool = False
 
-    # Optional parameter-based experiment config
-    param_fn: Optional[Callable] = None
-    fixed_param_dict: Dict[str, Any] = Field(default_factory=dict)
+    # Experiment configuration
+    evaluation_dataset: Optional[List[Dict[str, Any]]] = None
+    user_prompt_request: Optional[str] = None
+    model: Optional[Any] = None
+    prompt_template: str = ""
 
-    # Optional dataset-based experiment config
-    evaluation_dataset: Optional[List[Dict[str, str]]] = None
-    user_prompt_request: Optional[List[str]] = None
-    model: Optional[Any] = None  # Can be any model class that supports generation
-    model_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    evaluator: Optional[Dict[str, str]] = None  # Evaluator config for dataset experiments
-
-    # Optional experiment settings
-    search_method: str = "grid"
-    use_flaml_library: bool = False
-    use_iterative_optimization: bool = False
+    # Optional settings
     num_simulations: int = 1
+    use_iterative_optimization: bool = False
+    model_hyperparameters: Dict[str, Any] = Field(default_factory=dict)
 
     # Internal state
     start_datetime: datetime = Field(default_factory=datetime.now)
 
-    @abstractmethod
     def run(self, param_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Run the experiment with the given parameters.
+        """Run the experiment with given parameters."""
+        try:
+            # Setup and validation
+            if self.enable_logging:
+                logging.basicConfig(level=logging.INFO)
 
-        This method must be implemented by concrete experiment classes.
-        The implementation should handle experiment execution and return results.
-        """
-        pass
+            # Enforce parameter types based on model hyperparameters
+            typed_params = enforce_param_types(self, param_dict, self.model_hyperparameters)
 
-    def _validate_and_setup(self, param_dict: Dict[str, Any]) -> None:
-        """Validate parameters and setup experiment."""
-        if self.enable_logging:
-            ExperimentSetup.setup_logging(self.name)
+            # Split parameters into OpenAI and prompt tuning params
+            openai_params, prompt_params = self._split_parameters(typed_params)
 
-        if not ExperimentSetup.validate_params(param_dict, self.params):
-            missing_params = self.params - set(param_dict.keys())
-            raise ValueError(f"Missing required parameters: {missing_params}")
-
-    def _run_dataset_experiment(self, param_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Run experiment using evaluation dataset."""
-        if not self.evaluation_dataset:
-            raise ValueError("evaluation_dataset must be provided for dataset experiments")
-
-        results = {}
-        prompt_constructor = DefaultPromptConstructor()
-
-        for item in self.evaluation_dataset:
-            # Construct prompt using template and user prompt request if available
-            prompt_params = {**param_dict, **item}
-            if self.user_prompt_request:
-                prompt_params["template"] = self.user_prompt_request[0]  # Use first template for now
-
-            prompt = prompt_constructor.construct_prompt(
-                params=prompt_params,
-                examples=self.fixed_param_dict.get("examples")
+            # Get responses using the response manager
+            pred_responses, eval_questions, ref_responses, prompts = get_responses(
+                self,
+                type_safe_param_values=(openai_params, prompt_params),
+                model=self.model,
+                prompt_constructor=self,  # self implements construct_prompt
+                evaluation_dataset=self.evaluation_dataset,
+                user_prompt_request=self.user_prompt_request,
+                num_simulations=self.num_simulations,
+                enable_logging=self.enable_logging,
+                use_iterative_optimization=self.use_iterative_optimization
             )
 
-            # Get model response
-            if self.model:
-                response = self.model.generate(prompt, **self.model_kwargs)
-            else:
-                response = self.param_fn(prompt, **param_dict)
+            # Evaluate responses
+            eval_results = evaluate_responses(
+                self,
+                responses=pred_responses,
+                ref_responses=ref_responses,
+                evaluation_dataset=self.evaluation_dataset
+            )
 
-            # Validate and process response
-            if ResponseManager.validate_response(response):
-                structured_response = prompt_constructor.extract_response(response)
+            # Calculate mean scores
+            mean_scores = calculate_mean_score(
+                self,
+                eval_results=eval_results,
+                params=self.params
+            )
 
-                # Evaluate response using configured evaluator
-                score = None
-                if "answer" in item and self.evaluator:
-                    score = Evaluator.evaluate_response(
-                        structured_response,
-                        item["answer"],
-                        method=self.evaluator.get("method", "accuracy_evaluator")
-                    )
-
-                results[item["query"]] = {
-                    "response": structured_response,
-                    "score": score,
-                    "prompt": prompt  # Include prompt for analysis
+            # Prepare results
+            results = {
+                "status": determine_experiment_status(self, is_error=False),
+                "parameters": typed_params,
+                "predictions": pred_responses,
+                "prompts": prompts,
+                "evaluation": {
+                    "results": eval_results,
+                    "mean_scores": mean_scores
+                },
+                "metadata": {
+                    "timestamp": self.start_datetime.isoformat(),
+                    "model": str(self.model.__class__.__name__) if self.model else None,
+                    "num_simulations": self.num_simulations
                 }
+            }
 
-        return results
+            # Save results if logging is enabled
+            if self.enable_logging:
+                save_experiment(
+                    self,
+                    folder_path=f"experiments/{self.name}",
+                    start_datetime=self.start_datetime,
+                    experiment_data=results
+                )
 
-    def _run_parameter_experiment(self, param_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Run traditional parameter-based experiment."""
-        if not self.param_fn:
-            raise ValueError("param_fn must be provided for parameter-based experiments")
+            return results
 
-        # Combine fixed and variable parameters
-        full_params = {**self.fixed_param_dict, **param_dict}
-        return self.param_fn(**full_params)
+        except Exception as e:
+            error_msg = format_error_message(self, e)
+            if self.enable_logging:
+                logging.error(error_msg)
 
-    def save_experiment(self, folder_path: Path):
-        """Save experiment results."""
-        file_name = f"/experiment_{self.start_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.json"
-        with open(folder_path / file_name, "w") as file:
-            file.write(self.model_dump_json())
+            return create_default_experiment_result(self, param_dict)
+
+    def _split_parameters(self, param_dict: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Split parameters into OpenAI parameters and prompt tuning parameters."""
+        openai_params = {
+            k: v for k, v in param_dict.items()
+            if k in {'temperature', 'max_tokens', 'top_p', 'frequency_penalty', 'presence_penalty'}
+        }
+
+        prompt_params = {
+            k: v for k, v in param_dict.items()
+            if k not in openai_params
+        }
+
+        return openai_params, prompt_params
+
+    def construct_prompt(self, template: str, params: Dict[str, Any], **kwargs) -> str:
+        """Construct prompt using the prompt constructor helper."""
+        return construct_prompt(self, template or self.prompt_template, params, **kwargs)
+
+    def extract_response(self, response: str, **kwargs) -> str:
+        """Extract response content using the prompt constructor helper."""
+        return construct_prompt(self).extract_response(response, **kwargs)
+
+    class Config:
+        arbitrary_types_allowed = True

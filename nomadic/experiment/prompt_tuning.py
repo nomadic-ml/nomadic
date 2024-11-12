@@ -16,12 +16,12 @@ from openai import OpenAI
 from nomadic.experiment.helpers.base_evaluator import (
     accuracy_evaluator,
     get_bert_embedding,
-    evaluate_response,
+    evaluate_responses,
     calculate_mean_score
 )
 
 # Import base experiment class
-from nomadic.experiment.experiment_types import BaseExperiment
+from nomadic.experiment.helpers.experiment_types import BaseExperiment
 
 # Import dspy
 import dspy  # Ensure dspy is installed in your environment
@@ -836,7 +836,7 @@ class RLSimulation(BaseExperiment):
             )
         )
 
-from base_evaluator import get_bert_embedding, accuracy_evaluator
+from nomadic.experiment.helpers.base_evaluator import get_bert_embedding, accuracy_evaluator
 
 def transform_eval_dataset_to_eval_json(eval_dataset):
     eval_json = {
