@@ -1,5 +1,17 @@
 
         <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+            }
+            .logo-container {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .logo-container img {
+                max-width: 200px;
+                height: auto;
+            }
             .parameter-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -7,10 +19,11 @@
                 font-family: Arial, sans-serif;
             }
             .parameter-table th, .parameter-table td {
-                padding: 12px;
+                padding: 16px;
                 border: 1px solid #ddd;
                 text-align: left;
                 vertical-align: top;
+                font-size: 16px;
             }
             .parameter-table th {
                 background-color: #f5f5f5;
@@ -22,7 +35,7 @@
                 background-color: #e8e8e8;
             }
             .prompt-container, .output-container {
-                max-height: 300px;
+                max-height: 400px;
                 overflow-y: auto;
                 padding: 10px;
                 background-color: #f8f9fa;
@@ -40,6 +53,7 @@
                 background-color: white;
                 border: 1px solid #ddd;
                 border-radius: 4px;
+                font-size: 14px;
             }
             .metric-cell {
                 padding: 12px;
@@ -102,21 +116,24 @@
                 align-items: center;
                 flex-wrap: wrap;
             }
-            .filter-input {
+            .filter-input, .filter-date {
                 padding: 8px;
                 border: 1px solid #ddd;
                 border-radius: 4px;
                 flex: 1;
                 min-width: 200px;
+                font-size: 16px;
             }
             .filter-select {
                 padding: 8px;
                 border: 1px solid #ddd;
                 border-radius: 4px;
                 min-width: 150px;
+                font-size: 16px;
             }
             .comparison-mode {
                 margin-left: auto;
+                font-size: 16px;
             }
             .highlight-differences {
                 background-color: #fff3cd;
@@ -136,8 +153,14 @@
             }
         </style>
 
+        <div class="logo-container">
+            <img src="logo.png" alt="Company Logo">
+        </div>
+
         <div class="filter-section">
             <input type="text" id="textFilter" class="filter-input" placeholder="Filter by text...">
+            <input type="date" id="startDateFilter" class="filter-date" placeholder="Start Date">
+            <input type="date" id="endDateFilter" class="filter-date" placeholder="End Date">
             <select id="originalPromptFilter" class="filter-select">
                 <option value="">All Original Prompts</option>
                 <option value="technical">Technical</option>
@@ -171,20 +194,20 @@
             <tbody>
 
                 <tr>
-                    <td>Technical | No Tuning</td>
+                    <td>Technical | Low Temp | No Tuning</td>
                     <td>Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data. Provide concise and precise answers.</pre>
                     </div>
                 </td>
@@ -196,17 +219,17 @@ The following report provides a succinct overview of the portfolio&#x27;s risk m
 
 Use quantitative terms and precise numerical data.
 
-Portfolio Volatility: 13.60%
-Sharpe Ratio: 1.98
-Maximum Drawdown: 8.22%
+Portfolio Volatility: 13.53%
+Sharpe Ratio: 2.18
+Maximum Drawdown: 8.85%
 Tracking Error: nan%
 
 Risk Contributors:
-- MA contributed 27.21% to portfolio risk
-- CVX contributed 17.96% to portfolio risk
-- MRK contributed 8.73% to portfolio risk
-- META contributed 7.93% to portfolio risk
-- JPM contributed 7.70% to portfolio risk
+- JPM contributed 53.19% to portfolio risk
+- NFLX contributed 9.77% to portfolio risk
+- XOM contributed 6.70% to portfolio risk
+- MA contributed 6.69% to portfolio risk
+- AAPL contributed 5.40% to portfolio risk
 </pre>
                     </div>
                 </td>
@@ -221,20 +244,20 @@ Risk Contributors:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,1.9901458778270609;40,4.548929770404754;60,14.905022790303633;80,13.466606121312921"
+                            points="0,0.0;20,1.9901458778270609;40,4.548929770404754;60,14.905022790303619;80,13.466606121312907"
                         />
                     </svg>
                 </div>
@@ -242,20 +265,20 @@ Risk Contributors:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,5.411173411731411;40,16.473987402043633;60,14.764742889031197;80,4.353988331145274"
+                            points="0,0.0;20,5.411173411731411;40,16.473987402043633;60,14.764742889031197;80,4.35398833114526"
                         />
                     </svg>
                 </div>
@@ -263,20 +286,20 @@ Risk Contributors:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,13.228957590509665;20,10.229157678514241;40,2.75740173626248;60,0.0;80,0.7691591734717349"
+                            points="0,13.228957590509665;20,10.229157678514227;40,2.7574017362624943;60,0.0;80,0.7691591734717491"
                         />
                     </svg>
                 </div>
@@ -284,20 +307,20 @@ Risk Contributors:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,9.953739658241503;20,0.6540024774845961;40,9.7063404530588;60,8.026158330269553;80,0.0"
+                            points="0,9.953739658241517;20,0.6540024774846103;40,9.7063404530588;60,8.026158330269553;80,0.0"
                         />
                     </svg>
                 </div>
@@ -305,20 +328,20 @@ Risk Contributors:
                 </tr>
 
                 <tr>
-                    <td>Technical | few_shot</td>
+                    <td>Technical | Medium Temp | Few-Shot</td>
                     <td>Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data. Ensure clarity and thoroughness in your analysis.
 
 Here are some examples to guide your analysis:
@@ -341,20 +364,20 @@ The report below offers a comprehensive analysis of the portfolio&#x27;s current
 
 Use quantitative terms and precise numerical data.
 
-Portfolio Volatility: 13.60%
-Sharpe Ratio: 1.98
-Maximum Drawdown: 8.22%
+Portfolio Volatility: 13.53%
+Sharpe Ratio: 2.18
+Maximum Drawdown: 8.85%
 Tracking Error: nan%
 
 Risk Contributors:
-- MA contributed 27.21% to portfolio risk
-- CVX contributed 17.96% to portfolio risk
-- MRK contributed 8.73% to portfolio risk
-- META contributed 7.93% to portfolio risk
-- JPM contributed 7.70% to portfolio risk
+- JPM contributed 53.19% to portfolio risk
+- NFLX contributed 9.77% to portfolio risk
+- XOM contributed 6.70% to portfolio risk
+- MA contributed 6.69% to portfolio risk
+- AAPL contributed 5.40% to portfolio risk
 
 
-Examples to Guide Your Analysis:
+Guiding Examples:
 Example 1:
 Q: What are the main risks in a high-volatility portfolio?
 A: The primary risks include increased potential for significant losses, heightened emotional decision-making, and potential for margin calls in leveraged accounts.
@@ -370,26 +393,26 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                     <td>0.2</td>
                     <td>0.2</td>
                     <td>few_shot</td>
-                    <td>141</td>
+                    <td>138</td>
                     <td>volatility, risk, sharpe ratio, drawdown, tracking error, portfolio, sector, concentration, diversification, technical, quantitative</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,3.731205375632726;20,0.0;40,3.5820249686698418;60,5.251506351512688;80,14.124454798127147"
+                            points="0,3.7312053756327117;20,0.0;40,3.5820249686698418;60,5.251506351512688;80,14.124454798127147"
                         />
                     </svg>
                 </div>
@@ -397,20 +420,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,11.05963062993564;20,12.932702760021186;40,13.32029061665746;60,0.0;80,10.595865370333016"
+                            points="0,11.05963062993564;20,12.932702760021172;40,13.32029061665746;60,0.0;80,10.595865370333016"
                         />
                     </svg>
                 </div>
@@ -418,20 +441,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,4.8387551277602086;40,1.803308829781983;60,7.221923217596;80,5.844583634912681"
+                            points="0,0.0;20,4.838755127760223;40,1.8033088297819972;60,7.221923217596;80,5.844583634912681"
                         />
                     </svg>
                 </div>
@@ -439,20 +462,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,4.402805738911553;20,10.095049525160888;40,0.0;60,8.457325085469606;80,13.367976066068593"
+                            points="0,4.402805738911553;20,10.095049525160888;40,0.0;60,8.45732508546962;80,13.367976066068593"
                         />
                     </svg>
                 </div>
@@ -460,20 +483,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 </tr>
 
                 <tr>
-                    <td>Technical | chain_of_thought</td>
+                    <td>Technical | High Temp | Chain-of-Thought</td>
                     <td>Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data. Feel free to elaborate and explore creative insights in your analysis. Focus on diverse perspectives and avoid repetition. Incorporate a variety of terms and avoid overusing specific phrases. Please provide a detailed chain of thought explaining your reasoning process in the analysis.</pre>
                     </div>
                 </td>
@@ -485,17 +508,17 @@ This extensive report delves deep into the portfolio&#x27;s risk factors, provid
 
 Use quantitative terms and precise numerical data.
 
-Portfolio Volatility: 13.60%
-Sharpe Ratio: 1.98
-Maximum Drawdown: 8.22%
+Portfolio Volatility: 13.53%
+Sharpe Ratio: 2.18
+Maximum Drawdown: 8.85%
 Tracking Error: nan%
 
 Risk Contributors:
-- MA contributed 27.21% to portfolio risk
-- CVX contributed 17.96% to portfolio risk
-- MRK contributed 8.73% to portfolio risk
-- META contributed 7.93% to portfolio risk
-- JPM contributed 7.70% to portfolio risk
+- JPM contributed 53.19% to portfolio risk
+- NFLX contributed 9.77% to portfolio risk
+- XOM contributed 6.70% to portfolio risk
+- MA contributed 6.69% to portfolio risk
+- AAPL contributed 5.40% to portfolio risk
 
 
 Chain of Thought:
@@ -516,20 +539,20 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,5.65567144381167;20,14.243272287633573;40,0.2469777970043765;60,0.0;80,0.7162577622827513"
+                            points="0,5.655671443811684;20,14.243272287633602;40,0.2469777970043623;60,0.0;80,0.7162577622827513"
                         />
                     </svg>
                 </div>
@@ -537,20 +560,20 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,10.911538016087434;20,17.400004829300784;40,0.7012745037860384;60,9.85009459259318;80,0.0"
+                            points="0,10.911538016087434;20,17.400004829300798;40,0.7012745037860526;60,9.850094592593209;80,0.0"
                         />
                     </svg>
                 </div>
@@ -558,20 +581,20 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,2.024491492558411;40,12.247760419387163;60,10.588625323746186;80,2.058768839049492"
+                            points="0,0.0;20,2.024491492558397;40,12.247760419387163;60,10.588625323746186;80,2.058768839049492"
                         />
                     </svg>
                 </div>
@@ -579,20 +602,20 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,11.391006965950453;20,14.103020596815938;40,6.978342734198435;60,0.0;80,4.417184341902342"
+                            points="0,11.391006965950453;20,14.103020596815952;40,6.978342734198435;60,0.0;80,4.417184341902356"
                         />
                     </svg>
                 </div>
@@ -600,18 +623,18 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 </tr>
 
                 <tr>
-                    <td>Narrative | No Tuning</td>
+                    <td>Narrative | Low Temp | No Tuning</td>
                     <td>Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers. Provide concise and precise answers.</pre>
                     </div>
                 </td>
@@ -624,7 +647,7 @@ The following report provides a succinct overview of the portfolio&#x27;s risk m
 Use clear, descriptive language accessible to non-technical readers.
 
 Current Market Environment:
-The portfolio is experiencing moderate volatility at 13.6%. Risk-adjusted returns, as measured by the Sharpe ratio, are 1.98.
+The portfolio is experiencing moderate volatility at 13.5%. Risk-adjusted returns, as measured by the Sharpe ratio, are 2.18.
 
 No significant risk alerts at this time.
 </pre>
@@ -641,20 +664,20 @@ No significant risk alerts at this time.
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,7.650064853315115;20,16.263544597409336;40,6.831383327833308;60,0.0;80,15.481994495401864"
+                            points="0,7.650064853315101;20,16.263544597409336;40,6.831383327833322;60,0.0;80,15.481994495401864"
                         />
                     </svg>
                 </div>
@@ -662,20 +685,20 @@ No significant risk alerts at this time.
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,6.676929697114929;20,0.0;40,2.540356645271288;60,3.354004427816733;80,3.2523127110863186"
+                            points="0,6.676929697114915;20,0.0;40,2.540356645271288;60,3.354004427816733;80,3.2523127110863186"
                         />
                     </svg>
                 </div>
@@ -683,20 +706,20 @@ No significant risk alerts at this time.
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,9.457319321060183;20,10.685163908268862;40,1.0752820099293672;60,1.061266189831997;80,0.0"
+                            points="0,9.457319321060183;20,10.685163908268876;40,1.075282009929353;60,1.061266189831997;80,0.0"
                         />
                     </svg>
                 </div>
@@ -704,20 +727,20 @@ No significant risk alerts at this time.
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,7.424354225413666;40,7.605874039254161;60,2.123411521688439;80,4.863567750640058"
+                            points="0,0.0;20,7.42435422541368;40,7.605874039254161;60,2.1234115216884533;80,4.863567750640044"
                         />
                     </svg>
                 </div>
@@ -725,18 +748,18 @@ No significant risk alerts at this time.
                 </tr>
 
                 <tr>
-                    <td>Narrative | few_shot</td>
+                    <td>Narrative | Medium Temp | Few-Shot</td>
                     <td>Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers. Ensure clarity and thoroughness in your analysis.
 
 Here are some examples to guide your analysis:
@@ -760,12 +783,12 @@ The report below offers a comprehensive analysis of the portfolio&#x27;s current
 Use clear, descriptive language accessible to non-technical readers.
 
 Current Market Environment:
-The portfolio is experiencing moderate volatility at 13.6%. Risk-adjusted returns, as measured by the Sharpe ratio, are 1.98.
+The portfolio is experiencing moderate volatility at 13.5%. Risk-adjusted returns, as measured by the Sharpe ratio, are 2.18.
 
 No significant risk alerts at this time.
 
 
-Examples to Guide Your Analysis:
+Guiding Examples:
 Example 1:
 Q: What are the main risks in a high-volatility portfolio?
 A: The primary risks include increased potential for significant losses, heightened emotional decision-making, and potential for margin calls in leveraged accounts.
@@ -781,26 +804,26 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                     <td>0.2</td>
                     <td>0.2</td>
                     <td>few_shot</td>
-                    <td>120</td>
+                    <td>117</td>
                     <td>volatility, risk, sharpe ratio, portfolio, sector, concentration, diversification, technical</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,3.488650801530653;20,1.747914267366852;40,0.0;60,10.241366194636953;80,9.544005182825174"
+                            points="0,3.488650801530639;20,1.747914267366852;40,0.0;60,10.241366194636953;80,9.54400518282516"
                         />
                     </svg>
                 </div>
@@ -808,20 +831,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,9.536657839051458;20,0.0;40,10.679557884592114;60,2.2189032454914894;80,0.7017239163494935"
+                            points="0,9.536657839051458;20,0.0;40,10.6795578845921;60,2.2189032454914894;80,0.7017239163494935"
                         />
                     </svg>
                 </div>
@@ -829,20 +852,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,10.071379627723502;20,4.35439964824117;40,14.881828942325129;60,14.753171179411652;80,0.0"
+                            points="0,10.071379627723502;20,4.354399648241198;40,14.881828942325129;60,14.753171179411652;80,0.0"
                         />
                     </svg>
                 </div>
@@ -850,20 +873,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,7.776155844562567;20,12.199882864537841;40,4.701149831542722;60,0.0;80,10.515620560407129"
+                            points="0,7.776155844562567;20,12.199882864537827;40,4.701149831542708;60,0.0;80,10.515620560407129"
                         />
                     </svg>
                 </div>
@@ -871,18 +894,18 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 </tr>
 
                 <tr>
-                    <td>Narrative | chain_of_thought</td>
+                    <td>Narrative | High Temp | Chain-of-Thought</td>
                     <td>Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers. Feel free to elaborate and explore creative insights in your analysis. Focus on diverse perspectives and avoid repetition. Incorporate a variety of terms and avoid overusing specific phrases. Please provide a detailed chain of thought explaining your reasoning process in the analysis.</pre>
                     </div>
                 </td>
@@ -895,7 +918,7 @@ This extensive report delves deep into the portfolio&#x27;s risk factors, provid
 Use clear, descriptive language accessible to non-technical readers.
 
 Current Market Environment:
-The portfolio is experiencing moderate volatility at 13.6%. Risk-adjusted returns, as measured by the Sharpe ratio, are 1.98.
+The portfolio is experiencing moderate volatility at 13.5%. Risk-adjusted returns, as measured by the Sharpe ratio, are 2.18.
 
 No significant risk alerts at this time.
 
@@ -918,13 +941,13 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
@@ -939,20 +962,20 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,6.180265154232302;20,4.561130251794282;40,0.0;60,8.392332818574687;80,11.923178293475232"
+                            points="0,6.180265154232302;20,4.56113025179431;40,0.0;60,8.392332818574701;80,11.923178293475246"
                         />
                     </svg>
                 </div>
@@ -960,20 +983,20 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,9.90246469566371;40,6.7271435028098665;60,13.53549784773422;80,14.538401918969214"
+                            points="0,0.0;20,9.90246469566371;40,6.7271435028098665;60,13.535497847734234;80,14.538401918969228"
                         />
                     </svg>
                 </div>
@@ -981,20 +1004,20 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,2.318807372361121;40,4.881775072100254;60,10.13602612197954;80,14.450025604542205"
+                            points="0,0.0;20,2.318807372361107;40,4.881775072100254;60,10.13602612197954;80,14.450025604542205"
                         />
                     </svg>
                 </div>
@@ -1002,18 +1025,18 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 </tr>
 
                 <tr>
-                    <td>Actionable | No Tuning</td>
+                    <td>Actionable | Low Temp | No Tuning</td>
                     <td>Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions. Provide concise and precise answers.</pre>
                     </div>
                 </td>
@@ -1028,6 +1051,7 @@ Focus on practical, implementable solutions.
 No immediate actions are required. The portfolio is within defined risk parameters.
 
 Recommended Portfolio Adjustments:
+- Reduce holding of JPM by 10.79% to reach the target weight of 15.00%.
 </pre>
                     </div>
                 </td>
@@ -1036,26 +1060,26 @@ Recommended Portfolio Adjustments:
                     <td>0.0</td>
                     <td>0.0</td>
                     <td>None</td>
-                    <td>37</td>
+                    <td>51</td>
                     <td>risk, portfolio</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,10.70378008771901;20,8.90487070175574;40,3.1712765561385226;60,0.0;80,1.0431977240177872"
+                            points="0,10.703780087718997;20,8.904870701755726;40,3.1712765561385083;60,0.0;80,1.0431977240177872"
                         />
                     </svg>
                 </div>
@@ -1063,20 +1087,20 @@ Recommended Portfolio Adjustments:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,12.37301654561108;20,0.0;40,3.9775201183529134;60,7.342275336689909;80,6.290614282359002"
+                            points="0,12.37301654561108;20,0.0;40,3.977520118352899;60,7.3422753366898945;80,6.290614282359002"
                         />
                     </svg>
                 </div>
@@ -1084,20 +1108,20 @@ Recommended Portfolio Adjustments:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,6.433167516321717;20,9.7019789139123;40,7.643309130202255;60,0.0;80,14.1398703236096"
+                            points="0,6.433167516321717;20,9.701978913912313;40,7.643309130202255;60,0.0;80,14.1398703236096"
                         />
                     </svg>
                 </div>
@@ -1105,20 +1129,20 @@ Recommended Portfolio Adjustments:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,13.806243775027866;20,15.114627944530696;40,15.213103876153227;60,0.0;80,2.8345409745745798"
+                            points="0,13.806243775027866;20,15.114627944530682;40,15.213103876153227;60,0.0;80,2.8345409745745798"
                         />
                     </svg>
                 </div>
@@ -1126,18 +1150,18 @@ Recommended Portfolio Adjustments:
                 </tr>
 
                 <tr>
-                    <td>Actionable | few_shot</td>
+                    <td>Actionable | Medium Temp | Few-Shot</td>
                     <td>Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions. Ensure clarity and thoroughness in your analysis.
 
 Here are some examples to guide your analysis:
@@ -1163,9 +1187,10 @@ Focus on practical, implementable solutions.
 No immediate actions are required. The portfolio is within defined risk parameters.
 
 Recommended Portfolio Adjustments:
+- Reduce holding of JPM by 10.79% to reach the target weight of 15.00%.
 
 
-Examples to Guide Your Analysis:
+Guiding Examples:
 Example 1:
 Q: What are the main risks in a high-volatility portfolio?
 A: The primary risks include increased potential for significant losses, heightened emotional decision-making, and potential for margin calls in leveraged accounts.
@@ -1181,26 +1206,26 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                     <td>0.2</td>
                     <td>0.2</td>
                     <td>few_shot</td>
-                    <td>106</td>
+                    <td>117</td>
                     <td>volatility, risk, portfolio, sector, concentration, diversification</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.3494268482567975;20,7.888862531045902;40,0.0;60,0.3634915985165179;80,6.378976531309391"
+                            points="0,0.3494268482568117;20,7.888862531045916;40,0.0;60,0.3634915985165321;80,6.378976531309405"
                         />
                     </svg>
                 </div>
@@ -1208,20 +1233,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,3.9189548489669335;20,4.6072950671560875;40,0.37474589800665115;60,0.0;80,11.485470006879922"
+                            points="0,3.9189548489669335;20,4.6072950671560875;40,0.37474589800665115;60,0.0;80,11.485470006879936"
                         />
                     </svg>
                 </div>
@@ -1229,20 +1254,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,8.996138158547282;20,4.305616780987322;40,6.596737660009168;60,0.0;80,3.6926460318927212"
+                            points="0,8.996138158547268;20,4.305616780987307;40,6.596737660009154;60,0.0;80,3.6926460318927212"
                         />
                     </svg>
                 </div>
@@ -1250,20 +1275,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,9.324110407662673;20,11.120262659822416;40,0.0;60,11.977007986784074;80,1.1014990001478395"
+                            points="0,9.324110407662658;20,11.120262659822416;40,0.0;60,11.97700798678406;80,1.1014990001478253"
                         />
                     </svg>
                 </div>
@@ -1271,18 +1296,18 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 </tr>
 
                 <tr>
-                    <td>Actionable | chain_of_thought</td>
+                    <td>Actionable | High Temp | Chain-of-Thought</td>
                     <td>Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions. Feel free to elaborate and explore creative insights in your analysis. Focus on diverse perspectives and avoid repetition. Incorporate a variety of terms and avoid overusing specific phrases. Please provide a detailed chain of thought explaining your reasoning process in the analysis.</pre>
                     </div>
                 </td>
@@ -1297,6 +1322,7 @@ Focus on practical, implementable solutions.
 No immediate actions are required. The portfolio is within defined risk parameters.
 
 Recommended Portfolio Adjustments:
+- Reduce holding of JPM by 10.79% to reach the target weight of 15.00%.
 
 
 Chain of Thought:
@@ -1311,26 +1337,26 @@ Exploring derivative instruments could provide downside protection without signi
                     <td>0.4</td>
                     <td>0.4</td>
                     <td>chain_of_thought</td>
-                    <td>178</td>
+                    <td>192</td>
                     <td>volatility, risk, sharpe ratio, drawdown, tracking error, factor, exposure, portfolio, sector, concentration, diversification</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,6.704790925421165;40,10.147738068413716;60,5.458262055188811;80,8.859502806763516"
+                            points="0,0.0;20,6.70479092542115;40,10.147738068413702;60,5.458262055188797;80,8.859502806763501"
                         />
                     </svg>
                 </div>
@@ -1338,20 +1364,20 @@ Exploring derivative instruments could provide downside protection without signi
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,7.609582006913087;20,0.3611988048550643;40,10.530449712424328;60,0.0;80,1.0224862365680139"
+                            points="0,7.609582006913058;20,0.3611988048550643;40,10.530449712424328;60,0.0;80,1.0224862365680139"
                         />
                     </svg>
                 </div>
@@ -1359,20 +1385,20 @@ Exploring derivative instruments could provide downside protection without signi
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,2.692407525911051;40,2.0233679625985417;60,3.7814567139114104;80,2.1582768722935413"
+                            points="0,0.0;20,2.692407525911051;40,2.023367962598556;60,3.781456713911396;80,2.1582768722935413"
                         />
                     </svg>
                 </div>
@@ -1380,20 +1406,20 @@ Exploring derivative instruments could provide downside protection without signi
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,3.0284810802020132;20,14.47529862710482;40,9.839325523579063;60,0.0;80,15.37179686020788"
+                            points="0,3.028481080201999;20,14.47529862710482;40,9.839325523579063;60,0.0;80,15.371796860207894"
                         />
                     </svg>
                 </div>
@@ -1471,25 +1497,34 @@ Exploring derivative instruments could provide downside protection without signi
                 });
             }
 
-            // Enhanced filtering functionality
+            // Enhanced filtering functionality with date toggles
             document.getElementById("textFilter").addEventListener("input", filterTable);
             document.getElementById("originalPromptFilter").addEventListener("change", filterTable);
+            document.getElementById("startDateFilter").addEventListener("change", filterTable);
+            document.getElementById("endDateFilter").addEventListener("change", filterTable);
             document.getElementById("compareMode").addEventListener("change", toggleCompareMode);
 
             function filterTable() {
                 const textFilter = document.getElementById("textFilter").value.toLowerCase();
                 const typeFilter = document.getElementById("originalPromptFilter").value.toLowerCase();
+                const startDate = document.getElementById("startDateFilter").value;
+                const endDate = document.getElementById("endDateFilter").value;
                 const table = document.getElementById("parameterTable");
                 const rows = table.getElementsByTagName("tr");
-
 
                 for (let i = 1; i < rows.length; i++) {
                     const row = rows[i];
                     const textContent = row.textContent.toLowerCase();
                     const originalPrompt = row.getElementsByTagName("td")[1].textContent.toLowerCase();
 
+                    // Placeholder for date filtering logic
+                    // Assuming each row has a timestamp or date associated (not implemented in current script)
+                    // You can implement date filtering based on your data structure
+
                     const showRow = (!textFilter || textContent.includes(textFilter)) &&
                                   (!typeFilter || originalPrompt.includes(typeFilter));
+                                  // && (!startDate || rowDate >= startDate) &&
+                                  // (!endDate || rowDate <= endDate);
 
                     row.style.display = showRow ? "" : "none";
                 }
@@ -1570,20 +1605,20 @@ Exploring derivative instruments could provide downside protection without signi
         </script>
 
                 <tr>
-                    <td>Technical | No Tuning</td>
+                    <td>Technical | Low Temp | No Tuning</td>
                     <td>Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data. Provide concise and precise answers.</pre>
                     </div>
                 </td>
@@ -1595,17 +1630,17 @@ The following report provides a succinct overview of the portfolio&#x27;s risk m
 
 Use quantitative terms and precise numerical data.
 
-Portfolio Volatility: 13.60%
-Sharpe Ratio: 1.98
-Maximum Drawdown: 8.22%
+Portfolio Volatility: 13.53%
+Sharpe Ratio: 2.18
+Maximum Drawdown: 8.85%
 Tracking Error: nan%
 
 Risk Contributors:
-- MA contributed 27.21% to portfolio risk
-- CVX contributed 17.96% to portfolio risk
-- MRK contributed 8.73% to portfolio risk
-- META contributed 7.93% to portfolio risk
-- JPM contributed 7.70% to portfolio risk
+- JPM contributed 53.19% to portfolio risk
+- NFLX contributed 9.77% to portfolio risk
+- XOM contributed 6.70% to portfolio risk
+- MA contributed 6.69% to portfolio risk
+- AAPL contributed 5.40% to portfolio risk
 </pre>
                     </div>
                 </td>
@@ -1620,20 +1655,20 @@ Risk Contributors:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,1.9901458778270609;40,4.548929770404754;60,14.905022790303633;80,13.466606121312921"
+                            points="0,0.0;20,1.9901458778270609;40,4.548929770404754;60,14.905022790303619;80,13.466606121312907"
                         />
                     </svg>
                 </div>
@@ -1641,20 +1676,20 @@ Risk Contributors:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,5.411173411731411;40,16.473987402043633;60,14.764742889031197;80,4.353988331145274"
+                            points="0,0.0;20,5.411173411731411;40,16.473987402043633;60,14.764742889031197;80,4.35398833114526"
                         />
                     </svg>
                 </div>
@@ -1662,20 +1697,20 @@ Risk Contributors:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,13.228957590509665;20,10.229157678514241;40,2.75740173626248;60,0.0;80,0.7691591734717349"
+                            points="0,13.228957590509665;20,10.229157678514227;40,2.7574017362624943;60,0.0;80,0.7691591734717491"
                         />
                     </svg>
                 </div>
@@ -1683,20 +1718,20 @@ Risk Contributors:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,9.953739658241503;20,0.6540024774845961;40,9.7063404530588;60,8.026158330269553;80,0.0"
+                            points="0,9.953739658241517;20,0.6540024774846103;40,9.7063404530588;60,8.026158330269553;80,0.0"
                         />
                     </svg>
                 </div>
@@ -1704,20 +1739,20 @@ Risk Contributors:
                 </tr>
 
                 <tr>
-                    <td>Technical | few_shot</td>
+                    <td>Technical | Medium Temp | Few-Shot</td>
                     <td>Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data. Ensure clarity and thoroughness in your analysis.
 
 Here are some examples to guide your analysis:
@@ -1740,20 +1775,20 @@ The report below offers a comprehensive analysis of the portfolio&#x27;s current
 
 Use quantitative terms and precise numerical data.
 
-Portfolio Volatility: 13.60%
-Sharpe Ratio: 1.98
-Maximum Drawdown: 8.22%
+Portfolio Volatility: 13.53%
+Sharpe Ratio: 2.18
+Maximum Drawdown: 8.85%
 Tracking Error: nan%
 
 Risk Contributors:
-- MA contributed 27.21% to portfolio risk
-- CVX contributed 17.96% to portfolio risk
-- MRK contributed 8.73% to portfolio risk
-- META contributed 7.93% to portfolio risk
-- JPM contributed 7.70% to portfolio risk
+- JPM contributed 53.19% to portfolio risk
+- NFLX contributed 9.77% to portfolio risk
+- XOM contributed 6.70% to portfolio risk
+- MA contributed 6.69% to portfolio risk
+- AAPL contributed 5.40% to portfolio risk
 
 
-Examples to Guide Your Analysis:
+Guiding Examples:
 Example 1:
 Q: What are the main risks in a high-volatility portfolio?
 A: The primary risks include increased potential for significant losses, heightened emotional decision-making, and potential for margin calls in leveraged accounts.
@@ -1769,26 +1804,26 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                     <td>0.2</td>
                     <td>0.2</td>
                     <td>few_shot</td>
-                    <td>141</td>
+                    <td>138</td>
                     <td>volatility, risk, sharpe ratio, drawdown, tracking error, portfolio, sector, concentration, diversification, technical, quantitative</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,3.731205375632726;20,0.0;40,3.5820249686698418;60,5.251506351512688;80,14.124454798127147"
+                            points="0,3.7312053756327117;20,0.0;40,3.5820249686698418;60,5.251506351512688;80,14.124454798127147"
                         />
                     </svg>
                 </div>
@@ -1796,20 +1831,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,11.05963062993564;20,12.932702760021186;40,13.32029061665746;60,0.0;80,10.595865370333016"
+                            points="0,11.05963062993564;20,12.932702760021172;40,13.32029061665746;60,0.0;80,10.595865370333016"
                         />
                     </svg>
                 </div>
@@ -1817,20 +1852,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,4.8387551277602086;40,1.803308829781983;60,7.221923217596;80,5.844583634912681"
+                            points="0,0.0;20,4.838755127760223;40,1.8033088297819972;60,7.221923217596;80,5.844583634912681"
                         />
                     </svg>
                 </div>
@@ -1838,20 +1873,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,4.402805738911553;20,10.095049525160888;40,0.0;60,8.457325085469606;80,13.367976066068593"
+                            points="0,4.402805738911553;20,10.095049525160888;40,0.0;60,8.45732508546962;80,13.367976066068593"
                         />
                     </svg>
                 </div>
@@ -1859,20 +1894,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 </tr>
 
                 <tr>
-                    <td>Technical | chain_of_thought</td>
+                    <td>Technical | High Temp | Chain-of-Thought</td>
                     <td>Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Generate a technical risk analysis report focusing on:
-    - Portfolio volatility and risk metrics
-    - Sector concentration analysis
-    - Individual stock contributions to risk
-    - Key risk indicators and thresholds
+- Portfolio volatility and risk metrics
+- Sector concentration analysis
+- Individual stock contributions to risk
+- Key risk indicators and thresholds
 Use quantitative terms and precise numerical data. Feel free to elaborate and explore creative insights in your analysis. Focus on diverse perspectives and avoid repetition. Incorporate a variety of terms and avoid overusing specific phrases. Please provide a detailed chain of thought explaining your reasoning process in the analysis.</pre>
                     </div>
                 </td>
@@ -1884,17 +1919,17 @@ This extensive report delves deep into the portfolio&#x27;s risk factors, provid
 
 Use quantitative terms and precise numerical data.
 
-Portfolio Volatility: 13.60%
-Sharpe Ratio: 1.98
-Maximum Drawdown: 8.22%
+Portfolio Volatility: 13.53%
+Sharpe Ratio: 2.18
+Maximum Drawdown: 8.85%
 Tracking Error: nan%
 
 Risk Contributors:
-- MA contributed 27.21% to portfolio risk
-- CVX contributed 17.96% to portfolio risk
-- MRK contributed 8.73% to portfolio risk
-- META contributed 7.93% to portfolio risk
-- JPM contributed 7.70% to portfolio risk
+- JPM contributed 53.19% to portfolio risk
+- NFLX contributed 9.77% to portfolio risk
+- XOM contributed 6.70% to portfolio risk
+- MA contributed 6.69% to portfolio risk
+- AAPL contributed 5.40% to portfolio risk
 
 
 Chain of Thought:
@@ -1915,20 +1950,20 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,5.65567144381167;20,14.243272287633573;40,0.2469777970043765;60,0.0;80,0.7162577622827513"
+                            points="0,5.655671443811684;20,14.243272287633602;40,0.2469777970043623;60,0.0;80,0.7162577622827513"
                         />
                     </svg>
                 </div>
@@ -1936,20 +1971,20 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,10.911538016087434;20,17.400004829300784;40,0.7012745037860384;60,9.85009459259318;80,0.0"
+                            points="0,10.911538016087434;20,17.400004829300798;40,0.7012745037860526;60,9.850094592593209;80,0.0"
                         />
                     </svg>
                 </div>
@@ -1957,20 +1992,20 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,2.024491492558411;40,12.247760419387163;60,10.588625323746186;80,2.058768839049492"
+                            points="0,0.0;20,2.024491492558397;40,12.247760419387163;60,10.588625323746186;80,2.058768839049492"
                         />
                     </svg>
                 </div>
@@ -1978,20 +2013,20 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,11.391006965950453;20,14.103020596815938;40,6.978342734198435;60,0.0;80,4.417184341902342"
+                            points="0,11.391006965950453;20,14.103020596815952;40,6.978342734198435;60,0.0;80,4.417184341902356"
                         />
                     </svg>
                 </div>
@@ -1999,18 +2034,18 @@ Consider implementing dynamic hedging strategies to manage extreme volatility an
                 </tr>
 
                 <tr>
-                    <td>Narrative | No Tuning</td>
+                    <td>Narrative | Low Temp | No Tuning</td>
                     <td>Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers. Provide concise and precise answers.</pre>
                     </div>
                 </td>
@@ -2023,7 +2058,7 @@ The following report provides a succinct overview of the portfolio&#x27;s risk m
 Use clear, descriptive language accessible to non-technical readers.
 
 Current Market Environment:
-The portfolio is experiencing moderate volatility at 13.6%. Risk-adjusted returns, as measured by the Sharpe ratio, are 1.98.
+The portfolio is experiencing moderate volatility at 13.5%. Risk-adjusted returns, as measured by the Sharpe ratio, are 2.18.
 
 No significant risk alerts at this time.
 </pre>
@@ -2040,20 +2075,20 @@ No significant risk alerts at this time.
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,7.650064853315115;20,16.263544597409336;40,6.831383327833308;60,0.0;80,15.481994495401864"
+                            points="0,7.650064853315101;20,16.263544597409336;40,6.831383327833322;60,0.0;80,15.481994495401864"
                         />
                     </svg>
                 </div>
@@ -2061,20 +2096,20 @@ No significant risk alerts at this time.
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,6.676929697114929;20,0.0;40,2.540356645271288;60,3.354004427816733;80,3.2523127110863186"
+                            points="0,6.676929697114915;20,0.0;40,2.540356645271288;60,3.354004427816733;80,3.2523127110863186"
                         />
                     </svg>
                 </div>
@@ -2082,20 +2117,20 @@ No significant risk alerts at this time.
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,9.457319321060183;20,10.685163908268862;40,1.0752820099293672;60,1.061266189831997;80,0.0"
+                            points="0,9.457319321060183;20,10.685163908268876;40,1.075282009929353;60,1.061266189831997;80,0.0"
                         />
                     </svg>
                 </div>
@@ -2103,20 +2138,20 @@ No significant risk alerts at this time.
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,7.424354225413666;40,7.605874039254161;60,2.123411521688439;80,4.863567750640058"
+                            points="0,0.0;20,7.42435422541368;40,7.605874039254161;60,2.1234115216884533;80,4.863567750640044"
                         />
                     </svg>
                 </div>
@@ -2124,18 +2159,18 @@ No significant risk alerts at this time.
                 </tr>
 
                 <tr>
-                    <td>Narrative | few_shot</td>
+                    <td>Narrative | Medium Temp | Few-Shot</td>
                     <td>Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers. Ensure clarity and thoroughness in your analysis.
 
 Here are some examples to guide your analysis:
@@ -2159,12 +2194,12 @@ The report below offers a comprehensive analysis of the portfolio&#x27;s current
 Use clear, descriptive language accessible to non-technical readers.
 
 Current Market Environment:
-The portfolio is experiencing moderate volatility at 13.6%. Risk-adjusted returns, as measured by the Sharpe ratio, are 1.98.
+The portfolio is experiencing moderate volatility at 13.5%. Risk-adjusted returns, as measured by the Sharpe ratio, are 2.18.
 
 No significant risk alerts at this time.
 
 
-Examples to Guide Your Analysis:
+Guiding Examples:
 Example 1:
 Q: What are the main risks in a high-volatility portfolio?
 A: The primary risks include increased potential for significant losses, heightened emotional decision-making, and potential for margin calls in leveraged accounts.
@@ -2180,26 +2215,26 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                     <td>0.2</td>
                     <td>0.2</td>
                     <td>few_shot</td>
-                    <td>120</td>
+                    <td>117</td>
                     <td>volatility, risk, sharpe ratio, portfolio, sector, concentration, diversification, technical</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,3.488650801530653;20,1.747914267366852;40,0.0;60,10.241366194636953;80,9.544005182825174"
+                            points="0,3.488650801530639;20,1.747914267366852;40,0.0;60,10.241366194636953;80,9.54400518282516"
                         />
                     </svg>
                 </div>
@@ -2207,20 +2242,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,9.536657839051458;20,0.0;40,10.679557884592114;60,2.2189032454914894;80,0.7017239163494935"
+                            points="0,9.536657839051458;20,0.0;40,10.6795578845921;60,2.2189032454914894;80,0.7017239163494935"
                         />
                     </svg>
                 </div>
@@ -2228,20 +2263,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,10.071379627723502;20,4.35439964824117;40,14.881828942325129;60,14.753171179411652;80,0.0"
+                            points="0,10.071379627723502;20,4.354399648241198;40,14.881828942325129;60,14.753171179411652;80,0.0"
                         />
                     </svg>
                 </div>
@@ -2249,20 +2284,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,7.776155844562567;20,12.199882864537841;40,4.701149831542722;60,0.0;80,10.515620560407129"
+                            points="0,7.776155844562567;20,12.199882864537827;40,4.701149831542708;60,0.0;80,10.515620560407129"
                         />
                     </svg>
                 </div>
@@ -2270,18 +2305,18 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 </tr>
 
                 <tr>
-                    <td>Narrative | chain_of_thought</td>
+                    <td>Narrative | High Temp | Chain-of-Thought</td>
                     <td>Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Create a narrative risk report that explains:
-    - Overall portfolio health and risk level
-    - Major risk factors and their implications
-    - Historical context and trends
+- Overall portfolio health and risk level
+- Major risk factors and their implications
+- Historical context and trends
 Use clear, descriptive language accessible to non-technical readers. Feel free to elaborate and explore creative insights in your analysis. Focus on diverse perspectives and avoid repetition. Incorporate a variety of terms and avoid overusing specific phrases. Please provide a detailed chain of thought explaining your reasoning process in the analysis.</pre>
                     </div>
                 </td>
@@ -2294,7 +2329,7 @@ This extensive report delves deep into the portfolio&#x27;s risk factors, provid
 Use clear, descriptive language accessible to non-technical readers.
 
 Current Market Environment:
-The portfolio is experiencing moderate volatility at 13.6%. Risk-adjusted returns, as measured by the Sharpe ratio, are 1.98.
+The portfolio is experiencing moderate volatility at 13.5%. Risk-adjusted returns, as measured by the Sharpe ratio, are 2.18.
 
 No significant risk alerts at this time.
 
@@ -2317,13 +2352,13 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
@@ -2338,20 +2373,20 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,6.180265154232302;20,4.561130251794282;40,0.0;60,8.392332818574687;80,11.923178293475232"
+                            points="0,6.180265154232302;20,4.56113025179431;40,0.0;60,8.392332818574701;80,11.923178293475246"
                         />
                     </svg>
                 </div>
@@ -2359,20 +2394,20 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,9.90246469566371;40,6.7271435028098665;60,13.53549784773422;80,14.538401918969214"
+                            points="0,0.0;20,9.90246469566371;40,6.7271435028098665;60,13.535497847734234;80,14.538401918969228"
                         />
                     </svg>
                 </div>
@@ -2380,20 +2415,20 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,2.318807372361121;40,4.881775072100254;60,10.13602612197954;80,14.450025604542205"
+                            points="0,0.0;20,2.318807372361107;40,4.881775072100254;60,10.13602612197954;80,14.450025604542205"
                         />
                     </svg>
                 </div>
@@ -2401,18 +2436,18 @@ It&#x27;s advisable to review sector allocations periodically and consider adjus
                 </tr>
 
                 <tr>
-                    <td>Actionable | No Tuning</td>
+                    <td>Actionable | Low Temp | No Tuning</td>
                     <td>Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions. Provide concise and precise answers.</pre>
                     </div>
                 </td>
@@ -2427,6 +2462,7 @@ Focus on practical, implementable solutions.
 No immediate actions are required. The portfolio is within defined risk parameters.
 
 Recommended Portfolio Adjustments:
+- Reduce holding of JPM by 10.79% to reach the target weight of 15.00%.
 </pre>
                     </div>
                 </td>
@@ -2435,26 +2471,26 @@ Recommended Portfolio Adjustments:
                     <td>0.0</td>
                     <td>0.0</td>
                     <td>None</td>
-                    <td>37</td>
+                    <td>51</td>
                     <td>risk, portfolio</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,10.70378008771901;20,8.90487070175574;40,3.1712765561385226;60,0.0;80,1.0431977240177872"
+                            points="0,10.703780087718997;20,8.904870701755726;40,3.1712765561385083;60,0.0;80,1.0431977240177872"
                         />
                     </svg>
                 </div>
@@ -2462,20 +2498,20 @@ Recommended Portfolio Adjustments:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,12.37301654561108;20,0.0;40,3.9775201183529134;60,7.342275336689909;80,6.290614282359002"
+                            points="0,12.37301654561108;20,0.0;40,3.977520118352899;60,7.3422753366898945;80,6.290614282359002"
                         />
                     </svg>
                 </div>
@@ -2483,20 +2519,20 @@ Recommended Portfolio Adjustments:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,6.433167516321717;20,9.7019789139123;40,7.643309130202255;60,0.0;80,14.1398703236096"
+                            points="0,6.433167516321717;20,9.701978913912313;40,7.643309130202255;60,0.0;80,14.1398703236096"
                         />
                     </svg>
                 </div>
@@ -2504,20 +2540,20 @@ Recommended Portfolio Adjustments:
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,13.806243775027866;20,15.114627944530696;40,15.213103876153227;60,0.0;80,2.8345409745745798"
+                            points="0,13.806243775027866;20,15.114627944530682;40,15.213103876153227;60,0.0;80,2.8345409745745798"
                         />
                     </svg>
                 </div>
@@ -2525,18 +2561,18 @@ Recommended Portfolio Adjustments:
                 </tr>
 
                 <tr>
-                    <td>Actionable | few_shot</td>
+                    <td>Actionable | Medium Temp | Few-Shot</td>
                     <td>Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions. Ensure clarity and thoroughness in your analysis.
 
 Here are some examples to guide your analysis:
@@ -2562,9 +2598,10 @@ Focus on practical, implementable solutions.
 No immediate actions are required. The portfolio is within defined risk parameters.
 
 Recommended Portfolio Adjustments:
+- Reduce holding of JPM by 10.79% to reach the target weight of 15.00%.
 
 
-Examples to Guide Your Analysis:
+Guiding Examples:
 Example 1:
 Q: What are the main risks in a high-volatility portfolio?
 A: The primary risks include increased potential for significant losses, heightened emotional decision-making, and potential for margin calls in leveraged accounts.
@@ -2580,26 +2617,26 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                     <td>0.2</td>
                     <td>0.2</td>
                     <td>few_shot</td>
-                    <td>106</td>
+                    <td>117</td>
                     <td>volatility, risk, portfolio, sector, concentration, diversification</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.3494268482567975;20,7.888862531045902;40,0.0;60,0.3634915985165179;80,6.378976531309391"
+                            points="0,0.3494268482568117;20,7.888862531045916;40,0.0;60,0.3634915985165321;80,6.378976531309405"
                         />
                     </svg>
                 </div>
@@ -2607,20 +2644,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,3.9189548489669335;20,4.6072950671560875;40,0.37474589800665115;60,0.0;80,11.485470006879922"
+                            points="0,3.9189548489669335;20,4.6072950671560875;40,0.37474589800665115;60,0.0;80,11.485470006879936"
                         />
                     </svg>
                 </div>
@@ -2628,20 +2665,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,8.996138158547282;20,4.305616780987322;40,6.596737660009168;60,0.0;80,3.6926460318927212"
+                            points="0,8.996138158547268;20,4.305616780987307;40,6.596737660009154;60,0.0;80,3.6926460318927212"
                         />
                     </svg>
                 </div>
@@ -2649,20 +2686,20 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,9.324110407662673;20,11.120262659822416;40,0.0;60,11.977007986784074;80,1.1014990001478395"
+                            points="0,9.324110407662658;20,11.120262659822416;40,0.0;60,11.97700798678406;80,1.1014990001478253"
                         />
                     </svg>
                 </div>
@@ -2670,18 +2707,18 @@ A: High sector concentration can amplify risk if the sector underperforms, reduc
                 </tr>
 
                 <tr>
-                    <td>Actionable | chain_of_thought</td>
+                    <td>Actionable | High Temp | Chain-of-Thought</td>
                     <td>Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions.</td>
                     <td>
                     <div class="prompt-container">
                         <pre class="prompt-text">Provide an actionable risk assessment including:
-    - Specific risk mitigation recommendations
-    - Priority areas requiring immediate attention
-    - Step-by-step risk management actions
+- Specific risk mitigation recommendations
+- Priority areas requiring immediate attention
+- Step-by-step risk management actions
 Focus on practical, implementable solutions. Feel free to elaborate and explore creative insights in your analysis. Focus on diverse perspectives and avoid repetition. Incorporate a variety of terms and avoid overusing specific phrases. Please provide a detailed chain of thought explaining your reasoning process in the analysis.</pre>
                     </div>
                 </td>
@@ -2696,6 +2733,7 @@ Focus on practical, implementable solutions.
 No immediate actions are required. The portfolio is within defined risk parameters.
 
 Recommended Portfolio Adjustments:
+- Reduce holding of JPM by 10.79% to reach the target weight of 15.00%.
 
 
 Chain of Thought:
@@ -2710,26 +2748,26 @@ Exploring derivative instruments could provide downside protection without signi
                     <td>0.4</td>
                     <td>0.4</td>
                     <td>chain_of_thought</td>
-                    <td>178</td>
+                    <td>192</td>
                     <td>volatility, risk, sharpe ratio, drawdown, tracking error, factor, exposure, portfolio, sector, concentration, diversification</td>
                     <td>
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="volatility"
-                     data-value="0.1360"
-                     data-range="0.1360 - 0.1360">
+                     data-value="0.1353"
+                     data-range="0.1353 - 0.1353">
                     <div class="metric-header">
                         Volatility
                     </div>
                     <div class="metric-value">
-                        0.1360
+                        0.1353
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,6.704790925421165;40,10.147738068413716;60,5.458262055188811;80,8.859502806763516"
+                            points="0,0.0;20,6.70479092542115;40,10.147738068413702;60,5.458262055188797;80,8.859502806763501"
                         />
                     </svg>
                 </div>
@@ -2737,20 +2775,20 @@ Exploring derivative instruments could provide downside protection without signi
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sharpe_ratio"
-                     data-value="1.9833"
-                     data-range="1.9833 - 1.9833">
+                     data-value="2.1777"
+                     data-range="2.1777 - 2.1777">
                     <div class="metric-header">
                         Sharpe Ratio
                     </div>
                     <div class="metric-value">
-                        1.9833
+                        2.1777
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,7.609582006913087;20,0.3611988048550643;40,10.530449712424328;60,0.0;80,1.0224862365680139"
+                            points="0,7.609582006913058;20,0.3611988048550643;40,10.530449712424328;60,0.0;80,1.0224862365680139"
                         />
                     </svg>
                 </div>
@@ -2758,20 +2796,20 @@ Exploring derivative instruments could provide downside protection without signi
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="drawdown"
-                     data-value="0.0822"
-                     data-range="0.0822 - 0.0822">
+                     data-value="0.0885"
+                     data-range="0.0885 - 0.0885">
                     <div class="metric-header">
                         Drawdown
                     </div>
                     <div class="metric-value">
-                        0.0822
+                        0.0885
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,0.0;20,2.692407525911051;40,2.0233679625985417;60,3.7814567139114104;80,2.1582768722935413"
+                            points="0,0.0;20,2.692407525911051;40,2.023367962598556;60,3.781456713911396;80,2.1582768722935413"
                         />
                     </svg>
                 </div>
@@ -2779,191 +2817,30 @@ Exploring derivative instruments could provide downside protection without signi
                 <div class="metric-cell"
                      style="background: linear-gradient(to right, rgb(127, 127, 200), rgb(101, 101, 160))"
                      data-metric="sector_concentration"
-                     data-value="0.2072"
-                     data-range="0.2072 - 0.2072">
+                     data-value="0.2154"
+                     data-range="0.2154 - 0.2154">
                     <div class="metric-header">
                         Sector Concentration
                     </div>
                     <div class="metric-value">
-                        0.2072
+                        0.2154
                     </div>
                     <svg class="sparkline" width="100" height="20" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <polyline
                             fill="none"
                             stroke="rgba(0,0,0,0.5)"
                             stroke-width="2"
-                            points="0,3.0284810802020132;20,14.47529862710482;40,9.839325523579063;60,0.0;80,15.37179686020788"
+                            points="0,3.028481080201999;20,14.47529862710482;40,9.839325523579063;60,0.0;80,15.371796860207894"
                         />
                     </svg>
                 </div>
             </td>
                 </tr>
 
-            </tbody>
-        </table>
-        <div id="tooltip" class="tooltip"></div>
+        </tbody>
+    </table>
+    <div id="tooltip" class="tooltip"></div>
 
-        <script>
-            // Enhanced sorting function
-            function sortTable(n) {
-                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-                table = document.getElementById("parameterTable");
-                switching = true;
-                dir = "asc";
-
-                while (switching) {
-                    switching = false;
-                    rows = table.rows;
-
-                    for (i = 1; i < (rows.length - 1); i++) {
-                        shouldSwitch = false;
-                        x = rows[i].getElementsByTagName("TD")[n];
-                        y = rows[i + 1].getElementsByTagName("TD")[n];
-
-                        let xValue = x.textContent.toLowerCase();
-                        let yValue = y.textContent.toLowerCase();
-
-                        // Handle numeric values
-                        if (!isNaN(xValue) && !isNaN(yValue)) {
-                            xValue = parseFloat(xValue);
-                            yValue = parseFloat(yValue);
-                        }
-
-                        if (dir == "asc") {
-                            if (xValue > yValue) {
-                                shouldSwitch = true;
-                                break;
-                            }
-                        } else if (dir == "desc") {
-                            if (xValue < yValue) {
-                                shouldSwitch = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (shouldSwitch) {
-                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                        switching = true;
-                        switchcount++;
-                    } else {
-                        if (switchcount == 0 && dir == "asc") {
-                            dir = "desc";
-                            switching = true;
-                        }
-                    }
-                }
-
-                // Update header arrows
-                updateSortArrows(n, dir);
-            }
-
-            function updateSortArrows(columnIndex, direction) {
-                const headers = document.querySelectorAll('th');
-                headers.forEach((header, index) => {
-                    if (index === columnIndex) {
-                        header.textContent = header.textContent.replace(/[▼▲]/, '') +
-                            (direction === "asc" ? " ▲" : " ▼");
-                    } else {
-                        header.textContent = header.textContent.replace(/[▼▲]/, '') + " ▼";
-                    }
-                });
-            }
-
-            // Enhanced filtering functionality
-            document.getElementById("textFilter").addEventListener("input", filterTable);
-            document.getElementById("originalPromptFilter").addEventListener("change", filterTable);
-            document.getElementById("compareMode").addEventListener("change", toggleCompareMode);
-
-            function filterTable() {
-                const textFilter = document.getElementById("textFilter").value.toLowerCase();
-                const typeFilter = document.getElementById("originalPromptFilter").value.toLowerCase();
-                const table = document.getElementById("parameterTable");
-                const rows = table.getElementsByTagName("tr");
-
-
-                for (let i = 1; i < rows.length; i++) {
-                    const row = rows[i];
-                    const textContent = row.textContent.toLowerCase();
-                    const originalPrompt = row.getElementsByTagName("td")[1].textContent.toLowerCase();
-
-                    const showRow = (!textFilter || textContent.includes(textFilter)) &&
-                                  (!typeFilter || originalPrompt.includes(typeFilter));
-
-                    row.style.display = showRow ? "" : "none";
-                }
-            }
-
-            // Compare mode functionality
-            function toggleCompareMode() {
-                const compareMode = document.getElementById("compareMode").checked;
-                const table = document.getElementById("parameterTable");
-                const rows = table.getElementsByTagName("tr");
-
-                if (compareMode) {
-                    highlightDifferences(rows);
-                } else {
-                    clearHighlights(rows);
-                }
-            }
-
-            function highlightDifferences(rows) {
-                if (rows.length < 3) return; // Need at least 2 data rows
-
-                const baselineRow = rows[1]; // First data row
-                for (let i = 2; i < rows.length; i++) {
-                    const currentRow = rows[i];
-                    compareCells(baselineRow, currentRow);
-                }
-            }
-
-            function compareCells(baseRow, compareRow) {
-                const cells = baseRow.getElementsByTagName("TD");
-                const compareCells = compareRow.getElementsByTagName("TD");
-
-                for (let i = 0; i < cells.length; i++) {
-                    if (i !== 2 && i !== 3 && i !== 11) { // Skip Prompt, Output, and Metrics columns
-                        if (cells[i].textContent !== compareCells[i].textContent) {
-                            compareCells[i].classList.add("highlight-differences");
-                        } else {
-                            compareCells[i].classList.remove("highlight-differences");
-                        }
-                    }
-                }
-            }
-
-            function clearHighlights(rows) {
-                for (let i = 1; i < rows.length; i++) {
-                    const cells = rows[i].getElementsByTagName("TD");
-                    for (let cell of cells) {
-                        cell.classList.remove("highlight-differences");
-                    }
-                }
-            }
-
-            // Add tooltip functionality for metrics
-            document.querySelectorAll('.metric-cell').forEach(cell => {
-                cell.addEventListener('mouseover', showTooltip);
-                cell.addEventListener('mouseout', hideTooltip);
-            });
-
-            function showTooltip(event) {
-                const tooltip = document.getElementById('tooltip');
-                const cell = event.target;
-                const rect = cell.getBoundingClientRect();
-
-                tooltip.innerHTML = `
-                    <div style="font-weight: bold">${cell.dataset.metric}</div>
-                    <div>Value: ${cell.dataset.value}</div>
-                    <div>Range: ${cell.dataset.range}</div>
-                `;
-
-                tooltip.style.left = rect.left + window.scrollX + 'px';
-                tooltip.style.top = rect.bottom + window.scrollY + 5 + 'px';
-                tooltip.style.display = 'block';
-            }
-
-            function hideTooltip() {
-                document.getElementById('tooltip').style.display = 'none';
-            }
-        </script>
+    <script>
+        // Repeated sorting and tooltip scripts can be omitted or adjusted as needed
+    </script>
