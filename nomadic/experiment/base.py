@@ -11,8 +11,6 @@ from nomadic.experiment.helpers.base_response_manager import get_responses
 from nomadic.experiment.helpers.base_evaluator import (
     custom_evaluate,
     custom_evaluate_hallucination,
-    accuracy_evaluator,
-    transform_eval_dataset_to_eval_json,
     evaluate_responses,
     calculate_mean_score
 )
@@ -22,9 +20,8 @@ from nomadic.experiment.helpers.base_result_manager import (
     create_default_experiment_result,
     save_experiment
 )
-from nomadic.experiment.helpers.base_setup import setup_tuner, enforce_param_types
+from nomadic.experiment.helpers.base_setup import enforce_param_types
 from nomadic.experiment.helpers.experiment_types.base_experiment import BaseExperiment
-from nomadic.experiment.prompt_tuning import PromptTuner
 from llama_index.core.evaluation import BaseEvaluator
 
 class Experiment(BaseExperiment):
@@ -191,7 +188,7 @@ class Experiment(BaseExperiment):
     def _enforce_param_types(self, param_values: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Enforce parameter types using integrated type enforcement."""
         # First use the base setup helper
-        typed_params = enforce_param_types(self, param_values, self.model.hyperparameters if hasattr(self.model, 'hyperparameters') else {})
+        typed_params = enforce_param_types(param_values, self.model.hyperparameters if hasattr(self.model, 'hyperparameters') else {})
 
         # Then split into OpenAI and prompt tuning parameters
         openai_params = {

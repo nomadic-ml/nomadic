@@ -40,7 +40,7 @@ def get_responses(
                     params={'question': question, **prompt_tuning_params}
                 )
 
-                response = self._get_model_response(model, prompt, openai_params)
+                response = _get_model_response(model, prompt, openai_params)
 
                 pred_responses.append(response)
                 eval_questions.append(question)
@@ -58,7 +58,7 @@ def get_responses(
                     params={'question': user_prompt_request, **prompt_tuning_params}
                 )
 
-                response = self._get_model_response(model, prompt, openai_params)
+                response = _get_model_response(model, prompt, openai_params)
 
                 pred_responses.append(response)
                 prompt_variants.append(prompt)
@@ -78,16 +78,19 @@ def get_responses(
         return [], [], [], []
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-def _get_model_response(self, model: Any, prompt: str, params: Dict[str, Any]) -> str:
+def _get_model_response(model: Any, prompt: str, params: Dict[str, Any]) -> str:
     """Get response from model with retry logic."""
     try:
-        completion = model.complete(prompt, **params)
-        return self.extract_response(completion)
+        completion = model.run(
+                    prompt=prompt,
+                    parameters=params,
+                )
+        return extract_response(completion)
     except Exception as e:
         logging.error(f"Error getting model response: {str(e)}")
         raise
 
-def extract_response(self, completion_response: Any) -> str:
+def extract_response(completion_response: Any) -> str:
     """Extract response from completion object."""
     try:
         if hasattr(completion_response, 'choices') and completion_response.choices:
