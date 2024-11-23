@@ -9,8 +9,6 @@ import time
 from nomadic.experiment.helpers.base_prompt_constructor import construct_prompt
 from nomadic.experiment.helpers.base_response_manager import get_responses
 from nomadic.experiment.helpers.base_evaluator import (
-    accuracy_evaluator,
-    transform_eval_dataset_to_eval_json,
     evaluate_responses,
     calculate_mean_score
 )
@@ -20,7 +18,7 @@ from nomadic.experiment.helpers.base_result_manager import (
     create_default_experiment_result,
     save_experiment
 )
-from nomadic.experiment.helpers.base_setup import setup_tuner, enforce_param_types
+from nomadic.experiment.helpers.base_setup import enforce_param_types
 
 class BaseExperiment(ABC, BaseModel):
     """Abstract base class for all experiment types.
@@ -56,7 +54,7 @@ class BaseExperiment(ABC, BaseModel):
                 logging.basicConfig(level=logging.INFO)
 
             # Enforce parameter types based on model hyperparameters
-            typed_params = enforce_param_types(self, param_dict, self.model_hyperparameters)
+            typed_params = enforce_param_types(param_dict, self.model_hyperparameters)
 
             # Split parameters into OpenAI and prompt tuning params
             openai_params, prompt_params = self._split_parameters(typed_params)

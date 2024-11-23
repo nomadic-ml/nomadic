@@ -44,7 +44,7 @@ class DefaultExperiment(BaseExperiment):
                 logging.info(f"Parameters: {param_dict}")
 
             # Enforce parameter types and prepare parameters
-            typed_params = enforce_param_types(self, param_dict, self.model_hyperparameters)
+            typed_params = enforce_param_types(param_dict, self.model_hyperparameters)
             openai_params, prompt_params = self._split_parameters(typed_params)
 
             # Setup tuner if using iterative optimization

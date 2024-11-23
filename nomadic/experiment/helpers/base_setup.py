@@ -5,7 +5,7 @@ import logging
 
 
 
-def setup_tuner(self, param_dict: Dict[str, Any], param_function: Callable, **kwargs) -> Any:
+def setup_tuner(param_dict: Dict[str, Any], param_function: Callable, **kwargs) -> Any:
     """Set up parameter tuner with default configuration."""
     try:
         # Extract tuning parameters
@@ -35,7 +35,7 @@ def setup_tuner(self, param_dict: Dict[str, Any], param_function: Callable, **kw
             'early_stopping': True
         }
 
-def enforce_param_types(self, param_values: Dict[str, Any], model_hyperparameters: Dict[str, Any]) -> Dict[str, Any]:
+def enforce_param_types(param_values: Dict[str, Any], model_hyperparameters: Dict[str, Any]) -> Dict[str, Any]:
     """Enforce parameter types based on model hyperparameters."""
     try:
         enforced_params = {}
