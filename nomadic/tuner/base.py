@@ -59,12 +59,21 @@ class BaseParamTuner(BaseModel):
         if not isinstance(data, list):
             data = []
 
-        # Append the new entries to the list
-        data.extend([new_entry.model_dump()])
+        # Get the model dump of new_entry
+        entry_dict = new_entry.model_dump()
+
+        # Remove the 'visualization' field if it exists, as bytes
+        # it can't be dumped to JSON.
+        if 'visualization' in entry_dict:
+            del entry_dict['visualization']
+
+        # Append the new entry to the list
+        data.append(entry_dict)
 
         # Write the updated list back to the JSON file
         with open(self.results_filepath, "w") as file:
             json.dump(data, file, indent=4)
+
 
     def save_results_table(self, results, filepath):
         df = pd.DataFrame(results)

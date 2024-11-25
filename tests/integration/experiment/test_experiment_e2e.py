@@ -1,10 +1,9 @@
 import json
+import math
 import nest_asyncio
-import pytest
 import requests
 import os
 
-from llama_index.core.evaluation import BatchEvalRunner
 from llama_index.core.evaluation import SemanticSimilarityEvaluator
 from llama_index.embeddings.openai import OpenAIEmbedding
 
@@ -141,3 +140,4 @@ def test_rag_experiment_only_obj_function():
     )
     # Given 2*2=4 possible HP combinations
     assert len(experiment_result_rag.run_results) == 4
+    assert all(not math.isnan(x.score) for x in experiment_result_rag.run_results)
