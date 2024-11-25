@@ -133,6 +133,7 @@ def test_rag_experiment_only_obj_function():
             "eval_qs": eval_qs[:10],
             "ref_response_strs": ref_response_strs[:10],
         },
+        use_flaml_library=True
     )
 
     experiment_result_rag = experiment.run(

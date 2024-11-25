@@ -14,6 +14,9 @@ class RunResult(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="Metadata"
     )
+    visualization: Optional[bytes] = Field(
+        default_factory=bytes, description="Visualization"
+    )
 
     def get_json(self):
         params_to_serialize = self.params.copy()
