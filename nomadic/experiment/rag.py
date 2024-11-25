@@ -36,12 +36,6 @@ from llama_index.readers.file import PDFReader
 from nomadic.model import OpenAIModel
 from nomadic.result import RunResult
 
-class RunResult:
-    def __init__(self, response: Response, eval_result: Dict[str, Any], visualization: Optional[bytes] = None):
-        self.response = response
-        self.eval_result = eval_result
-        self.visualization = visualization
-
 class GraphRAG:
     def __init__(self, docs: List[Document]):
         self.docs = docs
@@ -320,22 +314,24 @@ def run_retrieval_pipeline(params_dict: Dict[str, Any]) -> RunResult:
     Returns:
         RunResult: The result of the retrieval pipeline run.
     """
+    variable_params = params_dict.copy()
     # Separate fixed params from variable params
     fixed_params = {
-        "docs": params_dict.pop("docs", []),
-        "eval_qs": params_dict.pop("eval_qs", []),
-        "ref_response_strs": params_dict.pop("ref_response_strs", []),
+        "docs": variable_params.pop("docs", []),
+        "eval_qs": variable_params.pop("eval_qs", []),
+        "ref_response_strs": variable_params.pop("ref_response_strs", []),
+        "enable_logging": variable_params.pop("enable_logging", False)
     }
 
-    # Now params_dict only contains the variable parameters
+    # Now variable_params only contains the variable parameters
 
-    chunk_size = params_dict.get("chunk_size", 1000)
-    top_k = params_dict.get("top_k", 3)
-    overlap = params_dict.get("overlap", 200)
-    similarity_threshold = params_dict.get("similarity_threshold", 0.7)
-    embedding_model = params_dict.get("embedding_model", "text-embedding-ada-002")
-    query_transformation = params_dict.get("query_transformation", None)
-    rag_mode = params_dict.get("rag_mode", "regular")
+    chunk_size = variable_params.get("chunk_size", 1000)
+    top_k = variable_params.get("top_k", 3)
+    overlap = variable_params.get("overlap", 200)
+    similarity_threshold = variable_params.get("similarity_threshold", 0.7)
+    embedding_model = variable_params.get("embedding_model", "text-embedding-ada-002")
+    query_transformation = variable_params.get("query_transformation", None)
+    rag_mode = variable_params.get("rag_mode", "regular")
 
     transformed_queries = [
         apply_query_transformation(query, query_transformation)
@@ -421,28 +417,30 @@ def run_retrieval_pipeline(params_dict: Dict[str, Any]) -> RunResult:
         "retrieval_time_ms": retrieval_time_ms,  # Include retrieval time in milliseconds
     }
 
-    # Save retrieval results to a file
-    with open("retrieval_results.json", "w") as f:
-        json.dump(retrieval_results, f)
+    if fixed_params["enable_logging"]:
+        # Save retrieval results to a file
+        with open("retrieval_results.json", "w") as f:
+            json.dump(retrieval_results, f)
 
-    # Generate visualization for both GraphRAG and normal RAG
-    if rag_mode == "graphrag":
-        index.store_results(
-            [result["best_doc"]["content"] for result in best_retrieval_results],
-            [result["best_doc"]["score"] for result in best_retrieval_results],
-            [f"Top result for query: {result['query']}" for result in best_retrieval_results]
-        )
+    # Collect visualization data
+    visualization_data = {
+        "top_results": [result["best_doc"]["content"] for result in best_retrieval_results],
+        "accuracy_scores": [result["best_doc"]["score"] for result in best_retrieval_results],
+        "explanations": [f"Top result for query: {result['query']}" for result in best_retrieval_results]
+    }
+
+    # Generate visualization
     visualization = visualize_rag_results(
-        index,
+        visualization_data,
         fixed_params["eval_qs"],
         avg_score
     )
 
     return RunResult(
         score=avg_score,
-        params=params_dict,  # This now only contains the variable parameters
+        params=variable_params,  # This now only contains the variable parameters
         metadata={
-            "retrieval_results_file": "retrieval_results.json",
+            "retrieval_results": retrieval_results,
             "best_retrieval_results": best_retrieval_results,
             "retrieval_time_ms": retrieval_time_ms,  # Include retrieval time in the metadata
         },
@@ -557,19 +555,20 @@ def run_inference_pipeline(params_dict: Dict[str, Any]) -> RunResult:
             }
         )
 
-    # Save inference results to a file
     inference_results = {
-        "detailed_results": detailed_results,
-        "mean_score": mean_score,
-    }
-    with open("inference_results.json", "w") as f:
-        json.dump(inference_results, f)
+            "detailed_results": detailed_results,
+            "mean_score": mean_score,
+        }
+    if params_dict["enable_logging"]:
+        # Save inference results to a file
+        with open("inference_results.json", "w") as f:
+            json.dump(inference_results, f)
 
     return RunResult(
         score=mean_score,
         params=params_dict,
         metadata={
-            "inference_results_file": "inference_results.json",
+            "inference_results": inference_results,
             "detailed_results": detailed_results,
         },
     )
@@ -600,6 +599,7 @@ def run_rag_pipeline(param_dict: Dict[str, Any], evaluator: Any = None) -> RunRe
         "rag_mode": "regular",
         "query_mode": "global",
         "prompt_tuning_strategy": None,
+        "enable_logging": False
     }
 
     required_params = ["docs", "eval_qs", "ref_response_strs"]
@@ -613,22 +613,6 @@ def run_rag_pipeline(param_dict: Dict[str, Any], evaluator: Any = None) -> RunRe
     for key, value in default_params.items():
         if key not in param_dict:
             param_dict[key] = value
-
-    # Extract parameters
-    chunk_size = param_dict["chunk_size"]
-    docs = param_dict["docs"]
-    top_k = param_dict["top_k"]
-    eval_qs = param_dict["eval_qs"]
-    ref_response_strs = param_dict["ref_response_strs"]
-    overlap = param_dict["overlap"]
-    similarity_threshold = param_dict["similarity_threshold"]
-    max_tokens = param_dict["max_tokens"]
-    temperature = param_dict["temperature"]
-    model_name = param_dict["model_name"]
-    embedding_model = param_dict["embedding_model"]
-    rag_mode = param_dict["rag_mode"]
-    query_mode = param_dict["query_mode"]
-    prompt_tuning_strategy = param_dict["prompt_tuning_strategy"]
 
     # Use SemanticSimilarityEvaluator if no evaluator is provided
     if evaluator is None:
@@ -837,20 +821,19 @@ def create_inference_heatmap(experiment_result):
 
     return pivot_df
 
-def visualize_rag_results(rag_object, queries, retrieval_score):
+def visualize_rag_results(data, queries, retrieval_score):
     """
     Create visualizations for RAG results including retrieved results, comparison to questions, and retrieval score.
 
     Args:
-        rag_object: The RAG object (GraphRAG or normal RAG) containing results to visualize.
+        data (dict): The data containing results to visualize.
         queries (List[str]): List of queries/questions asked.
         retrieval_score (float): The overall retrieval score.
 
     Returns:
         bytes: PNG image of the visualization.
     """
-    data = rag_object.get_visualization_data()
-
+    # Use data directly without calling get_visualization_data()
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 15))
 
     # Accuracy scores visualization
