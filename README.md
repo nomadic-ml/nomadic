@@ -11,6 +11,7 @@
   <img alt="PyPI - Python Version" src="https://img.shields.io/pypi/pyversions/nomadic?link=https%3A%2F%2Fpypi.org%2Fproject%2Fnomadic%2F">
   <img alt="Discord" src="https://img.shields.io/discord/1281121359476559996?link=https%3A%2F%2Fdiscord.gg%2FPF869aGM">
   <img alt="Static Badge" src="https://img.shields.io/badge/Pear_X-S24-green">
+  <img alt="Downloads" src="https://static.pepy.tech/badge/nomadic/month">
 </p>
 
 <p align="center">
