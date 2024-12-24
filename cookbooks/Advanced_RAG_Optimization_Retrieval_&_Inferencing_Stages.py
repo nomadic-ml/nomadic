@@ -1,8 +1,4 @@
 import os
-# os.environ["OPENAI_API_KEY"]
-
-import requests; (lambda r: r.raise_for_status() if r.status_code != 200 else print("API key is valid"))(requests.get("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"}))
-
 from nomadic.experiment import Experiment
 from nomadic.model import OpenAIModel
 from nomadic.tuner import tune
@@ -21,6 +17,12 @@ from nomadic.experiment.rag import (
 import pandas as pd
 pd.set_option('display.max_colwidth', None)
 import json
+
+from nomadic.client import NomadicClient, ClientOptions
+if "NOMADIC_API_KEY" in os.environ:
+    nomadic_client = NomadicClient(ClientOptions(api_key=os.environ["NOMADIC_API_KEY"], base_url="http://204.236.146.45"))
+
+import requests; (lambda r: r.raise_for_status() if r.status_code != 200 else print("API key is valid"))(requests.get("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"}))
 
 eval_json = {
     "queries": {
