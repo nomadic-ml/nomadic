@@ -16,7 +16,7 @@ python_version = "3.11.9"
 
 [tool.poetry]
 name = "nomadic"
-version = "0.0.1.3"
+version = "0.0.1.6"
 description = "Nomadic is an enterprise-grade toolkit for teams to continuously optimize compound AI systems"
 authors = ["Mustafa Bal <mustafa@nomadicml.com>"]
 classifiers = [

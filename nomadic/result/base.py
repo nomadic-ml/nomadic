@@ -1,3 +1,5 @@
+import base64
+import json
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
@@ -87,3 +89,20 @@ class ExperimentResult(BaseModel):
             data.append(experiment_metadata)
 
         return pd.DataFrame(data)
+
+def load_run_results_from_file(filepath: str) -> List[RunResult]:
+    """
+    Loads a list of dictionaries from a JSON file,
+    converting each dictionary into a RunResult object.
+    """
+    with open(filepath, "r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    run_results = []
+    for item in data:
+        if "visualization" in item and item["visualization"] is not None:
+            item["visualization"] = base64.b64decode(item["visualization"])
+
+        run_results.append(RunResult(**item))
+
+    return run_results

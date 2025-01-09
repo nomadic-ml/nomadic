@@ -559,7 +559,7 @@ def run_inference_pipeline(params_dict: Dict[str, Any]) -> RunResult:
             "detailed_results": detailed_results,
             "mean_score": mean_score,
         }
-    if params_dict["enable_logging"]:
+    if "enable_logging" in params_dict:
         # Save inference results to a file
         with open("inference_results.json", "w") as f:
             json.dump(inference_results, f)
